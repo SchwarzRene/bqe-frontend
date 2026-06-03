@@ -339,24 +339,71 @@
 </figure>
 
 <h3>Write performance</h3>
-<p>Encoding is performed once offline. The following benchmark measures the time to serialise the same 4.09 M-row dataset from an in-memory NumPy array to each format (median of 5 runs, same hardware).</p>
+<p>Encoding is a one-time offline operation. Four write paths were measured on AAPL (4.09 M rows, lz4, median of 5 runs, warm OS cache). Two of those paths end in a <code>.bqe</code> file — one starting from a CSV on disk, one starting from NumPy arrays already in memory.</p>
 
 <figure>
-  <img src="img/08_write.png" alt="Write time and resulting file size: CSV vs NumPy vs BQE_DeComp">
-  <figcaption style="display:flex; gap:0; margin-top:8px;">
-    <div style="flex:1; padding-right:16px; border-right:1px solid var(--muted); text-align:left;">
-      <strong>Left (log scale):</strong> time to write 4.1 M rows from NumPy to disk.<br><br>
-      CSV (pandas): 10,218 ms — number formatting and text serialisation<br>
-      NumPy (.npy): 65 ms — raw binary dump, fastest possible<br>
-      BQE_DeComp (lz4): 635 ms — 16× faster than CSV, compresses in parallel
-    </div>
-    <div style="flex:1; padding-left:16px; text-align:left;">
-      <strong>Right:</strong> resulting file size. BQE_DeComp produces a 35 MB file — 5.7× smaller than CSV and 57% smaller than the uncompressed .npy. The one-time encoding cost is amortised across every subsequent read.
-    </div>
+  <img src="img/08_write.png" alt="Write time comparison: CSV vs NumPy vs BQE from arrays vs BQE from CSV">
+  <figcaption>
+    Log scale. <strong>CSV (pandas):</strong> 10,218 ms — text formatting dominates.
+    <strong>NumPy .npy:</strong> 65 ms — raw binary dump, no encoding.
+    <strong>NumPy → BQE:</strong> 82 ms — f32 conversion + delta encoding + lz4 + disk write.
+    <strong>CSV → BQE:</strong> 177 ms — includes parallel CSV text parsing on top.
   </figcaption>
 </figure>
 
-<p>.npy is the fastest write format since it performs no compression — it dumps raw bytes directly. BQE_DeComp takes ~635 ms because lz4 compresses each band in parallel; zstd achieves a smaller file (28 MB) at ~1250 ms. The encoding cost is paid once and amortised across all future reads: at 10 ms per read, BQE_DeComp breaks even against .npy after approximately 4 reads, and against CSV after the very first read.</p>
+<h3>Stage-by-stage breakdown — NumPy arrays → .bqe</h3>
+<p>When the data is already in memory as NumPy arrays (<code>bqe.compress_arrays(ts, ohlcv, path)</code>), the pipeline consists of four stages. All timings measured with <code>bqe.profile_compress_arrays()</code> on AAPL, 4.09 M rows, lz4 codec, 998 bands.</p>
+
+<table>
+<tr><th>Stage</th><th class="r">ms</th><th class="r">share</th><th>notes</th></tr>
+<tr><td>Convert f32 → integers</td><td class="r">59.4</td><td class="r">52.5 %</td><td>4 M × 5 floats — round(price × 10 000), round(vol)</td></tr>
+<tr><td>Encode mode bytes</td><td class="r">1.1</td><td class="r">1.0 %</td><td>per-row 2-bit ts width + 2-bit price width selector</td></tr>
+<tr><td>Encode timestamps</td><td class="r">0.1</td><td class="r">0.1 %</td><td>delta chain — 90 % of rows write zero bytes</td></tr>
+<tr><td>Encode prices (4 cols)</td><td class="r">6.5</td><td class="r">5.8 %</td><td>variable-width delta chain for open/high/low/close</td></tr>
+<tr><td>Encode volume</td><td class="r">4.0</td><td class="r">3.5 %</td><td>byte-plane split — 4 parallel streams</td></tr>
+<tr><td>LZ4 mode column</td><td class="r">0.5</td><td class="r">0.5 %</td><td>~4 KB/band; essentially free</td></tr>
+<tr><td>LZ4 timestamps</td><td class="r">0.2</td><td class="r">0.1 %</td><td>sparse stream; compresses to near-nothing</td></tr>
+<tr><td>LZ4 prices (4 cols)</td><td class="r">2.5</td><td class="r">2.2 %</td><td>narrow-range int8 deltas compress very well</td></tr>
+<tr><td>LZ4 volume</td><td class="r">1.1</td><td class="r">0.9 %</td><td>byte-plane layout aids lz4 zero-run detection</td></tr>
+<tr><td>Write header (14 bytes)</td><td class="r">0.0</td><td class="r">0.0 %</td><td>magic + version + codec + n_records + band_len</td></tr>
+<tr><td><strong>Write bands to disk</strong></td><td class="r"><strong>37.7</strong></td><td class="r"><strong>33.3 %</strong></td><td>flushing 35 MB of compressed data — pure I/O</td></tr>
+<tr style="border-top:2px solid var(--border)"><td><strong>Total</strong></td><td class="r"><strong>82 ms</strong></td><td class="r">100 %</td><td></td></tr>
+</table>
+
+<p><strong>Key insight:</strong> lz4 compression accounts for only 4.3 ms total (3.8 %). The dominant cost is converting 20 M float values from f32 to the internal integer representation. The irreducible floor — encoding + lz4 + disk write — is approximately 45 ms; the f32→integer conversion (29 ms) is now parallelised across all CPU columns simultaneously.</p>
+
+<h3>Stage-by-stage breakdown — CSV file → .bqe</h3>
+<p>When starting from a raw CSV text file (<code>bqe.compress(csv_path, output)</code>), a parallel text-parsing stage is prepended. The file is memory-mapped and split across all available CPU threads; each thread parses its chunk byte-by-byte without String allocation or UTF-8 validation.</p>
+
+<table>
+<tr><th>Stage</th><th class="r">ms</th><th class="r">share</th><th>notes</th></tr>
+<tr><td><strong>Parse CSV (parallel)</strong></td><td class="r"><strong>294</strong></td><td class="r"><strong>86.6 %</strong></td><td>mmap + multi-thread text → integer conversion of 200 MB</td></tr>
+<tr><td>Encode mode bytes</td><td class="r">1.1</td><td class="r">0.3 %</td><td></td></tr>
+<tr><td>Encode timestamps</td><td class="r">0.1</td><td class="r">0.0 %</td><td></td></tr>
+<tr><td>Encode prices (4 cols)</td><td class="r">6.3</td><td class="r">1.9 %</td><td></td></tr>
+<tr><td>Encode volume</td><td class="r">3.9</td><td class="r">1.1 %</td><td></td></tr>
+<tr><td>LZ4 all columns</td><td class="r">4.6</td><td class="r">1.4 %</td><td>combined — lz4 is negligible at this scale</td></tr>
+<tr><td>Write bands to disk</td><td class="r">29.5</td><td class="r">8.7 %</td><td></td></tr>
+<tr style="border-top:2px solid var(--border)"><td><strong>Total</strong></td><td class="r"><strong>~340 ms*</strong></td><td class="r">100 %</td><td></td></tr>
+</table>
+<p class="muted" style="font-size:.85rem">* Profiler total is higher than the 177 ms single-run figure because <code>profile_compress</code> runs each column type's compression in a separate pass for measurement. The relative proportions are accurate.</p>
+
+<p><strong>Key insight:</strong> CSV text parsing consumes 86.6 % of encoding time — converting ASCII digit sequences like <code>"152.3400"</code> into integers (1 523 400) character by character across 4 M rows. lz4 is not the bottleneck. If data is already in memory as NumPy arrays, use <code>bqe.compress_arrays()</code> to skip parsing entirely and cut encoding time by 36 %.</p>
+
+<h3>Append performance</h3>
+<p><code>bqe.append()</code> uses an incremental strategy — it only re-encodes the last (partial) band plus the new rows, then patches the record count in the header. The rest of the file is untouched. Cost is O(new rows), not O(total rows).</p>
+
+<table>
+<tr><th>rows appended</th><th class="r">time</th><th>equivalent to</th></tr>
+<tr><td>1 row</td><td class="r"><strong>14.8 ms</strong></td><td>1 new bar from a live feed</td></tr>
+<tr><td>10 rows</td><td class="r"><strong>14.3 ms</strong></td><td>10-minute batch update</td></tr>
+<tr><td>390 rows</td><td class="r"><strong>14.2 ms</strong></td><td>1 full trading day</td></tr>
+<tr><td>1 950 rows</td><td class="r"><strong>15.1 ms</strong></td><td>1 trading week</td></tr>
+<tr><td>4 096 rows</td><td class="r"><strong>14.6 ms</strong></td><td>exactly 1 new band</td></tr>
+<tr><td>19 500 rows</td><td class="r"><strong>15.5 ms</strong></td><td>~1 trading month</td></tr>
+</table>
+
+<p>Append time is essentially constant across all sizes because the bottleneck is fixed: decode the last partial band (~2 000 rows on average), re-encode it merged with the new data (1–5 bands), and seek-write the result. The 4.09 M existing rows are never read. For growing datasets — daily feed updates, live bar streaming — the cost per append is negligible relative to a single read.</p>
 
 <h3>Performance analysis</h3>
 <p><code>np.load</code> reads a single-threaded, uncompressed 82 MB file. BQE_DeComp reads 35 MB off disk and decodes across ~998 bands simultaneously — fewer bytes transferred from storage, and memory bandwidth fully utilised by parallel decompression. A standard .npy file cannot be compressed without abandoning the fast <code>mmap</code> path; BQE achieves both compression and parallel decode by design, saturating memory bandwidth while .npy pays the full uncompressed size penalty.</p>
