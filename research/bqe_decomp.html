@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BQE-DeComp — High-Performance Binary Encoding for 1-Minute OHLCV Market Data</title>
+<style>
+  /* ── BQE Design Tokens (aligned with blackquantempire.at) ─────────── */
+  :root {
+    --fg:           #B8B8B8;
+    --fg-strong:    #FFFFFF;
+    --muted:        #6B7280;
+    --accent:       #C4A86B;
+    --accent-light: #D4B87B;
+    --accent-dark:  #9E8A55;
+    --bg:           #0A0A0A;
+    --bg-soft:      #131313;
+    --bg-muted:     #1F1F1F;
+    --card:         #131313;
+    --code-bg:      #1a1a1a;
+    --border:       rgba(196,168,107,0.18);
+    --navy:         rgba(26,43,74,0.5);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font: 16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+  }
+
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ── Header: dark field, gold border top/bottom (strategy-page style) */
+  header {
+    background: var(--bg-soft);
+    border-top: 3px solid var(--accent);
+    border-bottom: 3px solid var(--accent);
+    color: var(--fg-strong);
+    padding: 64px 24px 56px;
+    text-align: center;
+    position: relative;
+  }
+  header::before {
+    content: '';
+    position: absolute; top:0; left:0; right:0; bottom:0;
+    background: linear-gradient(135deg,rgba(196,168,107,.05) 0%,transparent 50%,rgba(196,168,107,.05) 100%);
+    pointer-events: none;
+  }
+  header h1 {
+    margin: 0 0 8px;
+    font-size: 2.6rem;
+    letter-spacing: -.5px;
+    color: var(--accent);
+    position: relative;
+  }
+  header p { margin:0; font-size:1.15rem; color:var(--fg); position:relative; }
+
+  /* ── Badges ──────────────────────────────────────────────────────── */
+  .badges { margin-top:22px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; position:relative; }
+  .badge {
+    background: rgba(196,168,107,.08);
+    border: 1px solid rgba(196,168,107,.35);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-size: .92rem;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  /* ── Headings ────────────────────────────────────────────────────── */
+  h2 {
+    font-size:1.7rem;
+    margin:56px 0 0;
+    letter-spacing:-.3px;
+    color:var(--fg-strong);
+    background:var(--bg-soft);
+    border-top:3px solid var(--accent);
+    border-bottom:1px solid var(--border);
+    padding:20px 24px;
+  }
+  h2 .num { color:var(--accent); font-weight:800; }
+  h3 { font-size:1.2rem; margin:32px 0 4px; color:var(--fg-strong); }
+  p { color:var(--fg); }
+  p.lead { color:var(--muted); margin-top:4px; }
+  strong { color:var(--fg-strong); }
+  a { color:var(--accent); }
+  a:hover { color:var(--accent-light); }
+
+  /* ── Figures ─────────────────────────────────────────────────────── */
+  figure { margin:20px 0; text-align:center; }
+  figure img { max-width:100%; border:1px solid var(--border); border-radius:10px; background:var(--bg-soft); }
+  figcaption { color:var(--muted); font-size:.9rem; margin-top:8px; }
+
+  /* ── Code ────────────────────────────────────────────────────────── */
+  code, pre { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  code { background:var(--bg-muted); color:var(--accent-light); padding:2px 6px; border-radius:5px; font-size:.9em; }
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 18px 20px;
+    border-radius: 10px;
+    overflow: auto;
+    font-size: .88rem;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+  }
+  pre .k { color:#7dd3fc; } pre .s { color:#86efac; } pre .c { color:#94a3b8; font-style:italic; }
+
+  /* ── Card ────────────────────────────────────────────────────────── */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:22px 26px; margin:18px 0; }
+
+  /* ── Table ───────────────────────────────────────────────────────── */
+  table { border-collapse:collapse; width:100%; margin:18px 0; font-size:.95rem; }
+  th,td { border:1px solid var(--border); padding:9px 12px; text-align:left; color:var(--fg); }
+  th { background:var(--navy); color:var(--accent); font-weight:600; }
+  td.r, th.r { text-align:right; }
+
+  /* ── Pill (inline code token) ────────────────────────────────────── */
+  .pill {
+    display: inline-block;
+    background: var(--bg-muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1px 8px;
+    font-size: .85em;
+    font-family: monospace;
+    color: var(--accent-light);
+  }
+
+  /* ── Key insight box ─────────────────────────────────────────────── */
+  .key {
+    border-left: 4px solid var(--accent);
+    background: rgba(196,168,107,.06);
+    padding: 12px 18px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+    color: var(--fg);
+  }
+  .key strong { color:var(--accent); }
+
+  /* ── Table of contents ───────────────────────────────────────────── */
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 24px;
+    margin: 28px 0;
+  }
+  nav.toc strong { color:var(--fg-strong); }
+  nav.toc a { color:var(--accent); text-decoration:none; }
+  nav.toc a:hover { color:var(--accent-light); text-decoration:underline; }
+  nav.toc ol { margin:6px 0; padding-left:22px; }
+
+  /* ── Muted text ──────────────────────────────────────────────────── */
+  .muted { color:var(--muted); }
+
+  /* ── File layout diagram ─────────────────────────────────────────── */
+  .file-diagram { border:1px solid var(--border); border-radius:10px; overflow:hidden; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; margin:20px 0; }
+  .fd-header { background:rgba(196,168,107,.12); color:var(--accent); padding:10px 16px; border-bottom:2px solid rgba(196,168,107,.3); text-align:center; font-weight:700; }
+  .fd-header-sub { font-size:.72rem; color:var(--muted); margin-top:3px; font-weight:400; }
+  .fd-band { border-bottom:2px dashed rgba(196,168,107,.25); }
+  .fd-band:last-child { border-bottom:none; }
+  .fd-cols { display:flex; border-bottom:1px solid var(--border); }
+  .fd-col { flex:1; padding:8px 4px; text-align:center; border-right:1px solid var(--border); color:var(--fg); }
+  .fd-col:last-child { border-right:none; }
+  .fd-col-mode  { flex:.65; background:rgba(196,168,107,.04); color:var(--muted); }
+  .fd-col-ts    { flex:1.3;  background:rgba(26,43,74,.3); color:var(--fg-strong); }
+  .fd-col-price { flex:1;    background:rgba(26,43,74,.15); }
+  .fd-col-vol   { flex:1.3;  background:rgba(196,168,107,.07); }
+  .fd-band-label { display:flex; justify-content:space-between; align-items:center; padding:5px 12px; background:rgba(26,43,74,.2); color:var(--muted); font-size:.72rem; }
+  .fd-band-label span { color:var(--accent); font-weight:600; }
+  .fd-ellipsis { text-align:center; padding:10px; color:var(--muted); font-size:1.3rem; letter-spacing:6px; background:var(--bg-soft); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+
+  /* ── Volume byte-plane diagram ───────────────────────────────────── */
+  .vol-diagram { margin:20px 0; }
+  .vd-section { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .vd-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .vd-table { width:100%; border-collapse:collapse; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; }
+  .vd-table th, .vd-table td { border:1px solid var(--border); padding:6px 10px; text-align:center; }
+  .vd-table th { background:var(--navy); color:var(--accent); font-weight:600; }
+  .vd-table td:first-child { text-align:left; font-weight:600; white-space:nowrap; }
+  .vd-b0 { background:rgba(196,168,107,.18); color:#D4B87B; }
+  .vd-b1 { background:rgba(196,168,107,.08); color:#A89050; }
+  .vd-b2 { background:rgba(26,43,74,.3); color:var(--muted); }
+  .vd-b3 { background:rgba(26,43,74,.14); color:#3a3a4a; }
+  .vd-table .zero { opacity:.4; }
+  .vd-table td:last-child { text-align:left; color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:.75rem; }
+  .vd-dropped td { opacity:.35; }
+  .vd-dropped td:last-child { opacity:1; color:var(--accent); font-weight:700; }
+  .vd-note { padding:8px 16px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); }
+  .vd-arrow { text-align:center; padding:14px 8px; color:var(--accent); font-size:.88rem; font-family:"SF Mono",monospace; font-weight:600; letter-spacing:.03em; }
+  .vd-ellipsis td { text-align:center; color:var(--muted); background:var(--bg-soft); font-weight:400; }
+
+  /* ── Timestamp encoding diagram ─────────────────────────────────── */
+  .ts-diagram { margin:20px 0; }
+  .tsd-section { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .tsd-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .tsd-table { width:100%; border-collapse:collapse; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; }
+  .tsd-table th, .tsd-table td { border:1px solid var(--border); padding:6px 10px; text-align:center; }
+  .tsd-table th { background:var(--navy); color:var(--accent); font-weight:600; }
+  .tsd-table td:first-child { text-align:left; font-weight:600; white-space:nowrap; }
+  .tsd-table td:last-child { text-align:left; color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:.75rem; }
+  .tsd-m0 { background:rgba(74,196,120,.1); color:#5dc87a; }
+  .tsd-m1 { background:rgba(196,168,107,.15); color:#D4B87B; }
+  .tsd-m2 { background:rgba(196,168,107,.07); color:#A89050; }
+  .tsd-m3 { background:rgba(180,100,100,.1); color:#c87a7a; }
+  .tsd-free { color:#5dc87a; font-weight:700; }
+  .tsd-gap { color:var(--accent); font-weight:700; }
+  .tsd-note { padding:8px 16px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); }
+  .tsd-arrow { text-align:center; padding:14px 8px; color:var(--accent); font-size:.88rem; font-family:"SF Mono",monospace; font-weight:600; letter-spacing:.03em; }
+  .tsd-ellipsis td { text-align:center; color:var(--muted); background:var(--bg-soft); font-weight:400; }
+
+  /* ── Price delta & variable-width diagram ───────────────────────── */
+  .pd-diagram { margin:20px 0; }
+  .pd-section { border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:0; }
+  .pd-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .pd-table { width:100%; border-collapse:collapse; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; }
+  .pd-table th, .pd-table td { border:1px solid var(--border); padding:6px 10px; text-align:center; }
+  .pd-table th { background:var(--navy); color:var(--accent); font-weight:600; }
+  .pd-table td:first-child { text-align:left; font-weight:600; white-space:nowrap; }
+  .pd-table td:last-child { text-align:left; color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:.75rem; }
+  .pd-abs { background:rgba(196,168,107,.18); color:#D4B87B; }
+  .pd-i8  { background:rgba(74,196,120,.1);  color:#5dc87a; }
+  .pd-i16 { background:rgba(196,168,107,.08); color:#A89050; }
+  .pd-i32 { background:rgba(180,100,100,.1); color:#c87a7a; }
+  .pd-byte-good { color:#5dc87a; font-weight:700; }
+  .pd-byte-mid  { color:var(--accent); font-weight:700; }
+  .pd-byte-bad  { color:#c87a7a; font-weight:700; }
+  .pd-note { padding:8px 16px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); }
+  .pd-arrow { text-align:center; padding:14px 8px; color:var(--accent); font-size:.88rem; font-family:"SF Mono",monospace; font-weight:600; letter-spacing:.03em; }
+  .pd-ellipsis td { text-align:center; color:var(--muted); background:var(--bg-soft); font-weight:400; }
+
+  /* ── Bar charts (replace numeric comparison tables) ──────────────── */
+  .chart { margin:22px 0; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .chart-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .chart-body { padding:16px 18px 14px; }
+  .chart-sub { font-size:.74rem; color:var(--muted); margin:0 0 10px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
+  .chart-sub.spaced { margin-top:18px; }
+  .bar-row { display:flex; align-items:center; margin:6px 0; font-size:.82rem; }
+  .bar-label { flex:0 0 200px; color:var(--fg); text-align:right; padding-right:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-track { flex:1; background:var(--bg-muted); border-radius:5px; height:24px; }
+  .bar-fill { height:100%; border-radius:5px; display:flex; align-items:center; justify-content:flex-end; padding-right:9px; font-size:.76rem; font-weight:700; color:#0A0A0A; white-space:nowrap; box-sizing:border-box; }
+  .bar-win  { background:linear-gradient(90deg,var(--accent-dark),var(--accent-light)); }
+  .bar-good { background:linear-gradient(90deg,#3e8e5a,#5dc87a); color:#08130c; }
+  .bar-dim  { background:rgba(26,43,74,.75); color:var(--fg-strong); }
+  .chart-note { padding:8px 16px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); }
+  .chart-note strong { color:var(--accent); }
+  @media(max-width:560px){ .bar-label{ flex-basis:120px; font-size:.74rem; } }
+
+  /* ── Benchmark matrix: bands × threads × decode time ────────────── */
+  .bm-grid { margin:22px 0; border:1px solid var(--border); border-radius:10px; overflow:hidden; font-size:.82rem; }
+  .bm-row { display:flex; border-bottom:1px solid var(--border); }
+  .bm-row:last-child { border-bottom:none; }
+  .bm-row.bm-header { background:var(--navy); }
+  .bm-label { flex:0 0 178px; padding:10px 12px; border-right:1px solid var(--border); font-family:"SF Mono",monospace; display:flex; flex-direction:column; justify-content:center; }
+  .bm-label strong { color:var(--accent); font-size:.85rem; }
+  .bm-label span { color:var(--muted); font-size:.71rem; margin-top:2px; display:block; }
+  .bm-row.bm-header .bm-label { color:var(--accent); font-weight:700; font-size:.78rem; justify-content:flex-end; padding-bottom:8px; }
+  .bm-cell { flex:1; padding:8px 4px; text-align:center; border-right:1px solid var(--border); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; min-width:0; }
+  .bm-cell:last-child { border-right:none; }
+  .bm-row.bm-header .bm-cell { color:var(--fg-strong); font-weight:600; font-family:"SF Mono",monospace; font-size:.78rem; padding:10px 4px; }
+  .bm-ms { font-family:"SF Mono",monospace; font-weight:700; font-size:.8rem; }
+  .bm-sp { font-size:.68rem; opacity:.7; }
+  .bm-baseline { background:rgba(26,43,74,.55); } .bm-baseline .bm-ms { color:var(--muted); }
+  .bm-noise    { background:rgba(26,43,74,.2);  } .bm-noise .bm-ms    { color:var(--muted); }
+  .bm-mild     { background:rgba(196,168,107,.1);} .bm-mild .bm-ms    { color:var(--accent); }
+  .bm-good     { background:rgba(196,168,107,.22);} .bm-good .bm-ms   { color:var(--accent-light); }
+  .bm-great    { background:rgba(74,196,120,.12);} .bm-great .bm-ms   { color:#5dc87a; }
+  .bm-best     { background:rgba(74,196,120,.28);} .bm-best .bm-ms    { color:#3db867; font-size:.85rem; }
+  .bm-opt { outline:2px solid rgba(74,196,120,.6); outline-offset:-2px; border-radius:2px; }
+  .bm-note { padding:10px 14px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); line-height:1.55; }
+  @media(max-width:640px){ .bm-label{flex-basis:110px;} .bm-cell{padding:6px 2px;} .bm-ms{font-size:.72rem;} }
+
+  /* ── Responsive ──────────────────────────────────────────────────── */
+  @media(max-width:640px) { header h1 { font-size:2rem; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>BQE-DeComp</h1>
+  <p>A domain-specific binary codec for 1-minute OHLCV equity data.<br>Decodes directly into NumPy arrays — no text parsing, all CPU cores in parallel.</p>
+  <div class="badges">
+    <span class="badge">7–9× smaller than CSV</span>
+    <span class="badge">4 M rows → NumPy in ~9 ms (lz4)</span>
+    <span class="badge">Rust · PyO3 · zstd / lz4</span>
+    <span class="badge">lossless price representation</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#why">The problem &amp; the result</a></li>
+    <li><a href="#format">Binary format reference</a></li>
+    <li><a href="#bands">Row-banding &amp; parallelism</a></li>
+    <li><a href="#delta">How it works — ① delta encoding &amp; ② variable width</a></li>
+    <li><a href="#ts">③ timestamp encoding</a></li>
+    <li><a href="#volume">④ byte-plane volume</a></li>
+    <li><a href="#codec">Codec choice — zstd vs lz4</a></li>
+    <li><a href="#history">Version history &amp; experiment log</a></li>
+    <li><a href="#api">API reference</a></li>
+    <li><a href="#precision">Precision &amp; correctness</a></li>
+  </ol>
+</nav>
+
+<h2 id="why">Problem definition &amp; proposed solution</h2>
+
+<h3>The bottleneck: scale constraints in equity data processing</h3>
+<p>Financial machine learning workflows operate on high-frequency time series across thousands of instruments. A single equity's complete 1-minute OHLCV history since 2000 constitutes approximately 240 MB of unstructured text. When training models across entire market segments, the aggregate I/O and parsing cost becomes prohibitive: parsing a single 240 MB CSV into NumPy incurs 1.4 seconds of overhead per file. With datasets of thousands of instruments, cumulative parsing time dominates the training pipeline.</p>
+
+<p>The root cause is structural: CSV text representation carries redundancy unsuitable for machine learning pipelines. Numeric values are serialised as ASCII strings, requiring system-level parsing to restore machine types. Records are variable-length due to optional fields and textual formatting, preventing fast bulk-copy I/O. Most critically, parsing is single-threaded — modern hardware parallelism is unused.</p>
+
+<h3>Proposed solution: parallel decompression into native array format</h3>
+<p>BQE encodes equity OHLCV data as a self-describing binary format that decompresses directly into columnar NumPy arrays — no intermediate representation, no text parsing, all CPU cores engaged from first byte to final value. The file header specifies the entropy codec (zstd or lz4) and band structure; the reader automatically selects the optimal decode path. Each row band is fully independent, permitting embarrassingly parallel decode across available cores.</p>
+
+<p>The trade-off is encode-time latency, which is acceptable because compression occurs once offline, whereas decoding is performed repeatedly during training. Decode throughput and output array layout are the primary design objectives. Every architectural decision documented below is supported by direct measurement against the alternative.</p>
+
+<h3>Benchmarks: CSV vs NumPy vs BQE</h3>
+<p style="margin-bottom:8px;"><strong>Setup:</strong> AAPL full history (4.09 M rows × 5 columns = 240 MB CSV), target output a column-oriented <code>float32</code> NumPy array, OS file cache warm. All timings are median over 5 consecutive runs on the same hardware (Intel Core i7-10700K, DDR4-3200).</p>
+
+<figure>
+  <img src="img/07_formats.png" alt="Load time and disk footprint: CSV vs NumPy vs BQE_DeComp">
+  <figcaption style="display:flex; gap:0; margin-top:8px;">
+    <div style="flex:1; padding-right:16px; border-right:1px solid var(--muted); text-align:left;">
+      <strong>Left (log scale):</strong> time to load 4.1 M rows into a NumPy array.<br><br>
+      CSV (pandas): 1378 ms — dominated by text parsing<br>
+      NumPy (.npy): 24 ms — pure I/O<br>
+      BQE_DeComp (lz4): 10 ms — 138× faster than CSV, 0.4× the size of NumPy
+    </div>
+    <div style="flex:1; padding-left:16px; text-align:left;">
+      <strong>Right:</strong> on-disk footprint. BQE_DeComp achieves 6.8× compression vs CSV and occupies 43% of NumPy's uncompressed size.
+    </div>
+  </figcaption>
+</figure>
+
+<h3>Write performance</h3>
+<p>Encoding is performed once offline. The following benchmark measures the time to serialise the same 4.09 M-row dataset from an in-memory NumPy array to each format (median of 5 runs, same hardware).</p>
+
+<figure>
+  <img src="img/08_write.png" alt="Write time and resulting file size: CSV vs NumPy vs BQE_DeComp">
+  <figcaption style="display:flex; gap:0; margin-top:8px;">
+    <div style="flex:1; padding-right:16px; border-right:1px solid var(--muted); text-align:left;">
+      <strong>Left (log scale):</strong> time to write 4.1 M rows from NumPy to disk.<br><br>
+      CSV (pandas): 10,218 ms — number formatting and text serialisation<br>
+      NumPy (.npy): 65 ms — raw binary dump, fastest possible<br>
+      BQE_DeComp (lz4): 635 ms — 16× faster than CSV, compresses in parallel
+    </div>
+    <div style="flex:1; padding-left:16px; text-align:left;">
+      <strong>Right:</strong> resulting file size. BQE_DeComp produces a 35 MB file — 5.7× smaller than CSV and 57% smaller than the uncompressed .npy. The one-time encoding cost is amortised across every subsequent read.
+    </div>
+  </figcaption>
+</figure>
+
+<p>.npy is the fastest write format since it performs no compression — it dumps raw bytes directly. BQE_DeComp takes ~635 ms because lz4 compresses each band in parallel; zstd achieves a smaller file (28 MB) at ~1250 ms. The encoding cost is paid once and amortised across all future reads: at 10 ms per read, BQE_DeComp breaks even against .npy after approximately 4 reads, and against CSV after the very first read.</p>
+
+<h3>Performance analysis</h3>
+<p><code>np.load</code> reads a single-threaded, uncompressed 82 MB file. BQE_DeComp reads 35 MB off disk and decodes across ~998 bands simultaneously — fewer bytes transferred from storage, and memory bandwidth fully utilised by parallel decompression. A standard .npy file cannot be compressed without abandoning the fast <code>mmap</code> path; BQE achieves both compression and parallel decode by design, saturating memory bandwidth while .npy pays the full uncompressed size penalty.</p>
+
+<h3>Design constraint</h3>
+<p>Decode throughput and output array layout are the primary objectives. Compression is performed once offline, so encoding speed is not optimised. Every architectural decision documented below is supported by direct measurement against the alternative.</p>
+
+<h2 id="format">Binary format reference <span class="muted" style="font-size:1rem">(v9, magic <code>BQRC</code>)</span></h2>
+
+<h3>Overall layout</h3>
+<p>A BQE file consists of a fixed 14-byte header followed by <em>K</em> independent row bands. Each band contains 7 compressed column streams, each preceded by a 4-byte length field. The structure mirrors a CSV partitioned into horizontal row segments — the header spans the full record width, and each band represents a self-contained group of rows that can be decoded without reference to any other band:</p>
+
+<div class="file-diagram">
+  <div class="fd-header">
+    HEADER · 14 bytes
+    <div class="fd-header-sub">magic "BQRC" &nbsp;·&nbsp; version=9 &nbsp;·&nbsp; codec (0=zstd / 1=lz4) &nbsp;·&nbsp; n_records u32 &nbsp;·&nbsp; band_len u32</div>
+  </div>
+  <div class="fd-band">
+    <div class="fd-cols">
+      <div class="fd-col fd-col-mode">mode</div>
+      <div class="fd-col fd-col-ts">timestamps</div>
+      <div class="fd-col fd-col-price">open</div>
+      <div class="fd-col fd-col-price">high</div>
+      <div class="fd-col fd-col-price">low</div>
+      <div class="fd-col fd-col-price">close</div>
+      <div class="fd-col fd-col-vol">volume</div>
+    </div>
+    <div class="fd-band-label">Band 0 &nbsp;·&nbsp; ~4 096 rows &nbsp;&nbsp;<span>→ decoded on Core 0</span></div>
+  </div>
+  <div class="fd-band">
+    <div class="fd-cols">
+      <div class="fd-col fd-col-mode">mode</div>
+      <div class="fd-col fd-col-ts">timestamps</div>
+      <div class="fd-col fd-col-price">open</div>
+      <div class="fd-col fd-col-price">high</div>
+      <div class="fd-col fd-col-price">low</div>
+      <div class="fd-col fd-col-price">close</div>
+      <div class="fd-col fd-col-vol">volume</div>
+    </div>
+    <div class="fd-band-label">Band 1 &nbsp;·&nbsp; ~4 096 rows &nbsp;&nbsp;<span>→ decoded on Core 1</span></div>
+  </div>
+  <div class="fd-ellipsis">⋮</div>
+  <div class="fd-band">
+    <div class="fd-cols">
+      <div class="fd-col fd-col-mode">mode</div>
+      <div class="fd-col fd-col-ts">timestamps</div>
+      <div class="fd-col fd-col-price">open</div>
+      <div class="fd-col fd-col-price">high</div>
+      <div class="fd-col fd-col-price">low</div>
+      <div class="fd-col fd-col-price">close</div>
+      <div class="fd-col fd-col-vol">volume</div>
+    </div>
+    <div class="fd-band-label">Band K-1 &nbsp;·&nbsp; last band (may be shorter) &nbsp;&nbsp;<span>→ decoded on Core K-1</span></div>
+  </div>
+</div>
+<p class="muted" style="font-size:.88rem">Each column cell is encoded as: <code>[4B compressed_size u32 LE][compressed payload]</code>. Band independence is enforced by restarting the delta chain at each band boundary — every core decodes its assigned band without synchronisation.</p>
+
+<h3>The header (14 bytes)</h3>
+<figure>
+  <img src="img/fmt_header.png" alt="14-byte header field map">
+  <figcaption>Magic, version, the codec byte (new in v9 — makes the file self-describing), then record count and band length as little-endian u32. v8 files omit the codec byte and are read as zstd.</figcaption>
+</figure>
+
+<h3>The per-row mode byte (column 0)</h3>
+<p>Column 0 stores one control byte per row. This byte encodes two independent 2-bit fields that inform the decoder of the storage width required for that row's timestamp delta and price deltas. The common case — a one-cent price move at the following minute — is represented with minimal overhead:</p>
+<figure>
+  <img src="img/fmt_mode.png" alt="mode byte bit-field">
+  <figcaption>Two bits select the timestamp width (with "+1 minute" costing zero bytes), two bits select the price width shared by all four OHLC columns; the top four bits are spare. The ts/price streams then store exactly those bytes per row.</figcaption>
+</figure>
+<p><strong>Why do bits [7:4] exist if they're unused?</strong> They don't — but a byte does. The mode field needs exactly 4 bits: 2 for <code>ts_mode</code> and 2 for <code>price_mode</code>. There is no 4-bit type in Rust (or any CPU-native system); <code>u8</code> is the smallest addressable unit. The upper 4 bits come with the byte whether we want them or not. The encoder writes <code>0</code> there; the decoder ignores them. They are not reserved for future use — they are simply the unavoidable padding of an 8-bit word. Because the mode column is itself compressed by zstd/lz4, a constant zero nibble costs essentially nothing in practice.</p>
+
+<h2 id="bands">Row-banding &amp; parallelism</h2>
+<p class="lead">Partition the data so every CPU core has an independent unit of work.</p>
+<p>The source data is organised as one row per minute, with columns ordered left-to-right: <code>timestamp, open, high, low, close, volume</code>. BQE preserves this layout and introduces two orthogonal decompositions that together enable full parallel decode:</p>
+<ul>
+  <li><strong>Horizontal partitioning → bands.</strong> Rows are grouped into bands of ~4 096 consecutive rows. Because delta decoding is inherently sequential (row <em>i</em> requires row <em>i−1</em>), each band stores its own absolute first-row values and restarts the delta chain. Bands are therefore fully independent: a 4 M-row file yields ~998 bands, each decoded on a separate core simultaneously.</li>
+  <li><strong>Vertical partitioning → column streams.</strong> Within each band, the seven columns are stored and compressed independently. Homogeneous data compresses more efficiently than interleaved row-major layout, and each column stream is small enough to fit in CPU cache during decode.</li>
+</ul>
+<figure>
+  <img src="img/05_bands.png" alt="A CSV cut horizontally into row-bands and vertically into column streams">
+  <figcaption>The CSV view: rows top-to-bottom, columns left-to-right. Dashed red lines are <strong>band splits</strong> (delta chain restarts → independent); the grey vertical lines are <strong>column splits</strong> (each column its own compressed stream). Each band → one core. The file is memory-mapped, so each core faults in only its own bytes — disk I/O overlaps compute.</figcaption>
+</figure>
+<p><strong>Decode is memory-bandwidth bound, not compute bound.</strong> Profiling confirmed this: replacing the price-scaling integer divide with a multiply had no measurable effect on throughput. Decode speed scales with thread count only until the aggregate memory bandwidth is saturated; beyond that threshold, additional threads compete for the same bus and throughput regresses. The thread pool is calibrated per machine via <code>bqe.calibrate_threads()</code> (see API reference). File size reduction also directly improves decode speed — fewer bytes transferred from DRAM is fewer bytes decompressed. Output arrays are allocated uninitialised and filled element-by-element, avoiding a redundant 80 MB zero-initialisation pass that contributed ~11% of the decode budget in early versions.</p>
+<h3>Band size sweep — rows per band vs. decode time &amp; file size</h3>
+<p>The band size (<code>BAND_ROWS</code>) controls the granularity of parallel work: smaller bands produce more independent tasks and therefore more parallelism, but each band introduces a small per-band overhead (delta chain restart, mode byte reset). Larger bands amortise that overhead but starve the thread pool. The table below was measured on AAPL (4.09 M rows, lz4 codec, 8 threads, 1 warmup + 5 runs, median, warm OS cache):</p>
+
+<div class="bm-grid">
+  <div class="bm-row bm-header">
+    <div class="bm-label">band_rows &nbsp;·&nbsp; bands</div>
+    <div class="bm-cell">decode time</div>
+    <div class="bm-cell">file size</div>
+    <div class="bm-cell" style="flex:1.8">verdict</div>
+  </div>
+  <!-- 512 -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>512</strong><span>7 980 bands</span></div>
+    <div class="bm-cell bm-great"><div class="bm-ms">9.6 ms</div></div>
+    <div class="bm-cell bm-noise"><div class="bm-ms">36.7 MB</div><div class="bm-sp">+6% larger</div></div>
+    <div class="bm-cell bm-noise" style="flex:1.8"><div class="bm-ms" style="font-size:.73rem;font-weight:400;color:var(--muted);">fastest decode, per-band overhead inflates file</div></div>
+  </div>
+  <!-- 4 096 — current default -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>4 096</strong><span>998 bands &nbsp;·&nbsp; v10 default</span></div>
+    <div class="bm-cell bm-best bm-opt"><div class="bm-ms">9.2 ms</div></div>
+    <div class="bm-cell bm-mild"><div class="bm-ms">35.0 MB</div></div>
+    <div class="bm-cell bm-best" style="flex:1.8"><div class="bm-ms" style="font-size:.73rem;font-weight:400;color:var(--fg-strong);">best decode/size balance — current default</div></div>
+  </div>
+  <!-- 8 192 -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>8 192</strong><span>499 bands</span></div>
+    <div class="bm-cell bm-great"><div class="bm-ms">10.5 ms</div></div>
+    <div class="bm-cell bm-mild"><div class="bm-ms">34.65 MB</div></div>
+    <div class="bm-cell bm-good" style="flex:1.8"><div class="bm-ms" style="font-size:.73rem;font-weight:400;color:var(--muted);">fast, negligible size difference</div></div>
+  </div>
+  <!-- 16 384 -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>16 384</strong><span>250 bands</span></div>
+    <div class="bm-cell bm-good"><div class="bm-ms">11.5 ms</div></div>
+    <div class="bm-cell bm-good"><div class="bm-ms">34.41 MB</div><div class="bm-sp">slightly smaller</div></div>
+    <div class="bm-cell bm-good" style="flex:1.8"><div class="bm-ms" style="font-size:.73rem;font-weight:400;color:var(--muted);">40% faster and smaller than v9 default</div></div>
+  </div>
+  <!-- 32 768 -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>32 768</strong><span>125 bands</span></div>
+    <div class="bm-cell bm-mild"><div class="bm-ms">14.5 ms</div></div>
+    <div class="bm-cell bm-good"><div class="bm-ms">34.22 MB</div><div class="bm-sp">smallest</div></div>
+    <div class="bm-cell bm-mild" style="flex:1.8"><div class="bm-ms" style="font-size:.73rem;font-weight:400;color:var(--muted);">smallest file, decode begins to slow</div></div>
+  </div>
+  <!-- 131 072 — old default -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>131 072</strong><span>32 bands &nbsp;·&nbsp; v9 default</span></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">19.8 ms</div></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">34.70 MB</div></div>
+    <div class="bm-cell bm-baseline" style="flex:1.8"><div class="bm-ms" style="font-size:.73rem;font-weight:400;color:var(--muted);">v9 default — only 32 bands, 6 threads idle</div></div>
+  </div>
+  <!-- 2 097 152 -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>2 097 152</strong><span>2 bands</span></div>
+    <div class="bm-cell bm-noise"><div class="bm-ms">36.6 ms</div></div>
+    <div class="bm-cell bm-noise"><div class="bm-ms">34.65 MB</div></div>
+    <div class="bm-cell bm-noise" style="flex:1.8"><div class="bm-ms" style="font-size:.73rem;font-weight:400;color:var(--muted);">near-sequential — only 2 threads utilised</div></div>
+  </div>
+  <div class="bm-note">
+    Highlighted cell (outlined) = chosen v10 default. AAPL · 4.09 M rows · lz4 · 8 threads · warm cache · median of 5 runs.<br>
+    The v9 default (131 072 rows/band) was set before systematic measurement — only 32 bands, leaving 6 threads idle. Reducing to 4 096 produces 998 bands, 2.2× faster decode with &lt;1% size penalty. Compression ratio degrades below ~2 048 rows/band as per-band fixed overhead becomes significant relative to payload.
+  </div>
+</div>
+
+<h3>Thread count vs. band count vs. decode time</h3>
+<p>A file with <em>K</em> bands can fully utilise at most <em>K</em> threads — each band is one independent unit of parallel work. The band size (rows per band) is therefore the primary lever: with the v10 default of 4 096 rows/band, even a 158 K-row file produces 39 bands, saturating a multi-core CPU at 7–10× speedup. Beyond the band count ceiling, throughput is memory-bandwidth bound: once the active threads saturate the memory bus, adding more threads causes regression. The optimal thread count is therefore a joint function of the hardware and the band count. The following matrix was benchmarked with <code>bqe.calibrate_threads()</code> (1 warmup + 5 runs, median, warm OS cache, <code>BAND_ROWS = 4 096</code>):</p>
+
+<div class="bm-grid">
+  <div class="bm-row bm-header">
+    <div class="bm-label">file &nbsp;·&nbsp; bands &nbsp;·&nbsp; size</div>
+    <div class="bm-cell">1 thread</div>
+    <div class="bm-cell">2 threads</div>
+    <div class="bm-cell">4 threads</div>
+    <div class="bm-cell">8 threads</div>
+    <div class="bm-cell">16 threads</div>
+  </div>
+  <!-- AFIB: 39 bands (v10 BAND_ROWS=4096) -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>AFIB</strong><span>39 bands &nbsp;·&nbsp; 1.3 MB &nbsp;·&nbsp; 158 K rows</span></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">2.3 ms</div><div class="bm-sp">1.0×</div></div>
+    <div class="bm-cell bm-mild">    <div class="bm-ms">1.2 ms</div><div class="bm-sp">1.9×</div></div>
+    <div class="bm-cell bm-good">    <div class="bm-ms">0.6 ms</div><div class="bm-sp">3.8×</div></div>
+    <div class="bm-cell bm-great">   <div class="bm-ms">0.4 ms</div><div class="bm-sp">5.8×</div></div>
+    <div class="bm-cell bm-best bm-opt"><div class="bm-ms">0.3 ms</div><div class="bm-sp">7.7×</div></div>
+  </div>
+  <!-- ATEX: 78 bands -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>ATEX</strong><span>78 bands &nbsp;·&nbsp; 3.0 MB &nbsp;·&nbsp; 316 K rows</span></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">5.0 ms</div><div class="bm-sp">1.0×</div></div>
+    <div class="bm-cell bm-mild">    <div class="bm-ms">2.5 ms</div><div class="bm-sp">2.0×</div></div>
+    <div class="bm-cell bm-good">    <div class="bm-ms">1.2 ms</div><div class="bm-sp">4.2×</div></div>
+    <div class="bm-cell bm-great">   <div class="bm-ms">0.7 ms</div><div class="bm-sp">7.1×</div></div>
+    <div class="bm-cell bm-best bm-opt"><div class="bm-ms">0.5 ms</div><div class="bm-sp">10×</div></div>
+  </div>
+  <!-- ASO: 133 bands -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>ASO</strong><span>133 bands &nbsp;·&nbsp; 5.1 MB &nbsp;·&nbsp; 542 K rows</span></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">6.0 ms</div><div class="bm-sp">1.0×</div></div>
+    <div class="bm-cell bm-mild">    <div class="bm-ms">3.0 ms</div><div class="bm-sp">2.0×</div></div>
+    <div class="bm-cell bm-good">    <div class="bm-ms">1.6 ms</div><div class="bm-sp">3.8×</div></div>
+    <div class="bm-cell bm-great">   <div class="bm-ms">0.9 ms</div><div class="bm-sp">6.7×</div></div>
+    <div class="bm-cell bm-best bm-opt"><div class="bm-ms">0.6 ms</div><div class="bm-sp">10×</div></div>
+  </div>
+  <!-- ADC: 267 bands -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>ADC</strong><span>267 bands &nbsp;·&nbsp; 9.7 MB &nbsp;·&nbsp; 1.09 M rows</span></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">16.5 ms</div><div class="bm-sp">1.0×</div></div>
+    <div class="bm-cell bm-mild">    <div class="bm-ms">9.1 ms</div><div class="bm-sp">1.8×</div></div>
+    <div class="bm-cell bm-good">    <div class="bm-ms">4.2 ms</div><div class="bm-sp">3.9×</div></div>
+    <div class="bm-cell bm-great">   <div class="bm-ms">2.7 ms</div><div class="bm-sp">6.1×</div></div>
+    <div class="bm-cell bm-best bm-opt"><div class="bm-ms">2.4 ms</div><div class="bm-sp">6.9×</div></div>
+  </div>
+  <!-- AJG: 521 bands -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>AJG</strong><span>521 bands &nbsp;·&nbsp; 17.2 MB &nbsp;·&nbsp; 2.13 M rows</span></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">29.0 ms</div><div class="bm-sp">1.0×</div></div>
+    <div class="bm-cell bm-mild">    <div class="bm-ms">15.8 ms</div><div class="bm-sp">1.8×</div></div>
+    <div class="bm-cell bm-good">    <div class="bm-ms">7.2 ms</div><div class="bm-sp">4.0×</div></div>
+    <div class="bm-cell bm-great bm-opt"><div class="bm-ms">4.8 ms</div><div class="bm-sp">6.0×</div></div>
+    <div class="bm-cell bm-great">   <div class="bm-ms">4.8 ms</div><div class="bm-sp">6.0×</div></div>
+  </div>
+  <!-- AAPL: 998 bands — bandwidth saturation at 8T -->
+  <div class="bm-row">
+    <div class="bm-label"><strong>AAPL</strong><span>998 bands &nbsp;·&nbsp; 35.0 MB &nbsp;·&nbsp; 4.09 M rows</span></div>
+    <div class="bm-cell bm-baseline"><div class="bm-ms">44.7 ms</div><div class="bm-sp">1.0×</div></div>
+    <div class="bm-cell bm-mild">    <div class="bm-ms">22.3 ms</div><div class="bm-sp">2.0×</div></div>
+    <div class="bm-cell bm-good">    <div class="bm-ms">11.8 ms</div><div class="bm-sp">3.8×</div></div>
+    <div class="bm-cell bm-great bm-opt"><div class="bm-ms">9.2 ms</div><div class="bm-sp">4.9×</div></div>
+    <div class="bm-cell bm-great">   <div class="bm-ms">9.6 ms</div><div class="bm-sp">4.7×</div></div>
+  </div>
+  <div class="bm-note">
+    Highlighted cell (outlined) = fastest for that file. Colour: <span style="color:var(--muted)">■ 1.0×</span> &nbsp;·&nbsp; <span style="color:var(--accent)">■ ~2×</span> &nbsp;·&nbsp; <span style="color:var(--accent-light)">■ ~4×</span> &nbsp;·&nbsp; <span style="color:#5dc87a">■ ~5–7×</span> &nbsp;·&nbsp; <span style="color:#3db867">■ &gt;7×</span>
+    &nbsp;·&nbsp; Measured with <code>BAND_ROWS = 4 096</code> (v10 default).<br>
+    With 39–998 bands per file, <strong>every file size now scales strongly across thread counts</strong>. Small files (AFIB, ASO) reach 7–10× at 16 threads — impossible when the old 131 072 default produced only 2–5 bands. The only exception is AAPL (35 MB): memory bandwidth saturates at 8 threads regardless of band count; adding more threads causes regression. Online calibration detects this machine-specific ceiling automatically.
+  </div>
+</div>
+
+<h3>Thread calibration — two modes</h3>
+<p>Two calibration strategies are available. Both write to <code>~/.bqe_threads</code> and apply automatically on all subsequent sessions.</p>
+
+<div style="margin:18px 0; background:var(--bg-soft); border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+  <div style="padding:16px; border-bottom:2px solid var(--accent);">
+    <div style="font-weight:700; color:var(--accent); margin-bottom:10px; font-size:1rem;">Mode 1 — Automatic single-file calibration</div>
+    <table style="margin:0; width:100%; font-size:.9rem; border-collapse:collapse;">
+      <tr><td style="padding:8px 0; border-bottom:1px solid var(--border);"><code>bqe.read()</code> on unconfigured machine</td><td style="padding:8px 12px 8px 0; text-align:right; border-bottom:1px solid var(--border); color:var(--muted);">Benchmarks all thread counts, saves optimal, decodes</td><td style="padding:8px 12px 8px 0; text-align:right; border-bottom:1px solid var(--border); color:var(--muted); white-space:nowrap;">~500 ms once</td></tr>
+      <tr><td style="padding:8px 0; color:var(--fg-dim);">All subsequent calls</td><td style="padding:8px 12px 8px 0; text-align:right; color:var(--fg-dim);">Uses stored optimal from <code>~/.bqe_threads</code></td><td style="padding:8px 12px 8px 0; text-align:right; color:var(--fg-dim); white-space:nowrap;">Zero</td></tr>
+    </table>
+  </div>
+  <div style="padding:16px;">
+    <div style="font-weight:700; color:var(--accent); margin-bottom:10px; font-size:1rem;">Mode 2 — Online incremental calibration</div>
+    <table style="margin:0; width:100%; font-size:.9rem; border-collapse:collapse;">
+      <tr><td style="padding:8px 0; border-bottom:1px solid var(--border);"><code>bqe.start_online_calibration()</code> activated</td><td style="padding:8px 12px 8px 0; text-align:right; border-bottom:1px solid var(--border); color:var(--muted);">Each read rotates through thread counts; after ~18 calls, optimal is decided &amp; saved</td><td style="padding:8px 12px 8px 0; text-align:right; border-bottom:1px solid var(--border); color:var(--muted); white-space:nowrap;">None</td></tr>
+      <tr><td style="padding:8px 0; color:var(--fg-dim);">All subsequent calls</td><td style="padding:8px 12px 8px 0; text-align:right; color:var(--fg-dim);">Uses the discovered optimal automatically</td><td style="padding:8px 12px 8px 0; text-align:right; color:var(--fg-dim); white-space:nowrap;">Zero</td></tr>
+    </table>
+  </div>
+  <div style="padding:12px 16px; background:var(--bg); border-top:1px solid var(--border); font-size:.85rem; color:var(--muted);">
+    <strong>Special cases:</strong> Single-band files (&lt; 4 096 rows) skip calibration entirely — no thread pool dispatch. Reset with <code>bqe.set_thread_config(0)</code> to re-calibrate from scratch next session.
+  </div>
+</div>
+
+<p>Mode 2 is recommended for large datasets. With <code>samples_per=3</code> and ~6 thread candidates, calibration completes after 18 reads — a rounding error in a dataset of 100 000 files. The exploration phase is completely transparent: data is decoded correctly on every call, just with a different thread count each time. Mode 1 is better suited for a one-off setup (CI pipeline, first run on a new machine).</p>
+
+<h3>Runtime support components</h3>
+<table>
+<tr><th>Component</th><th>Role</th></tr>
+<tr><td><span class="pill">zstd</span> / <span class="pill">lz4</span></td><td>Entropy coding per column stream; symmetric decompression speed is the primary decode bottleneck.</td></tr>
+<tr><td><span class="pill">mmap</span></td><td>Eliminates a file-size copy into process memory; OS pages fault in during decode, overlapping I/O with computation.</td></tr>
+<tr><td><span class="pill">mimalloc</span></td><td>Concurrent allocator; replaces the OS heap which serialises thread-local allocations across a shared lock.</td></tr>
+<tr><td><span class="pill">rayon</span></td><td>Work-stealing thread pool; each band is an independent task dispatched to an available worker.</td></tr>
+<tr><td>columnar layout</td><td>Each column is compressed as a homogeneous stream; similar values cluster and entropy coders achieve higher ratios.</td></tr>
+</table>
+
+<h2 id="delta">How it works — <span class="num">①</span> Delta encoding &amp; <span class="num">②</span> per-row variable width</h2>
+<p class="lead">Encode successive differences rather than absolute values, then allocate only the bytes each difference requires.</p>
+
+<h3>① Delta encoding</h3>
+<p>Equity prices are highly autocorrelated at the 1-minute frequency: the absolute close price may span a wide range across years, yet the minute-to-minute change is typically a few cents. A price of $152.3400 requires 4 bytes when stored as an integer (price × 10 000 = 1 523 400), whereas a 1-cent increment (+$0.0100 = +100 in integer space) fits in a single signed byte.</p>
+<p>Each band stores its first row as absolute integer values and encodes all subsequent rows as signed differences (deltas) from the preceding row. Reconstruction is a running prefix sum: <code>price[i] = price[i−1] + delta[i]</code>. The internal representation uses lossless scaled integers (price × 10 000) throughout the decode pipeline; conversion to <code>float32</code> is deferred to the final output write.</p>
+
+<div class="pd-diagram">
+  <div class="pd-section">
+    <div class="pd-title">① Prices in a CSV — absolute values, 4 bytes each regardless of how small the move</div>
+    <table class="pd-table">
+      <thead><tr>
+        <th>CSV row</th>
+        <th>close price</th>
+        <th>integer (× 10 000)</th>
+        <th>bytes to store</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>row 0</td><td>$152.3400</td><td>1 523 400</td><td class="pd-abs">4 bytes (i32)</td></tr>
+        <tr><td>row 1</td><td>$152.3500</td><td>1 523 500</td><td class="pd-abs">4 bytes (i32)</td></tr>
+        <tr><td>row 2</td><td>$152.3470</td><td>1 523 470</td><td class="pd-abs">4 bytes (i32)</td></tr>
+        <tr><td>row 3</td><td>$152.3600</td><td>1 523 600</td><td class="pd-abs">4 bytes (i32)</td></tr>
+        <tr class="pd-ellipsis"><td colspan="4">⋮ &nbsp;&nbsp; 4 bytes per row, every row, regardless of how small the change ⋮</td></tr>
+      </tbody>
+    </table>
+    <div class="pd-note">4 M rows × 4 bytes × 4 OHLC columns = 64 MB of raw price integers — before any compression.</div>
+  </div>
+
+  <div class="pd-arrow">↓ &nbsp; keep only the band-start row as absolute — every other row stores just the difference &nbsp; ↓</div>
+
+  <div class="pd-section">
+    <div class="pd-title">② Delta chain — first row of each band absolute, every subsequent row is only the change</div>
+    <table class="pd-table">
+      <thead><tr>
+        <th>CSV row</th>
+        <th>delta (× 10 000)</th>
+        <th>price move</th>
+        <th>bytes to store</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>row 0</td><td class="pd-abs">1 523 400 (absolute)</td><td class="pd-abs">—</td><td class="pd-abs">4 bytes</td></tr>
+        <tr><td>row 1</td><td class="pd-i8">+100</td><td class="pd-i8">+$0.0100</td><td class="pd-byte-good">1 byte ✓</td></tr>
+        <tr><td>row 2</td><td class="pd-i8">−30</td><td class="pd-i8">−$0.0030</td><td class="pd-byte-good">1 byte ✓</td></tr>
+        <tr><td>row 3</td><td class="pd-i8">+130</td><td class="pd-i8">+$0.0130</td><td class="pd-byte-good">1 byte ✓</td></tr>
+        <tr class="pd-ellipsis"><td colspan="4">⋮ &nbsp;&nbsp; the vast majority of rows — normal intraday ticks — cost 1 byte each ⋮</td></tr>
+      </tbody>
+    </table>
+    <div class="pd-note">Decoding: <code>price[i] = price[i−1] + delta[i]</code>. The chain restarts at the start of each band, making every band fully independent — each can decode on its own CPU core.</div>
+  </div>
+</div>
+
+<h3>② Per-row variable width</h3>
+<p>Approximately 90% of 1-minute price deltas fall within the <code>i8</code> range (±$0.0127). Earnings announcements, gap openings, and macro events produce occasional large moves that require wider storage. Allocating 4 bytes per delta to accommodate these outliers would impose a fixed cost on the overwhelming majority of normal rows. Instead, each row records a 2-bit <code>price_mode</code> field (bits [3:2] of the mode byte), and the decoder reads exactly the number of bytes that field specifies:</p>
+
+<table>
+<tr><th>price_mode</th><th>bits [3:2]</th><th class="r">bytes · per OHLC col</th><th>delta range</th><th>typical cause</th></tr>
+<tr><td><strong>0</strong></td><td><code>00</code></td><td class="r"><strong>1 byte (i8)</strong></td><td>−128 … +127 &nbsp;(= ±$0.0127)</td><td>normal 1-minute tick (~90% of rows)</td></tr>
+<tr><td>1</td><td><code>01</code></td><td class="r">2 bytes (i16)</td><td>−32 768 … +32 767 &nbsp;(= ±$3.28)</td><td>larger intraday move, news headline</td></tr>
+<tr><td>2</td><td><code>10</code></td><td class="r">4 bytes (i32)</td><td>any value</td><td>earnings gap, split, extreme event</td></tr>
+<tr><td>3</td><td><code>11</code></td><td class="r">— (unused)</td><td>—</td><td>reserved</td></tr>
+</table>
+
+<p>All four OHLC columns share a single <code>price_mode</code> value per row. This is justified empirically: when a large price move occurs, it affects all four intrabar price levels simultaneously (the opening gap, intrabar high/low, and closing price all widen together). The mode is determined by the column with the largest absolute delta, and applied uniformly:</p>
+
+<div class="pd-diagram">
+  <div class="pd-section">
+    <div class="pd-title">③ Variable width in action — price_mode set by the largest |delta| across all four OHLC columns</div>
+    <table class="pd-table">
+      <thead><tr>
+        <th>CSV row</th>
+        <th>max |delta| across OHLC</th>
+        <th>price_mode</th>
+        <th>bytes · all 4 OHLC cols</th>
+        <th>typical situation</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>row 0</td><td class="pd-abs">— (absolute)</td><td class="pd-abs">—</td><td class="pd-abs">4 × 4 = 16 bytes</td><td>band-start: absolute i32 for every column</td></tr>
+        <tr><td>row 1</td><td class="pd-i8">100 &nbsp;(+$0.01)</td><td class="pd-i8">00</td><td class="pd-byte-good">4 × 1 = 4 bytes ✓</td><td>normal tick — one cent move</td></tr>
+        <tr><td>row 2</td><td class="pd-i8">30 &nbsp;(−$0.003)</td><td class="pd-i8">00</td><td class="pd-byte-good">4 × 1 = 4 bytes ✓</td><td>quiet minute, barely moved</td></tr>
+        <tr class="pd-ellipsis"><td colspan="5">⋮ &nbsp;&nbsp; ~90% of rows are price_mode 00, paying 4 bytes total instead of 16 ⋮</td></tr>
+        <tr><td>row N</td><td class="pd-i16">8 500 &nbsp;(+$0.85)</td><td class="pd-i16">01</td><td class="pd-byte-mid">4 × 2 = 8 bytes</td><td>large intraday move, news headline</td></tr>
+        <tr><td>row M</td><td class="pd-i32">185 000 &nbsp;(+$18.50)</td><td class="pd-i32">10</td><td class="pd-byte-bad">4 × 4 = 16 bytes</td><td>earnings gap — price opens sharply higher</td></tr>
+        <tr class="pd-ellipsis"><td colspan="5">⋮</td></tr>
+      </tbody>
+    </table>
+    <div class="pd-note">One 2-bit field covers all four OHLC columns — zero per-column mode overhead. Wide rows (i16/i32) cost the same as fixed-width i32 would; the ~90% of i8 rows save 12 bytes each compared to fixed i32.</div>
+  </div>
+</div>
+
+<p><strong>Combined effect:</strong> A fixed-width <code>i32</code> scheme requires 4 columns × 4 bytes = 16 bytes of price storage per row. With delta encoding and variable-width selection, ~90% of rows pay 4 columns × 1 byte = 4 bytes. Applied across 4 M rows, this reduces raw price storage from 64 MB to approximately 17 MB before entropy coding. The entropy coder (zstd or lz4) then compresses the resulting narrow-range byte stream further, exploiting the fact that most values cluster tightly around zero.</p>
+
+<h2 id="ts"><span class="num">③</span> Timestamp encoding</h2>
+<p class="lead">Assign zero storage cost to the dominant case: consecutive 1-minute bars.</p>
+<p>Timestamps are stored as a <strong>minute index</strong> — an integer count of minutes elapsed since 2000-01-01 00:00 UTC. During continuous intraday trading, successive bars differ by exactly one minute. This case, which accounts for approximately 90% of all rows in a typical equity dataset, is assigned a dedicated mode value that writes <strong>zero bytes</strong> to the timestamp stream. Only genuine gaps — overnight sessions, weekend closures, and trading halts — require any storage.</p>
+
+<h3>Timestamp mode encoding</h3>
+<p>Bits [1:0] of the per-row mode byte encode the <code>ts_mode</code> field, which determines the storage width of the timestamp delta in the <code>ts</code> column stream:</p>
+<table>
+<tr><th>ts_mode</th><th>bits [1:0]</th><th class="r">bytes used</th><th>delta range</th><th>typical cause</th></tr>
+<tr><td><strong>0</strong></td><td><code>00</code></td><td class="r"><strong>0 — free</strong></td><td>exactly +1 min</td><td>continuous intraday trading (~90 % of all rows)</td></tr>
+<tr><td>1</td><td><code>01</code></td><td class="r">1 byte (i8)</td><td>−128 … +127 min</td><td>short halt, early close, small data gap</td></tr>
+<tr><td>2</td><td><code>10</code></td><td class="r">2 bytes (i16)</td><td>−32 768 … +32 767 min</td><td>overnight (~1 050 min) or weekend (~3 930 min)</td></tr>
+<tr><td>3</td><td><code>11</code></td><td class="r">4 bytes (i32)</td><td>any</td><td>extended holiday, long data gap (extremely rare)</td></tr>
+</table>
+
+<p>The following diagram illustrates the encoding across two consecutive trading sessions — a complete intraday sequence, the overnight gap, and the subsequent open:</p>
+
+<div class="ts-diagram">
+  <div class="tsd-section">
+    <div class="tsd-title">① Timestamps as they appear in a CSV — absolute minute indices, one row per bar</div>
+    <table class="tsd-table">
+      <thead><tr>
+        <th>CSV row</th>
+        <th>bar time</th>
+        <th>minute index</th>
+        <th>Δ from previous</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>row 0</td><td>2024-01-15 &nbsp;09:30</td><td>12 700 650</td><td>— (first row)</td></tr>
+        <tr><td>row 1</td><td>2024-01-15 &nbsp;09:31</td><td>12 700 651</td><td>+1</td></tr>
+        <tr><td>row 2</td><td>2024-01-15 &nbsp;09:32</td><td>12 700 652</td><td>+1</td></tr>
+        <tr class="tsd-ellipsis"><td colspan="4">⋮ &nbsp;&nbsp; 386 more rows — every bar from 09:33 … 15:59, each +1 minute ⋮</td></tr>
+        <tr><td>row 390</td><td>2024-01-15 &nbsp;16:00</td><td>12 701 040</td><td>+1</td></tr>
+        <tr><td>row 391</td><td>2024-01-16 &nbsp;09:30</td><td>12 702 090</td><td class="tsd-gap">+1 050</td></tr>
+        <tr><td>row 392</td><td>2024-01-16 &nbsp;09:31</td><td>12 702 091</td><td>+1</td></tr>
+        <tr class="tsd-ellipsis"><td colspan="4">⋮</td></tr>
+      </tbody>
+    </table>
+    <div class="tsd-note">Storing raw minute indices costs 4 bytes each. 4 M rows × 4 bytes = 16 MB for timestamps alone — before any compression.</div>
+  </div>
+
+  <div class="tsd-arrow">↓ &nbsp; store only the delta — and map "+1 minute" to a zero-byte mode &nbsp; ↓</div>
+
+  <div class="tsd-section">
+    <div class="tsd-title">② What BQE writes — 2-bit mode in the mode byte, delta bytes in the ts stream</div>
+    <table class="tsd-table">
+      <thead><tr>
+        <th>CSV row</th>
+        <th>delta</th>
+        <th>ts_mode bits [1:0]</th>
+        <th>bytes in ts stream</th>
+        <th>explanation</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>row 0</td><td>— absolute</td><td class="tsd-m1">—</td><td class="tsd-m1">4 bytes (i32)</td><td>first row of band: always stored as absolute value</td></tr>
+        <tr><td>row 1</td><td class="tsd-m0">+1</td><td class="tsd-m0">00</td><td class="tsd-free">0 bytes ✓</td><td>next minute — the delta is implicit, nothing written</td></tr>
+        <tr><td>row 2</td><td class="tsd-m0">+1</td><td class="tsd-m0">00</td><td class="tsd-free">0 bytes ✓</td><td>next minute — the delta is implicit, nothing written</td></tr>
+        <tr class="tsd-ellipsis"><td colspan="5">⋮ &nbsp;&nbsp; 387 rows, every one mode 00, every one 0 bytes in the ts stream ⋮</td></tr>
+        <tr><td>row 390</td><td class="tsd-m0">+1</td><td class="tsd-m0">00</td><td class="tsd-free">0 bytes ✓</td><td>last bar of the trading day — still just the next minute</td></tr>
+        <tr><td>row 391</td><td class="tsd-gap">+1 050</td><td class="tsd-m2">10</td><td class="tsd-m2">2 bytes (i16)</td><td>overnight gap — 17.5 hours from close (16:00) to next open (09:30)</td></tr>
+        <tr><td>row 392</td><td class="tsd-m0">+1</td><td class="tsd-m0">00</td><td class="tsd-free">0 bytes ✓</td><td>next day — continuous trading resumes immediately</td></tr>
+        <tr class="tsd-ellipsis"><td colspan="5">⋮</td></tr>
+      </tbody>
+    </table>
+    <div class="tsd-note">~390 mode-0 rows per trading day × ~252 days/year → ~98 000 zero-byte rows per year. Only ~252 overnight gaps + ~104 weekend gaps actually write any bytes. Weekend gaps (~3 930 min) also fit in i16 (mode 2). Mode 3 (i32) is essentially never used in practice.</div>
+  </div>
+</div>
+
+<p><strong>Storage efficiency of the timestamp stream:</strong> A standard US equity session spans 390 minutes (09:30–16:00). For AAPL across 4 M bars: approximately 3.6 M rows (90%) contribute zero bytes to the timestamp stream. The remaining ~10% — overnight and weekend gaps — each write 2 bytes (i16). Total uncompressed timestamp storage is approximately 20 kB, which compresses to ~0.18 MB in the final file. The timestamp column is effectively a rounding error in the overall file size.</p>
+
+<h2 id="volume"><span class="num">④</span> Byte-plane volume encoding</h2>
+<p class="lead">Volume lacks temporal autocorrelation. An alternative structural redundancy is exploited instead.</p>
+<p>Unlike price, minute-bar volume exhibits no significant serial correlation — the delta between consecutive bars is often as large as either value itself, making delta encoding counterproductive. Empirical measurement confirms this (see the encoding comparison below). Volume does, however, exhibit a different kind of compressible structure:</p>
+<ul>
+  <li><strong>Magnitude is bounded.</strong> Minute-bar volumes almost never exceed 16 million (24 bits), so the most-significant byte of every <code>u32</code> is always zero. The second-most-significant byte is near-zero for most equities.</li>
+  <li><strong>Values are round-number concentrated.</strong> Approximately 30% of observed volumes are exact multiples of 100, consistent with institutional block-order rounding. This zeroes low-significance bytes for a substantial fraction of rows.</li>
+</ul>
+<p>BQE exploits this structural redundancy through a <strong>byte-plane split</strong>: rather than storing each 4-byte volume as four consecutive bytes (row-interleaved layout), the column is transposed — all least-significant bytes are grouped into one contiguous block, followed by all second bytes, then third bytes, then most-significant bytes. Visualised as a CSV, this is equivalent to rotating the column 90° and reading it vertically:</p>
+
+<div class="vol-diagram">
+  <div class="vd-section">
+    <div class="vd-title">① Volume values — interleaved, as they appear in a CSV (row-by-row)</div>
+    <table class="vd-table">
+      <thead><tr>
+        <th>CSV row</th>
+        <th class="vd-b0">byte 0 · LSB</th>
+        <th class="vd-b1">byte 1</th>
+        <th class="vd-b2">byte 2</th>
+        <th class="vd-b3">byte 3 · MSB</th>
+        <th>volume</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>row 0</td><td class="vd-b0">0x10</td><td class="vd-b1">0x27</td><td class="vd-b2 zero">0x00</td><td class="vd-b3 zero">0x00</td><td>10 000</td></tr>
+        <tr><td>row 1</td><td class="vd-b0">0x20</td><td class="vd-b1">0x4E</td><td class="vd-b2 zero">0x00</td><td class="vd-b3 zero">0x00</td><td>20 000</td></tr>
+        <tr><td>row 2</td><td class="vd-b0">0x64</td><td class="vd-b1 zero">0x00</td><td class="vd-b2 zero">0x00</td><td class="vd-b3 zero">0x00</td><td>100</td></tr>
+        <tr><td>row 3</td><td class="vd-b0">0x80</td><td class="vd-b1">0xBB</td><td class="vd-b2 zero">0x00</td><td class="vd-b3 zero">0x00</td><td>48 000</td></tr>
+        <tr class="vd-ellipsis"><td colspan="6">⋮</td></tr>
+      </tbody>
+    </table>
+    <div class="vd-note">Bytes of different magnitudes alternate: a non-zero b0 is followed by a near-zero b2, then another non-zero b0. The compressor cannot predict what comes next — it sees noise.</div>
+  </div>
+
+  <div class="vd-arrow">↓ &nbsp; regroup by byte position — collect all byte 0s, then all byte 1s, then byte 2s, then byte 3s &nbsp; ↓</div>
+
+  <div class="vd-section">
+    <div class="vd-title">② Byte-plane split — same bytes, grouped vertically by position (one plane per row)</div>
+    <table class="vd-table">
+      <thead><tr>
+        <th>plane</th>
+        <th>row 0</th>
+        <th>row 1</th>
+        <th>row 2</th>
+        <th>row 3</th>
+        <th>…</th>
+        <th>why it compresses</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td class="vd-b0">Plane 0 · LSB</td>
+          <td class="vd-b0">0x10</td><td class="vd-b0">0x20</td><td class="vd-b0">0x64</td><td class="vd-b0">0x80</td><td class="vd-b0">…</td>
+          <td>real signal — mixed, but isolated so the compressor handles it alone</td>
+        </tr>
+        <tr>
+          <td class="vd-b1">Plane 1</td>
+          <td class="vd-b1">0x27</td><td class="vd-b1">0x4E</td><td class="vd-b1 zero">0x00</td><td class="vd-b1">0xBB</td><td class="vd-b1">…</td>
+          <td>often zero — round multiples of 256 zero this byte</td>
+        </tr>
+        <tr>
+          <td class="vd-b2 zero">Plane 2</td>
+          <td class="vd-b2 zero">0x00</td><td class="vd-b2 zero">0x00</td><td class="vd-b2 zero">0x00</td><td class="vd-b2 zero">0x00</td><td class="vd-b2 zero">…</td>
+          <td>almost always zero — volumes rarely reach 65 536</td>
+        </tr>
+        <tr class="vd-dropped">
+          <td class="vd-b3 zero">Plane 3 · MSB</td>
+          <td class="vd-b3 zero">0x00</td><td class="vd-b3 zero">0x00</td><td class="vd-b3 zero">0x00</td><td class="vd-b3 zero">0x00</td><td class="vd-b3 zero">…</td>
+          <td>always 0x00 — entire plane dropped (n_planes = 3)</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="vd-note">Decoding: read the 1-byte plane count, load each plane block, OR the bytes back into u32. No per-row mode bits. Long zero runs compress to almost nothing with zstd/lz4.</div>
+  </div>
+</div>
+
+<p><strong>Why byte-planes outperform delta encoding for volume:</strong> Delta coding is effective when consecutive values are correlated. Equity price changes are serially correlated at the 1-minute frequency; volume changes are not. A volume delta between 10 000 and 980 000 is 970 000 — larger in magnitude than either source value, consuming more storage than the raw representation. Byte-plane encoding is order-independent: it exploits intra-value structure (the near-universal absence of high-significance bytes) rather than inter-row correlation. The two techniques are complementary — delta coding for temporally smooth columns, byte-plane coding for statistically bursty ones.</p>
+<figure>
+  <img src="img/04b_byteplane_size.png" alt="Byte-plane vs interleaved compressed size">
+  <figcaption>…which zstd crushes. Same bytes, just reordered — ~17% smaller, and the decode stays branchless (just OR the planes back together).</figcaption>
+</figure>
+<div class="card">
+<h3 style="margin-top:0">Why byte-plane and not delta? — the shootout</h3>
+<p class="muted" style="margin-top:0">Every candidate encoding for the volume column, compressed with real zstd-3 (AAPL) — shorter is smaller:</p>
+<div style="margin:14px 0 6px;">
+  <div class="bar-row"><div class="bar-label">Byte-plane split (chosen)</div><div class="bar-track"><div class="bar-fill bar-good" style="width:78%">8.65 MB</div></div></div>
+  <div class="bar-row"><div class="bar-label">Raw u32, interleaved</div><div class="bar-track"><div class="bar-fill bar-dim" style="width:94%">10.41 MB</div></div></div>
+  <div class="bar-row"><div class="bar-label">Per-row delta + mode</div><div class="bar-track"><div class="bar-fill bar-dim" style="width:95%">10.50 MB</div></div></div>
+  <div class="bar-row"><div class="bar-label">Block frame-of-reference</div><div class="bar-track"><div class="bar-fill bar-dim" style="width:98%">10.82 MB</div></div></div>
+  <div class="bar-row"><div class="bar-label">Delta i32</div><div class="bar-track"><div class="bar-fill bar-dim" style="width:100%">11.05 MB</div></div></div>
+</div>
+<p class="muted">Byte-planes are <strong style="color:var(--accent)">~17% smaller</strong> than the next best. Per-row mode <em>switching</em> hit an information-theoretic wall: the mode selector's own entropy cost about as much as the variable widths saved. Byte-planes win with zero per-row overhead.</p>
+</div>
+
+<h2 id="codec">Codec selection — zstd vs lz4</h2>
+<p class="lead">The file format is codec-agnostic. Stage profiling shows that decompression accounts for 70% of total decode time with zstd, making the choice of entropy coder the dominant performance lever.</p>
+<div class="chart">
+  <div class="chart-title">zstd vs lz4 — the speed / size tradeoff (AAPL, 4.08 M rows, warm cache)</div>
+  <div class="chart-body">
+    <div class="chart-sub">Decode time · lower = faster &nbsp;→&nbsp; <span style="color:#5dc87a">lz4 wins</span></div>
+    <div class="bar-row"><div class="bar-label">lz4 (hot / ML data)</div><div class="bar-track"><div class="bar-fill bar-good" style="width:31%">~9 ms</div></div></div>
+    <div class="bar-row"><div class="bar-label">zstd (archival)</div><div class="bar-track"><div class="bar-fill bar-dim" style="width:100%">~29 ms</div></div></div>
+    <div class="chart-sub spaced">File size · lower = smaller &nbsp;→&nbsp; <span style="color:var(--accent)">zstd wins</span></div>
+    <div class="bar-row"><div class="bar-label">zstd (archival)</div><div class="bar-track"><div class="bar-fill bar-win" style="width:75%">26.4 MB &nbsp;·&nbsp; 9.1× vs CSV</div></div></div>
+    <div class="bar-row"><div class="bar-label">lz4 (hot / ML data)</div><div class="bar-track"><div class="bar-fill bar-dim" style="width:100%">35.0 MB &nbsp;·&nbsp; 6.8× vs CSV</div></div></div>
+  </div>
+  <div class="chart-note"><strong>The tradeoff:</strong> lz4 decodes ~2.6× faster end-to-end; zstd packs ~24% smaller. Same on-disk format — the codec byte in the v9 header lets both live side by side and the reader picks automatically.</div>
+</div>
+<p>The codec is stored as a single byte in the v9 file header, making each file self-describing. Files encoded with different codecs may coexist in the same directory; the reader selects the appropriate decompressor automatically. The codec is specified at compression time: <code>bqe.compress(src, dst, codec="lz4")</code> or <code>codec="zstd"</code>.</p>
+<p><strong>Why lz4 achieves faster decode despite a larger file:</strong> with zstd, decompression alone accounts for 71% of total decode time. lz4 decompresses approximately 2.6× faster than zstd at comparable ratios. The additional ~30% on-disk bytes are transferred faster than the decompression time they displace, yielding a net ~1.6× end-to-end improvement on a warm OS cache. On cold storage with limited read bandwidth, the larger file size may negate this advantage.</p>
+
+<h2 id="history">Development history &amp; optimisation log</h2>
+<p class="lead">A full account of the codec's evolution from its initial implementation to its current form — each change, the hypothesis that motivated it, and the measured outcome. All decode times are for AAPL (4.08 M rows, warm OS cache, machine-calibrated thread count); file sizes refer to the AAPL compressed output.</p>
+
+<figure>
+  <img src="img/00_history.png" alt="Decode time and file size across versions" onerror="this.style.display='none'">
+  <figcaption>Decode time (lower better) and file size across versions. The big drops: zstd+parallelism (v3), per-row widths (v5), byte-planes (v8), and the lz4 codec (v9).</figcaption>
+</figure>
+
+<table>
+<tr><th>Ver</th><th>Change</th><th class="r">Decode</th><th class="r">Size</th><th>Why</th></tr>
+<tr><td><strong>v2</strong></td><td>zlib, columnar, parallel</td><td class="r">~111 ms</td><td class="r">≈ v3</td><td>baseline: column-split + DEFLATE</td></tr>
+<tr><td><strong>v3</strong></td><td>zstd + row-bands + mmap + mimalloc + 8-thread cap</td><td class="r">~53 ms</td><td class="r">32.5 MB</td><td>faster decompress, true parallelism, fix allocator &amp; oversubscription</td></tr>
+<tr><td><strong>v4</strong></td><td>i16 delta encoding (escape sentinel)</td><td class="r">~42 ms</td><td class="r">29.6 MB</td><td>halve the price-delta stream (4→2 bytes)</td></tr>
+<tr><td><strong>v5</strong></td><td>per-row mode column (i8/i16/i32 + free "+1 min")</td><td class="r">~37 ms</td><td class="r">28.1 MB</td><td>true variable width; timestamps cost 0 bytes 90% of the time</td></tr>
+<tr><td><strong>v6</strong></td><td>volume delta + vol_mode packed in mode byte</td><td class="r">~36 ms</td><td class="r">28.3 MB</td><td>tried to shrink volume — <em>backfired</em> (mode entropy ↑)</td></tr>
+<tr><td><strong>v7</strong></td><td>separate vol_mode stream + ÷100 scaled deltas</td><td class="r">~37 ms</td><td class="r">28.2 MB</td><td>tried again — <em>wall hit</em> (mode entropy ≈ savings)</td></tr>
+<tr><td><strong>v8</strong></td><td>byte-plane volume + un-zeroed output buffers</td><td class="r">~31 ms</td><td class="r">26.4 MB</td><td>right volume trick; skip the wasted memset</td></tr>
+<tr><td><strong>v9</strong></td><td>codec flag — lz4 option</td><td class="r">~18 ms</td><td class="r">34.7 MB</td><td>decode is decompression-bound; lz4 is ~2.6× faster to decompress</td></tr>
+<tr><td><strong>v10</strong></td><td>band size 131 072 → 4 096 + online thread calibration</td><td class="r"><strong>~9 ms</strong></td><td class="r">35.0 MB</td><td>systematic sweep: smaller bands give more parallel work items; all file sizes now scale; online calibration finds per-machine optimum over real workload</td></tr>
+</table>
+
+<h3>v2 → v3 — architectural foundation (111 → 53 ms)</h3>
+<p>Four independent changes were implemented simultaneously, each validated by measurement before inclusion:</p>
+<ul>
+  <li><strong>zlib → zstd:</strong> Comparable compression ratio, substantially faster symmetric decompression.</li>
+  <li><strong>Row-banding (~4 096 rows/band):</strong> Delta chains are inherently sequential — a single column can utilise only one core. Restarting the chain at band boundaries makes each band independently decodable, enabling full CPU utilisation.</li>
+  <li><strong>Memory-mapped I/O:</strong> Eliminates a ~32 MB copy of the compressed file into a separate buffer. OS pages fault into the mmap region during decode, overlapping disk I/O with computation. Peak working-set size is reduced by the compressed file size.</li>
+  <li><strong>mimalloc concurrent allocator:</strong> The OS heap serialised hundreds of small per-band allocations across threads on a shared lock, stalling decode at ~88 ms regardless of thread count. Replacing the allocator reduced this to ~53 ms — a larger gain than any other single change in this version.</li>
+  <li><strong>Thread-count calibration:</strong> Profiling revealed a bandwidth-saturation ceiling: decode at 24 threads took 75 ms, at 12 threads 65 ms, at 8 threads 53 ms. The thread pool is capped via <code>bqe.calibrate_threads()</code> and stored per machine.</li>
+</ul>
+
+<h3>v3 → v4 → v5 — price and timestamp compression (53 → 37 ms)</h3>
+<p><strong>v4</strong> stored price deltas as <code>i16</code> rather than <code>i32</code>, halving price-stream bandwidth. An escape sentinel handled the rare case of deltas exceeding the 16-bit range. <strong>v5</strong> replaced the sentinel mechanism with a per-row mode column: each row selects <code>i8</code>, <code>i16</code>, or <code>i32</code> for prices, and a dedicated timestamp mode provides a zero-byte encoding for the "+1 minute" case. The timestamp column was reduced from 0.54 MB to 0.18 MB. Reduced decompressed data volume per band translates directly to lower memory bandwidth consumption and faster decode.</p>
+
+<h3>v6 → v7 — volume encoding failures</h3>
+<p><strong>Findings that shaped v8.</strong> Volume appeared compressible: approximately 30% of values are multiples of 100. v6 applied delta encoding to volume with mode bits packed into the existing mode byte. The mode column's entropy increased from 0.55 MB to 1.02 MB — more than eliminating any volume savings. The file grew slightly larger. v7 moved the volume mode to an independent stream and applied a ÷100 scaling to round-number deltas; the result was equivalent. The underlying constraint is information-theoretic: a per-row encoding selector carries approximately 1.5 bits/row of entropy, which is comparable to the savings it enables. Conclusion: eliminate per-row mode selection for volume.</p>
+
+<h3>v8 — byte-plane volume + uninitialised output buffers (37 → 31 ms, 28.2 → 26.4 MB)</h3>
+<ul>
+  <li><strong>Byte-plane volume encoding.</strong> A controlled comparison across all candidate encodings (see §④) established byte-plane split at 8.65 MB — 17% smaller than the next best alternative. The encoding captures structural redundancy (zero high bytes, round-number low bytes) through entropy coder RLE without introducing per-row mode overhead. Decoding is branchless: a fixed plane count is read once per band, and planes are OR-combined into the output u32 values.</li>
+  <li><strong>Uninitialised output allocation.</strong> Output arrays (80 MB OHLCV + 32 MB timestamps) were being zero-initialised before being fully overwritten by the decoder — a 112 MB wasted write pass. Switching to uninitialised allocation (guaranteed safe: every element is written exactly once before any read) eliminated ~11% of decode time.</li>
+</ul>
+
+<h3>v9 — entropy coder substitution (31 → 18 ms)</h3>
+<p>Stage-level profiling via <code>bqe.profile_stages()</code> attributed <strong>71% of total decode CPU time to zstd decompression</strong>, contradicting the earlier assumption that output writing was the bottleneck. lz4 decompresses approximately 2.6× faster than zstd at comparable quality. Adopting lz4 as the primary codec (recorded in a new 1-byte header field; v8 files remain readable as zstd) reduced wall-clock decode time to ~18 ms, at a cost of ~32% larger files. With lz4, the stage profile rebalances to approximately 46% decompression / 54% compute, with ~15 ms ideal-parallel throughput and 93% parallel efficiency.</p>
+
+<h3>v10 — band size 131 072 → 4 096 + online thread calibration (18 → 9 ms)</h3>
+<p>Two independent improvements landed together:</p>
+<ul>
+  <li><strong>Band size reduction.</strong> A systematic sweep of <code>BAND_ROWS</code> across 13 values (512–2 097 152) on three representative file sizes revealed the original constant was an order of magnitude too large. With 131 072 rows per band, a 1 MB weekly file produced just 2 bands — leaving almost all CPU cores idle. Reducing to 4 096 rows per band gives 39–998 bands depending on file size, saturating all available cores for every file in the dataset. Compression overhead is minimal (+3% file size) because zstd's per-band context window is still large enough to exploit the homogeneous column data within each band.</li>
+  <li><strong>Online thread calibration (Mode 2).</strong> Rather than requiring an explicit calibration call against a single representative file, the library can now discover the optimal thread count incrementally over the real workload. Each call to <code>bqe.read()</code> uses the next candidate thread count in round-robin order and records the actual decode time. After <code>samples_per × n_candidates</code> calls the fastest median wins and is saved — typically 15–25 reads, a rounding error in a dataset of thousands of files.</li>
+</ul>
+
+<h3>Approaches evaluated and rejected</h3>
+<table>
+<tr><th>Idea</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>DCT / cosine transform / Taylor series</td><td>rejected</td><td>price increments are ~white noise → no energy to concentrate; 2nd-order differencing <em>doubles</em> a random walk's residual variance; also lossy and slow to invert</td></tr>
+<tr><td>Reciprocal multiply (<code>÷10000</code> → <code>×1e-4</code>)</td><td>no effect</td><td>proved decode isn't bottlenecked on that arithmetic — pointed us at decompression instead</td></tr>
+<tr><td>Per-row volume modes (v6/v7)</td><td>rejected</td><td>information-theoretic wall: selector entropy ≈ savings</td></tr>
+<tr><td>Block frame-of-reference for volume</td><td>rejected</td><td>10.82 MB vs byte-plane's 8.65 MB</td></tr>
+<tr><td>Non-temporal (MOVNT) stores</td><td>not done</td><td>only ~15% of the budget after lz4; needs unsafe SIMD + awkward alignment for the interleaved layout — disproportionate risk</td></tr>
+<tr><td>Decode-once mmap raw cache</td><td>deferred</td><td>best for repeated-epoch training, but ~3× the disk — declined: dataset too large</td></tr>
+</table>
+
+<p><strong>Correctness issue identified and resolved:</strong> the CSV volume parser originally concatenated digit characters without processing the decimal point, producing a 10× magnitude error for split-adjusted fractional volumes (e.g., <code>97.5</code> was read as <code>975</code>). This affected approximately 3% of rows in pre-2000 split-adjusted datasets. The parser now rounds fractional volumes to the nearest integer.</p>
+
+<h2 id="api">API reference</h2>
+<p class="lead">The compiled Rust extension is exposed as the <code>bqe</code> Python package. All CPU-intensive operations release the GIL and may be called from multithreaded Python code without contention.</p>
+
+<h3>Installation</h3>
+<p>Build from source using <a href="https://github.com/PyO3/maturin">maturin</a>:</p>
+<pre><span class="c"># from the decompLib/ directory</span>
+maturin build --release
+pip install target/wheels/bqe-*.whl</pre>
+<p>Requires: Python ≥ 3.9, a Rust toolchain (stable), and the <code>maturin</code> build tool. No runtime dependencies beyond NumPy.</p>
+
+<h3>Reading data</h3>
+<p>All read functions return a tuple of <code>(timestamps: int64[N], ohlcv: float32[N, 5])</code>. The timestamp array contains minute indices (minutes since 2000-01-01 00:00); convert to datetime strings with <code>bqe.ts_to_str()</code>.</p>
+<pre><span class="k">import</span> bqe
+
+<span class="c"># Single file → NumPy arrays</span>
+ts, ohlcv = bqe.read(<span class="s">"AAPL.bqe"</span>)
+<span class="c"># ts:   int64[N]     — minute indices since 2000-01-01</span>
+<span class="c"># ohlcv: float32[N,5] — columns: open, high, low, close, volume</span>
+
+<span class="c"># Multiple files concatenated in parallel (sorted order preserved)</span>
+<span class="k">import</span> glob
+paths = sorted(glob.glob(<span class="s">"stocks/AAPL/*.bqe"</span>))
+ts, ohlcv = bqe.read_concat(paths)
+
+<span class="c"># Date-range query over a weekly-split ticker directory</span>
+ts, ohlcv = bqe.read_range(
+    <span class="s">"stocks/AAPL"</span>,          <span class="c"># directory of YYYY-Www.bqe files</span>
+    start_date=<span class="s">"2010-01-01"</span>,
+    end_date=<span class="s">"2023-12-31"</span>,
+)
+
+<span class="c"># Convert minute indices back to ISO datetime strings</span>
+strings = bqe.ts_to_str(ts.tolist())  <span class="c"># ["2010-01-04 09:30:00", ...]</span></pre>
+
+<h3>Writing and compressing data</h3>
+<p>Compression is always performed offline. The codec is chosen at compression time and stored in the file header; readers select the appropriate decompressor automatically.</p>
+<pre><span class="c"># Compress a single CSV text file to .bqe</span>
+bqe.compress(<span class="s">"AAPL.txt"</span>, <span class="s">"AAPL.bqe"</span>, codec=<span class="s">"lz4"</span>)   <span class="c"># default: lz4</span>
+bqe.compress(<span class="s">"AAPL.txt"</span>, <span class="s">"AAPL.bqe"</span>, codec=<span class="s">"zstd"</span>)  <span class="c"># smaller file</span>
+
+<span class="c"># Compress an entire directory in parallel (one thread per file)</span>
+bqe.compress_dir(<span class="s">"csv_in/"</span>, <span class="s">"bqe_out/"</span>, codec=<span class="s">"lz4"</span>)
+
+<span class="c"># Partition a full-history CSV into weekly .bqe files</span>
+<span class="c"># Output layout: output_dir/TICKER/YYYY-Www.bqe</span>
+bqe.split_to_weekly(<span class="s">"AAPL.txt"</span>, <span class="s">"stocks/"</span>, ticker=<span class="s">"AAPL"</span>)
+
+<span class="c"># Process an entire directory of full-history CSVs → weekly structure</span>
+n_weeks = bqe.split_dir_to_weekly(<span class="s">"csv_in/"</span>, <span class="s">"stocks/"</span>, codec=<span class="s">"lz4"</span>)
+
+<span class="c"># Decompress .bqe back to CSV text (lossless round-trip)</span>
+bqe.decompress(<span class="s">"AAPL.bqe"</span>, <span class="s">"AAPL_out.txt"</span>)</pre>
+
+<h3>Appending data to an existing file</h3>
+<p><code>bqe.append()</code> adds new rows to the bottom of an existing <code>.bqe</code> file — analogous to <code>open(path, "a")</code>. It accepts the same NumPy arrays that <code>bqe.read()</code> returns, making it straightforward to incrementally extend a file as new data arrives (e.g. a daily feed update, live bar streaming). New rows must be chronologically after the last row already in the file.</p>
+<p>Internally the function reads the existing file via the lossless integer path (no f32 round-trip on existing data), concatenates the new rows, writes to a temporary file, and atomically renames it over the original — a crash cannot leave a corrupt file.</p>
+<pre><span class="k">import</span> bqe
+<span class="k">import</span> numpy <span class="k">as</span> np
+
+<span class="c"># Read existing file to inspect the last timestamp</span>
+ts, ohlcv = bqe.read(<span class="s">"AAPL.bqe"</span>)
+print(f<span class="s">"Last bar: {bqe.ts_to_str([int(ts[-1])])[0]}"</span>)
+
+<span class="c"># New bars arriving from your data provider</span>
+new_ts = np.array([ts[-1] + 1, ts[-1] + 2], dtype=np.int64)   <span class="c"># next two minutes</span>
+new_ohlcv = np.array([
+    [182.50, 183.10, 182.20, 182.90, 1_200_000],
+    [182.90, 183.40, 182.60, 183.30,   980_000],
+], dtype=np.float32)
+
+<span class="c"># Append — modifies AAPL.bqe in-place, atomically</span>
+bqe.append(<span class="s">"AAPL.bqe"</span>, new_ts, new_ohlcv)
+
+<span class="c"># Optional: specify codec explicitly (default: preserves existing file's codec)</span>
+bqe.append(<span class="s">"AAPL.bqe"</span>, new_ts, new_ohlcv, codec=<span class="s">"lz4"</span>)</pre>
+
+<table>
+<tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+<tr><td><code>path</code></td><td><code>str</code></td><td>Path to an existing <code>.bqe</code> file. Modified in-place.</td></tr>
+<tr><td><code>new_timestamps</code></td><td><code>int64[N]</code></td><td>Minute indices — same format as returned by <code>bqe.read()</code>. Must be strictly after <code>ts[-1]</code> of the existing file.</td></tr>
+<tr><td><code>new_ohlcv</code></td><td><code>float32[N, 5]</code></td><td>OHLCV values — columns: open, high, low, close, volume. Must be C-contiguous.</td></tr>
+<tr><td><code>codec</code></td><td><code>str</code> (optional)</td><td><code>"lz4"</code> or <code>"zstd"</code>. Defaults to the codec already used in the file.</td></tr>
+</table>
+
+<h3>CSV format requirements</h3>
+<p>Input CSV files must have one row per minute with the following column order and no header line:</p>
+<pre><span class="c"># YYYY-MM-DD HH:MM:SS, open, high, low, close, volume</span>
+2024-01-15 09:30:00,152.34,152.41,152.28,152.36,1523400
+2024-01-15 09:31:00,152.36,152.44,152.31,152.39,984200</pre>
+<p>Prices may have up to four decimal places. Volumes may be fractional (split-adjusted); they are rounded to the nearest integer on ingestion.</p>
+
+<h3>Thread calibration</h3>
+<p>Two calibration modes are available. Both save to <code>~/.bqe_threads</code> and apply automatically on all future sessions.</p>
+<p><strong>Mode 1 (automatic, single-file):</strong> on the first call to <code>bqe.read()</code> in an unconfigured environment, the library benchmarks all thread counts against the file being loaded, saves the optimal, and decodes. Zero overhead on all subsequent calls.</p>
+<p><strong>Mode 2 (online, incremental):</strong> activate with <code>bqe.start_online_calibration()</code>. Each read rotates through all candidate thread counts in order. After <code>samples_per × n_candidates</code> calls the optimal is decided and saved automatically. Recommended for large datasets where 15–25 calibration calls are negligible.</p>
+<pre><span class="c"># ── Mode 1: automatic single-file calibration ────────────────────────────────</span>
+<span class="c"># First call with no config file: benchmarks all thread counts, saves optimal</span>
+ts, ohlcv = bqe.read(<span class="s">"AAPL.bqe"</span>)   <span class="c"># ~500 ms extra on first call, once only</span>
+ts, ohlcv = bqe.read(<span class="s">"AAPL.bqe"</span>)   <span class="c"># ~9 ms — stored optimal used from here on</span>
+
+<span class="c"># Explicit single-file calibration (cleaner — dedicated benchmark pools)</span>
+result = bqe.calibrate_threads(<span class="s">"AAPL.bqe"</span>, n_warmup=2, n_runs=5, save=<span class="k">True</span>)
+<span class="c"># {1: 44.7, 2: 22.3, 4: 11.8, 8: 9.2, 16: 9.6, "optimal": 8, "config_file": ...}</span>
+
+<span class="c"># ── Mode 2: online incremental calibration ───────────────────────────────────</span>
+bqe.start_online_calibration(samples_per=3)  <span class="c"># activate — pre-creates candidate pools</span>
+
+<span class="c"># Each read transparently uses the next thread count in rotation</span>
+<span class="k">for</span> path <span class="k">in</span> my_files:
+    ts, ohlcv = bqe.read(path)             <span class="c"># uses 1T, then 2T, then 4T, then 8T …</span>
+
+<span class="c"># Check progress at any time</span>
+status = bqe.get_calibration_status()
+<span class="c"># {"mode": "exploring", "samples_collected": 12, "samples_needed": 18,</span>
+<span class="c">#  "next_threads": 16, "partial_timings_ms": {1: 44.7, 2: 22.3, 4: 11.8, 8: 9.2}}</span>
+
+<span class="c"># After samples_per × n_candidates calls → decided and saved automatically</span>
+<span class="c"># {"mode": "decided", "optimal_threads": 8, "timings_ms": {...}}</span>
+
+bqe.stop_online_calibration()  <span class="c"># disable without saving if still exploring</span>
+
+<span class="c"># ── Inspect and override ─────────────────────────────────────────────────────</span>
+cfg = bqe.get_thread_config()
+<span class="c"># {"active_threads": 8, "stored_threads": 8, "available_cores": 24,</span>
+<span class="c">#  "default_cap": 8, "config_file": "C:\\Users\\...\.bqe_threads"}</span>
+
+bqe.set_thread_config(8)   <span class="c"># override manually (takes effect next Python session)</span>
+bqe.set_thread_config(0)   <span class="c"># reset — next session re-calibrates from scratch</span></pre>
+<p><strong>Single-band fast path:</strong> files with fewer than 4 096 rows occupy a single band and bypass the thread pool entirely — they are decoded sequentially with no dispatch overhead. Calibration is also skipped for such files. Parallelism scales linearly with band count up to the calibrated thread limit; a 4 M-row file (~998 bands) fully utilises the pool.</p>
+
+<h3>Profiling</h3>
+<p>Three profiling functions are available for performance diagnosis:</p>
+<pre><span class="c"># Measure compression time and output size for a .txt file</span>
+p = bqe.profile(<span class="s">"AAPL.txt"</span>)
+<span class="c"># {"records": 4082400, "parse_csv_s": 4.2, "compress_s": 3.1, "compressed_mb": 34.7}</span>
+
+<span class="c"># Measure decode time and per-column compressed sizes for a .bqe file</span>
+p = bqe.profile_read(<span class="s">"AAPL.bqe"</span>)
+<span class="c"># {"records": 4082400, "file_mb": 34.7, "bands": 32, "mmap_ms": 0.3,</span>
+<span class="c">#  "decode_ms": 18.2, "total_ms": 18.5, "mode": 0.55, "timestamps": 0.18, ...}</span>
+
+<span class="c"># Fine-grained stage breakdown: per-column decompression CPU time</span>
+p = bqe.profile_stages(<span class="s">"AAPL.bqe"</span>)
+<span class="c"># {"wall_ms": 18.2, "threads": 4, "cpu_decompress_ms": 62.1,</span>
+<span class="c">#  "cpu_compute_tsprice_ms": 28.4, "cpu_compute_volume_ms": 11.3, ...}</span></pre>
+
+<h3>Framework integration</h3>
+<p>BQE arrays are standard NumPy arrays and integrate directly with PyTorch and TensorFlow without copying:</p>
+<pre><span class="k">import</span> bqe
+<span class="k">import</span> torch
+<span class="k">import</span> numpy <span class="k">as</span> np
+
+ts, ohlcv = bqe.read(<span class="s">"AAPL.bqe"</span>)
+
+<span class="c"># PyTorch — zero-copy tensor from NumPy array</span>
+tensor = torch.from_numpy(ohlcv)           <span class="c"># float32[N, 5], shared memory</span>
+ts_tensor = torch.from_numpy(np.array(ts)) <span class="c"># int64[N]</span>
+
+<span class="c"># TensorFlow</span>
+<span class="k">import</span> tensorflow <span class="k">as</span> tf
+tf_ohlcv = tf.constant(ohlcv)             <span class="c"># float32 tensor</span>
+
+<span class="c"># Sliding-window dataset for sequence modelling</span>
+window, step = 128, 1
+windows = np.lib.stride_tricks.sliding_window_view(ohlcv, (window, 5)).squeeze()
+<span class="c"># windows: float32[N-window+1, window, 5]</span>
+
+<span class="c"># Multi-ticker training batch (parallel load)</span>
+<span class="k">import</span> glob
+all_files = sorted(glob.glob(<span class="s">"stocks/**/*.bqe"</span>, recursive=<span class="k">True</span>))
+ts_all, ohlcv_all = bqe.read_concat(all_files)  <span class="c"># concatenated across all tickers</span></pre>
+
+<h2 id="precision">Precision &amp; correctness</h2>
+<p class="lead">The BQE codec is lossless at the level of its internal integer representation. The only source of numerical error is the final <code>float32</code> output conversion, which is an explicit and quantified trade-off.</p>
+
+<h3>Internal representation</h3>
+<p>All price columns (open, high, low, close) are stored internally as 64-bit signed integers scaled by 10 000 (i.e., price × 10 000, rounded to the nearest unit). This representation exactly preserves any price expressible with four decimal places and a magnitude below $214 748. No floating-point arithmetic is performed during encoding or decoding until the final output write.</p>
+<p>Volume values are stored as exact 32-bit unsigned integers. Fractional volumes arising from split adjustment (e.g., <code>97.5</code> shares) are rounded to the nearest integer at ingestion time and stored without further loss.</p>
+<p>Timestamp values are 32-bit unsigned minute indices (minutes since 2000-01-01 00:00). The representation is exact and lossless for all dates within the supported range (through approximately year 2038 with unsigned 32-bit arithmetic).</p>
+
+<h3>Output representation and error bounds</h3>
+<p>The Python API returns prices and volumes as <code>float32</code> arrays for compatibility with ML frameworks. IEEE 754 single precision provides approximately 7 significant decimal digits (23-bit mantissa). The following error bounds are derived from first principles and verified empirically across the full AAPL dataset (4.08 M rows):</p>
+<table>
+<tr><th>Column</th><th class="r">max absolute error</th><th class="r">max relative error</th><th>condition</th></tr>
+<tr><td>open / high / low / close</td><td class="r">$0.000015</td><td class="r">6 × 10⁻⁸</td><td>price ≤ $1 677</td></tr>
+<tr><td>open / high / low / close</td><td class="r">$0.0001</td><td class="r">6 × 10⁻⁸</td><td>price $1 677–$8 000</td></tr>
+<tr><td>volume</td><td class="r">8 shares</td><td class="r">6 × 10⁻⁸</td><td>volume ≤ 16.7 M</td></tr>
+<tr><td>timestamp</td><td class="r">0</td><td class="r">0</td><td>always exact (int64 output)</td></tr>
+</table>
+<p><strong>Derivation:</strong> A price of $152.3400 is stored as the integer 1 523 400. When converted to <code>float32</code>, the result is the nearest representable value. Since 1 523 400 has 7 significant digits and <code>float32</code> provides ~7.2, the conversion is exact for prices below ~$1 677 (where the scaled integer exceeds 16 777 216 = 2²⁴, the exact-integer range of <code>float32</code>). Above this threshold, the last decimal place may round by one unit. For prices in the $1 677–$8 000 range, the error remains below $0.0001 — immaterial for all ML applications.</p>
+
+<h3>Round-trip correctness</h3>
+<p>A full encode → decode → CSV round-trip is lossless at the integer level. The <code>bqe.decompress()</code> function reconstructs the original CSV representation from the stored integers without any intermediate floating-point conversion. Prices are written with the minimum number of decimal places required to represent the stored integer exactly (e.g., 1 523 400 → <code>152.34</code>, not <code>152.3400</code>).</p>
+<figure>
+  <img src="../../plots/ohlc_overlay.png" alt="Original vs BQE round-trip overlay" onerror="this.style.display='none'">
+  <figcaption>AAPL close price: original CSV values (gold) and BQE round-trip output (white) overlaid across 4.08 M rows. The curves are visually indistinguishable at all time scales; the residual panel shows zero error at the resolution of <code>float32</code> output.</figcaption>
+</figure>
+
+<h3>Known limitations</h3>
+<ul>
+  <li><strong>Prices above ~$8 000:</strong> Scaled integers exceed the 7-digit <code>float32</code> precision boundary. The relative error bound of 6 × 10⁻⁸ continues to hold, but the absolute error in dollar terms grows proportionally to the price. This does not affect correctness for ML applications, where relative scale is what matters.</li>
+  <li><strong>Volumes above 16.7 M:</strong> The <code>float32</code> mantissa cannot represent all integers above 2²⁴ = 16 777 216 exactly. Large-cap stocks on heavy trading days may exhibit volume rounding of up to 8 shares. The lossless path (<code>bqe.decompress()</code>) is unaffected; this limitation applies only to the <code>float32</code> output of <code>bqe.read()</code>.</li>
+  <li><strong>Pre-2000 timestamps:</strong> The minute-index representation counts from 2000-01-01 00:00 and does not support earlier dates. Negative indices would result in incorrect timestamp decoding.</li>
+  <li><strong>Four decimal places maximum:</strong> The ×10 000 scaling exactly represents prices with up to four decimal places. Prices quoted to five or more decimal places (e.g., certain OTC markets) are truncated at ingestion.</li>
+</ul>
+
+<h3>Verification</h3>
+<p>The test suite in <code>tests/test_toolkit.py</code> verifies round-trip correctness for price, volume, and timestamp columns across normal bars, gap rows, earnings events, and split-adjusted data. Run with:</p>
+<pre>python -m pytest tests/test_toolkit.py -v</pre>
+
+<p class="muted" style="margin-top:56px; text-align:center; font-size:.9rem; border-top:1px solid var(--border); padding-top:24px;">
+  BQE Codec &nbsp;·&nbsp; Rust + PyO3 &nbsp;·&nbsp; zstd / lz4 &nbsp;·&nbsp; © Black Quant Empire<br>
+  Source: <code>decompLib/src/lib.rs</code> &nbsp;·&nbsp; Format version: v9 (magic <code>BQRC</code>)
+</p>
+
+</div>
+</body>
+</html>
