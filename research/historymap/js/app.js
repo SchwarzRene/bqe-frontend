@@ -91,12 +91,42 @@ function updateEvents(year) {
   });
 }
 
+// ===== Hauptstädte =====
+const capitalLayer = L.layerGroup().addTo(map);
+let capitalsVisible = true;
+
+function updateCapitals(year) {
+  capitalLayer.clearLayers();
+  if (!capitalsVisible) return;
+  CAPITALS.filter(c => year >= c.show[0] && year <= c.show[1]).forEach(c => {
+    const marker = L.marker([c.lat, c.lng], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div class="capital-marker" title="${escapeHtml(c.name)}">★</div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      })
+    });
+    marker.bindTooltip(
+      `<b>${escapeHtml(c.name)}</b><br><small>Hauptstadt: ${escapeHtml(c.state)}</small>`,
+      { className: 'region-tip' }
+    );
+    marker.bindPopup(
+      `<div class="event-popup"><h4>🏛️ ${escapeHtml(c.name)}</h4><p>Hauptstadt von <b>${escapeHtml(c.state)}</b></p>` +
+      `<a href="https://de.wikipedia.org/wiki/${encodeURIComponent(c.wiki.replace(/ /g, '_'))}" target="_blank" rel="noopener">Mehr auf Wikipedia ↗</a></div>`,
+      { maxWidth: 280 }
+    );
+    capitalLayer.addLayer(marker);
+  });
+}
+
 let loadToken = 0;
 async function showYear(year) {
   const token = ++loadToken;
   document.getElementById('year-label').textContent = formatYear(year);
   updateEraPanel(year);
   updateEvents(year);
+  updateCapitals(year);
 
   let geo;
   try { geo = await loadYear(year); }
@@ -149,14 +179,18 @@ function updateEraPanel(year) {
   document.getElementById('era-range').textContent =
     formatYear(era.from) + ' – ' + formatYear(Math.min(era.to, 2025));
   document.getElementById('era-title').textContent = era.title;
-  document.getElementById('era-hegemon').innerHTML = '🏆 <b>Vorherrschaft:</b> ' + era.hegemon;
-  document.getElementById('era-text').innerHTML = era.text;
-  document.getElementById('era-denken').innerHTML = era.denken;
+  document.getElementById('era-hegemon').innerHTML = '🏆 <b>Vorherrschaft:</b> ' + linkify(era.hegemon);
+  document.getElementById('era-text').innerHTML = linkify(era.text);
+  document.getElementById('era-denken').innerHTML = linkify(era.denken);
+
+  document.getElementById('era-kunst').innerHTML = linkify(era.kunst || '');
+  const koepfe = document.getElementById('era-koepfe');
+  koepfe.innerHTML = (era.koepfe || []).map(k => '<li>' + linkify(k) + '</li>').join('');
 
   const kon = document.getElementById('era-konflikte');
-  kon.innerHTML = era.konflikte.map(k => '<li>' + k + '</li>').join('');
+  kon.innerHTML = era.konflikte.map(k => '<li>' + linkify(k) + '</li>').join('');
   const schlag = document.getElementById('era-schlaglichter');
-  schlag.innerHTML = era.schlaglichter.map(s => '<li>' + s + '</li>').join('');
+  schlag.innerHTML = era.schlaglichter.map(s => '<li>' + linkify(s) + '</li>').join('');
 
   // Chronik: datierte Ereignisse dieser Epoche
   const entries = CHRONICLE
@@ -214,7 +248,7 @@ async function openSidebar(props, year) {
   const repEl = document.getElementById('sb-report');
   if (report) {
     repEl.innerHTML = '<h3 style="margin-top:0">📜 ' + escapeHtml(report.title) + '</h3>'
-      + report.html
+      + linkify(report.html)
       + '<div class="wiki-links"><b style="font-size:.8rem;color:var(--text-dim)">Vertiefen:</b><br>' + wikiChips(report.wiki) + '</div>';
   } else {
     repEl.innerHTML = '<p style="color:var(--text-dim);font-size:.9rem">Zu dieser Region liegt für ' + formatYear(year) +
@@ -305,6 +339,14 @@ eventsBtn.addEventListener('click', () => {
   updateEvents(YEARS[+slider.value]);
 });
 
+// Hauptstädte ein-/ausblenden
+const capitalsBtn = document.getElementById('btn-capitals');
+capitalsBtn.addEventListener('click', () => {
+  capitalsVisible = !capitalsVisible;
+  capitalsBtn.classList.toggle('off', !capitalsVisible);
+  updateCapitals(YEARS[+slider.value]);
+});
+
 // Tick-Beschriftungen unter dem Regler
 const TICKS = [-3000, -1, 500, 1000, 1500, 1715, 1914, 2010];
 const ticksEl = document.getElementById('slider-ticks');
@@ -317,6 +359,11 @@ TICKS.forEach(y => {
   el.textContent = y < 0 ? Math.abs(y) + ' v.Chr.' : y;
   ticksEl.appendChild(el);
 });
+
+// Auf schmalen Bildschirmen startet das Epochen-Panel eingeklappt, damit die Karte sichtbar bleibt
+if (window.innerWidth <= 800) {
+  document.getElementById('era-panel').classList.add('collapsed');
+}
 
 // ===== Start =====
 showYear(START_YEAR);

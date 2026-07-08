@@ -120,6 +120,15 @@ html, body {
 .region-link { color: var(--accent2); cursor: pointer; text-decoration: underline dotted; }
 .region-link:hover { color: var(--accent); }
 
+/* Automatisch verlinkte Fachbegriffe im Fließtext */
+.inline-wiki {
+  color: inherit;
+  text-decoration: underline dotted rgba(111, 179, 224, 0.7);
+  text-underline-offset: 3px;
+  transition: color .15s;
+}
+.inline-wiki:hover { color: var(--accent2); }
+
 /* Chronik */
 .chron-row {
   display: flex;
@@ -337,6 +346,26 @@ html, body {
 
 #btn-events.off { opacity: .4; }
 
+/* ---------- Hauptstadt-Marker ---------- */
+.capital-marker {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: rgba(18, 27, 40, 0.92);
+  border: 2px solid var(--accent2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--accent2);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  transition: transform .15s;
+}
+.capital-marker:hover { transform: scale(1.3); }
+
+#btn-capitals.off { opacity: .4; }
+
 .leaflet-popup-content-wrapper {
   background: var(--panel);
   color: var(--text);
@@ -365,10 +394,58 @@ html, body {
 }
 .event-popup a:hover { background: rgba(111,179,224,.25); }
 
-/* Mobil */
+/* ---------- Mobil ---------- */
 @media (max-width: 800px) {
-  #era-panel { width: calc(100vw - 28px); max-height: 45vh; }
-  #sidebar { width: calc(100vw - 28px); max-height: 60vh; }
-  #year-label { min-width: 110px; font-size: 1.1rem; }
+  #map { inset: 0 0 128px 0; }
+
+  #era-panel {
+    top: 8px; left: 8px;
+    width: calc(100vw - 16px);
+    max-height: 42vh;
+  }
+  #era-panel.collapsed { max-height: none; }
+  #era-title { font-size: 1.1rem; }
+  #era-header { padding: 12px 14px 8px; }
+
+  /* Sidebar wird auf Mobilgeräten zum vollflächigen Overlay, damit sie sich
+     nicht mit dem Epochen-Panel überlagert */
+  #sidebar {
+    top: 8px; left: 8px; right: 8px;
+    width: auto;
+    max-height: calc(100vh - 144px);
+    z-index: 1200;
+    padding: 16px 16px 18px;
+  }
+  #sidebar.hidden { transform: translateY(20px); }
+
+  /* Zeitleiste: zweizeilig – oben Regler (volle Breite), unten Steuerung */
+  #timebar {
+    flex-direction: column;
+    height: auto;
+    padding: 8px 12px 10px;
+    gap: 6px;
+  }
+  #slider-wrap { width: 100%; order: 1; padding-top: 4px; }
   #slider-ticks { display: none; }
+  #timebar-controls {
+    order: 2;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  #timebar-controls button { width: 34px; height: 34px; font-size: .78rem; flex-shrink: 0; }
+  #year-label { min-width: auto; font-size: 1rem; margin-left: 6px; }
+
+  #attribution { display: none; }
+
+  /* Leaflet-Popups nie breiter als der Bildschirm */
+  .leaflet-popup-content-wrapper { max-width: calc(100vw - 60px); }
+  .leaflet-popup-content { width: auto !important; max-width: calc(100vw - 80px); }
+}
+
+@media (max-width: 420px) {
+  #timebar-controls button { width: 30px; height: 30px; font-size: .7rem; }
+  #year-label { font-size: .9rem; width: 100%; text-align: center; margin: 2px 0 0; order: 3; }
+  #era-title { font-size: 1rem; }
 }
