@@ -1,0 +1,374 @@
+:root {
+  --bg: #0e1621;
+  --ocean: #16202e;
+  --panel: rgba(18, 27, 40, 0.94);
+  --panel-border: #2c3e55;
+  --text: #e8eef6;
+  --text-dim: #9fb0c4;
+  --accent: #e8b04b;
+  --accent2: #6fb3e0;
+  --radius: 12px;
+  font-size: 15px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+#map {
+  position: absolute;
+  inset: 0 0 86px 0;
+  background: var(--ocean);
+  z-index: 1;
+}
+
+.panel {
+  position: absolute;
+  z-index: 1000;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 30px rgba(0,0,0,.45);
+}
+
+/* ---------- Epochen-Panel ---------- */
+#era-panel {
+  top: 14px;
+  left: 14px;
+  width: 400px;
+  max-width: calc(100vw - 28px);
+  max-height: calc(100vh - 130px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#era-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  cursor: pointer;
+}
+
+#era-range {
+  color: var(--accent);
+  font-size: .8rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+#era-title {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  margin-top: 2px;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+#era-toggle {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: transform .25s;
+}
+#era-panel.collapsed #era-toggle { transform: rotate(-90deg); }
+#era-panel.collapsed #era-body { display: none; }
+
+#era-body {
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  line-height: 1.55;
+}
+
+#era-hegemon {
+  background: rgba(232,176,75,.1);
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 12px;
+  font-size: .92rem;
+}
+#era-hegemon strong { color: var(--accent); }
+
+#era-text { font-size: .95rem; color: var(--text); }
+#era-text p { margin-bottom: 8px; }
+
+.era-section { margin-top: 14px; }
+.era-section h3 {
+  font-size: .85rem;
+  color: var(--accent2);
+  letter-spacing: .04em;
+  margin-bottom: 6px;
+}
+.era-section, .era-section li, #era-denken { font-size: .9rem; color: var(--text-dim); }
+.era-section ul { padding-left: 18px; }
+.era-section li { margin-bottom: 5px; }
+.era-section li b, #era-denken b { color: var(--text); }
+
+.region-link { color: var(--accent2); cursor: pointer; text-decoration: underline dotted; }
+.region-link:hover { color: var(--accent); }
+
+/* Chronik */
+.chron-row {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(44, 62, 85, 0.45);
+  font-size: .86rem;
+  line-height: 1.45;
+}
+.chron-row:last-child { border-bottom: none; }
+.chron-year {
+  flex: 0 0 74px;
+  text-align: right;
+  color: var(--accent);
+  font-family: Georgia, serif;
+  font-weight: 600;
+}
+.chron-text { color: var(--text-dim); }
+.chron-link { color: var(--accent2); text-decoration: none; }
+.chron-link:hover { color: var(--accent); }
+
+/* ---------- Sidebar ---------- */
+#sidebar {
+  top: 14px;
+  right: 14px;
+  width: 430px;
+  max-width: calc(100vw - 28px);
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+  padding: 18px 20px;
+  transition: transform .25s, opacity .25s;
+}
+#sidebar.hidden { transform: translateX(30px); opacity: 0; pointer-events: none; }
+
+#sidebar-close {
+  position: absolute;
+  top: 8px; right: 12px;
+  background: none; border: none;
+  color: var(--text-dim);
+  font-size: 1.6rem;
+  cursor: pointer;
+}
+#sidebar-close:hover { color: var(--text); }
+
+#sb-title {
+  font-family: Georgia, serif;
+  font-size: 1.35rem;
+  padding-right: 26px;
+}
+#sb-subtitle { color: var(--text-dim); font-size: .85rem; margin: 4px 0 12px; }
+
+#sb-report { line-height: 1.6; font-size: .95rem; }
+#sb-report h3 {
+  color: var(--accent);
+  font-size: .95rem;
+  margin: 14px 0 4px;
+  font-family: Georgia, serif;
+}
+#sb-report p { margin-bottom: 8px; }
+#sb-report .wiki-links { margin-top: 10px; }
+#sb-report .wiki-links a, #sb-wiki a {
+  display: inline-block;
+  background: rgba(111,179,224,.12);
+  border: 1px solid rgba(111,179,224,.4);
+  color: var(--accent2);
+  border-radius: 20px;
+  padding: 3px 12px;
+  margin: 3px 4px 0 0;
+  font-size: .82rem;
+  text-decoration: none;
+}
+#sb-report .wiki-links a:hover, #sb-wiki a:hover { background: rgba(111,179,224,.25); }
+
+#sb-wiki { margin-top: 16px; border-top: 1px solid var(--panel-border); padding-top: 12px; }
+#sb-wiki-loading { color: var(--text-dim); font-style: italic; font-size: .85rem; }
+#sb-wiki-content img {
+  float: right;
+  max-width: 130px;
+  border-radius: 8px;
+  margin: 0 0 8px 10px;
+}
+#sb-wiki-content p { font-size: .9rem; line-height: 1.55; color: var(--text-dim); margin-bottom: 8px; }
+#sb-wiki-content .wiki-src { font-size: .75rem; color: var(--text-dim); opacity: .7; }
+
+.hidden { display: none !important; }
+
+/* ---------- Zeitleiste ---------- */
+#timebar {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 86px;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-border);
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 22px;
+}
+
+#timebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+#timebar-controls button {
+  background: #1d2a3d;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: .85rem;
+}
+#timebar-controls button:hover { background: #2a3b55; border-color: var(--accent2); }
+#btn-play.playing { background: var(--accent); color: #14202e; border-color: var(--accent); }
+
+#year-label {
+  font-family: Georgia, serif;
+  font-size: 1.5rem;
+  color: var(--accent);
+  min-width: 160px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+#slider-wrap { position: relative; flex: 1; padding-top: 10px; }
+
+#time-slider {
+  width: 100%;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #31435f, #3c5170);
+  outline: none;
+  cursor: pointer;
+}
+#time-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #14202e;
+  box-shadow: 0 0 0 2px var(--accent);
+  cursor: grab;
+}
+#time-slider::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #14202e;
+  cursor: grab;
+}
+
+#slider-ticks {
+  position: relative;
+  height: 18px;
+  margin-top: 2px;
+}
+.tick {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: .62rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  user-select: none;
+}
+.tick::before {
+  content: "";
+  display: block;
+  width: 1px; height: 4px;
+  background: var(--text-dim);
+  margin: 0 auto 1px;
+}
+
+#attribution {
+  position: absolute;
+  bottom: 90px;
+  right: 8px;
+  z-index: 1000;
+  font-size: .68rem;
+  color: var(--text-dim);
+  background: rgba(14,22,33,.7);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+#attribution a { color: var(--accent2); }
+
+/* Leaflet-Tooltip */
+.leaflet-tooltip.region-tip {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+/* ---------- Ereignis-Marker ---------- */
+.event-marker {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: rgba(18, 27, 40, 0.92);
+  border: 2px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  transition: transform .15s;
+}
+.event-marker:hover { transform: scale(1.25); }
+
+#btn-events.off { opacity: .4; }
+
+.leaflet-popup-content-wrapper {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+}
+.leaflet-popup-tip { background: var(--panel); }
+.leaflet-popup-close-button { color: var(--text-dim) !important; }
+
+.event-popup h4 {
+  font-family: Georgia, serif;
+  color: var(--accent);
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+.event-popup p { font-size: .87rem; line-height: 1.5; margin-bottom: 8px; }
+.event-popup a {
+  display: inline-block;
+  background: rgba(111,179,224,.12);
+  border: 1px solid rgba(111,179,224,.4);
+  color: var(--accent2);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: .8rem;
+  text-decoration: none;
+}
+.event-popup a:hover { background: rgba(111,179,224,.25); }
+
+/* Mobil */
+@media (max-width: 800px) {
+  #era-panel { width: calc(100vw - 28px); max-height: 45vh; }
+  #sidebar { width: calc(100vw - 28px); max-height: 60vh; }
+  #year-label { min-width: 110px; font-size: 1.1rem; }
+  #slider-ticks { display: none; }
+}

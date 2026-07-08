@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MarketJEPA — Self-Supervised World Model for Intraday Trading (Training Internals)</title>
+<style>
+  :root{
+    --fg:#B8B8B8; --fg-strong:#FFFFFF; --muted:#6B7280;
+    --accent:#C4A86B; --accent-light:#D4B87B; --accent-dark:#9E8A55;
+    --bg:#0A0A0A; --bg-soft:#131313; --bg-muted:#1F1F1F; --card:#131313;
+    --border:rgba(196,168,107,0.18); --navy:rgba(26,43,74,0.5);
+    --green:#5dc87a; --red:#c87a7a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg);}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px 96px;}
+  header{background:var(--bg-soft);border-top:3px solid var(--accent);border-bottom:3px solid var(--accent);color:var(--fg-strong);padding:64px 24px 56px;text-align:center;position:relative;}
+  header::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(196,168,107,.05) 0%,transparent 50%,rgba(196,168,107,.05) 100%);pointer-events:none;}
+  header h1{margin:0 0 8px;font-size:2.6rem;letter-spacing:-.5px;color:var(--accent);position:relative;}
+  header p{margin:0;font-size:1.12rem;color:var(--fg);position:relative;}
+  .badges{margin-top:22px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;position:relative;}
+  .badge{background:rgba(196,168,107,.08);border:1px solid rgba(196,168,107,.35);border-radius:999px;padding:6px 16px;font-size:.9rem;font-weight:600;color:var(--accent);}
+  h2{font-size:1.7rem;margin:56px 0 0;letter-spacing:-.3px;color:var(--fg-strong);background:var(--bg-soft);border-top:3px solid var(--accent);border-bottom:1px solid var(--border);padding:20px 24px;scroll-margin-top:12px;}
+  h2 .num{color:var(--accent);font-weight:800;}
+  h3{font-size:1.2rem;margin:32px 0 4px;color:var(--fg-strong);}
+  h4{font-size:1rem;margin:22px 0 2px;color:var(--accent-light);}
+  p{color:var(--fg);} p.lead{color:var(--muted);margin-top:4px;} strong{color:var(--fg-strong);}
+  a{color:var(--accent);} a:hover{color:var(--accent-light);}
+  code,pre{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;}
+  code{background:var(--bg-muted);color:var(--accent-light);padding:2px 6px;border-radius:5px;font-size:.9em;}
+  pre{background:#0f172a;color:#e2e8f0;padding:18px 20px;border-radius:10px;overflow:auto;font-size:.85rem;line-height:1.5;border:1px solid var(--border);}
+  pre .k{color:#7dd3fc;} pre .s{color:#86efac;} pre .c{color:#94a3b8;font-style:italic;} pre .n{color:#fca5a5;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px 26px;margin:18px 0;}
+  table{border-collapse:collapse;width:100%;margin:18px 0;font-size:.93rem;}
+  th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;color:var(--fg);vertical-align:top;}
+  th{background:var(--navy);color:var(--accent);font-weight:600;}
+  td.r,th.r{text-align:right;}
+  .pill{display:inline-block;background:var(--bg-muted);border:1px solid var(--border);border-radius:6px;padding:1px 8px;font-size:.85em;font-family:monospace;color:var(--accent-light);}
+  .key{border-left:4px solid var(--accent);background:rgba(196,168,107,.06);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;color:var(--fg);}
+  .key strong{color:var(--accent);}
+  .warn{border-left:4px solid var(--red);background:rgba(200,122,122,.07);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;}
+  .warn strong{color:var(--red);}
+  .ok{border-left:4px solid var(--green);background:rgba(93,200,122,.07);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;}
+  .ok strong{color:var(--green);}
+  nav.toc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 24px;margin:28px 0;}
+  nav.toc strong{color:var(--fg-strong);} nav.toc a{color:var(--accent);text-decoration:none;} nav.toc a:hover{color:var(--accent-light);text-decoration:underline;}
+  nav.toc ol{margin:6px 0;padding-left:22px;columns:2;} @media(max-width:640px){nav.toc ol{columns:1;}}
+  .muted{color:var(--muted);}
+  /* flow diagram */
+  .flow{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:20px 0;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;}
+  .flow-row{display:flex;align-items:stretch;border-bottom:1px solid var(--border);}
+  .flow-row:last-child{border-bottom:none;}
+  .flow-stage{flex:0 0 160px;padding:12px 14px;background:rgba(196,168,107,.10);color:var(--accent);font-weight:700;border-right:1px solid var(--border);display:flex;align-items:center;}
+  .flow-body{flex:1;padding:12px 14px;color:var(--fg);}
+  .flow-body .sh{color:var(--green);}
+  .arrowdown{text-align:center;color:var(--accent);font-size:1.1rem;padding:4px;}
+  /* file map */
+  .fm{border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:"SF Mono",monospace;font-size:.8rem;margin:18px 0;}
+  .fm div{padding:6px 14px;border-bottom:1px solid var(--border);}
+  .fm div:last-child{border-bottom:none;}
+  .fm .f{color:var(--accent-light);} .fm .d{color:var(--muted);}
+  @media(max-width:640px){header h1{font-size:2rem;} .flow-stage{flex-basis:108px;}}
+
+  /* ── Version / findings log ──────────────────────────────────────── */
+  .vlog{margin:18px 0;}
+  .ventry{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 20px;margin:14px 0;}
+  .ventry h4{margin:0 0 8px;color:var(--fg-strong);font-size:1.05rem;}
+  .vtag{display:inline-block;background:rgba(196,168,107,.15);border:1px solid rgba(196,168,107,.4);color:var(--accent);border-radius:6px;padding:1px 9px;font-family:monospace;font-size:.82rem;font-weight:700;margin-right:10px;}
+  .ventry .row{margin:5px 0;font-size:.94rem;}
+  .ventry .lbl{color:var(--accent);font-weight:700;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;margin-right:6px;}
+  .ventry.fix{border-left-color:var(--red);} .ventry.fix .vtag{color:var(--red);border-color:rgba(200,122,122,.45);background:rgba(200,122,122,.12);}
+  .ventry.fix .lbl{color:var(--red);}
+  .ventry.win{border-left-color:var(--green);} .ventry.win .vtag{color:var(--green);border-color:rgba(93,200,122,.45);background:rgba(93,200,122,.12);}
+  .ventry.win .lbl{color:var(--green);}
+  .ventry.live .vtag{background:rgba(125,211,252,.12);border-color:rgba(125,211,252,.45);color:#7dd3fc;}
+</style>
+</head>
+<body>
+<header>
+  <h1>MarketJEPA</h1>
+  <p>A self-supervised world model that learns intraday market structure from the
+  raw BQE universe, then trades the pretrained latent space.<br>
+  This document describes <em>exactly</em> what happens while it trains — enough to rebuild it.</p>
+  <div class="badges">
+    <span class="badge">JEPA + SIGReg pretraining</span>
+    <span class="badge">7,659 stocks · 18.8 M sessions</span>
+    <span class="badge">stock-agnostic by design</span>
+    <span class="badge">resumable on an 8 GB GPU</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section style="margin-top:34px;">
+  <h3 style="margin:0 0 12px;">What is MarketJEPA?</h3>
+  <p>MarketJEPA is a from-scratch implementation of the Joint-Embedding Predictive Architecture
+  (JEPA) — the self-supervised learning paradigm advocated by Yann LeCun — adapted to financial
+  time series. It builds on the LeWorldModel recipe (JEPA paired with the SIGReg anti-collapse
+  regularizer) and the masked-prediction idea from wav2vec 2.0.</p>
+
+  <p>The model is trained on the <em>FirstRate</em> split- and dividend-adjusted US equities
+  dataset — roughly 7,659 stocks at 1-minute resolution since 2000. The data is stored in the BQE
+  binary format, a domain-specific codec for 1-minute OHLCV described in its own paper,
+  <a href="bqe_decomp.html">BQE-DeComp</a>. MarketJEPA reads it in place, with no decompression to
+  disk.</p>
+
+  <p>It has two halves. First, a self-supervised world model (Stage A) learns a latent-space
+  representation of the stock market by predicting the future latents of price action — not raw
+  prices, and deliberately not stock identities or calendar dates. This is pure representation
+  learning: no labels, no returns, only an abstract embedding of what the market looks like and
+  where it is heading. Second, a thin supervised layer (Stages B and C) — small classifier heads
+  plus a decision policy — operates on the frozen latent and tries to generate alpha: estimating
+  the probability and size of a profitable exit, timing entries and exits, and turning the
+  representation into trades.</p>
+
+  <p>The thesis follows LeCun's world-model program: predict in a learned latent space rather than
+  in raw price space, prevent representational collapse with one principled regularizer (SIGReg)
+  instead of a stack of heuristics, pretrain once on the entire unlabeled universe, then attach
+  cheap task-specific heads. A single strong pretrained latent then serves many downstream trading
+  strategies at once. The full design specifications live in <code>Papers/MarketJEPA_design_v3.md</code>
+  and <code>Papers/TradingJEPASpace.md</code>; this document describes the implementation's
+  internals.</p>
+</section>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#overview">What this system is</a></li>
+    <li><a href="#pipeline">End-to-end pipeline</a></li>
+    <li><a href="#findings">★ Findings &amp; experiment log</a></li>
+    <li><a href="#reading">① Reading BQE (no copy)</a></li>
+    <li><a href="#preprocess">② Preprocess → memmap cache</a></li>
+    <li><a href="#dataset">③ Sharded dataset &amp; batchloader</a></li>
+    <li><a href="#features">④ Causal features</a></li>
+    <li><a href="#views">⑤ Views, sessions, chunks</a></li>
+    <li><a href="#time">⑥ Time encoding (stock-agnostic)</a></li>
+    <li><a href="#model">⑦ Model architecture</a></li>
+    <li><a href="#forward">⑧ The forward pass (shapes)</a></li>
+    <li><a href="#loss">⑨ The loss: JEPA + SIGReg</a></li>
+    <li><a href="#loop">⑩ The training step</a></li>
+    <li><a href="#ckpt">⑪ Checkpoint &amp; resume</a></li>
+    <li><a href="#health">⑫ Health diagnostics</a></li>
+    <li><a href="#heads">⑬ Stage B: heads</a></li>
+    <li><a href="#policy">⑭ Stage C: policy</a></li>
+    <li><a href="#strategies">⑮ Trading models &amp; selection</a></li>
+    <li><a href="#monitor">⑯ The live monitor</a></li>
+    <li><a href="#axes">Design space — full axis menu</a></li>
+    <li><a href="#search">Search strategy (§12)</a></li>
+    <li><a href="#eval">Evaluation methodology (§13)</a></li>
+    <li><a href="#risks">Risks &amp; failure modes (§14)</a></li>
+    <li><a href="#catalogue">Strategy catalogue (all 12)</a></li>
+    <li><a href="#vq">Optional: VQ regime tokens (App. B)</a></li>
+    <li><a href="#roadmap">Build roadmap (§16)</a></li>
+    <li><a href="#repro">Reproduce it</a></li>
+    <li><a href="#filemap">File map</a></li>
+  </ol>
+</nav>
+
+<h2 id="overview">What this system is</h2>
+<p class="lead">Predict the future in a learned latent space; never memorise names or eras.</p>
+<p>MarketJEPA is a three-stage pipeline that turns the BQE 1-minute equity universe
+into a tradeable signal. It follows the v3 design (<code>Papers/MarketJEPA_design_v3.md</code>)
+and the trading-readouts companion (<code>Papers/TradingJEPASpace.md</code>):</p>
+<table>
+  <tr><th>Stage</th><th>Trains</th><th>Objective</th><th>Code</th></tr>
+  <tr><td><strong>A — Pretraining</strong></td><td>encoder f<sub>θ</sub> + predictor g<sub>φ</sub></td>
+      <td>multi-anchor, multi-horizon latent prediction + SIGReg anti-collapse</td>
+      <td><code>training/trainer.py</code></td></tr>
+  <tr><td><strong>B — Heads</strong></td><td>small heads (backbone frozen)</td>
+      <td>profitability term-structure, extremum/exit, forward return</td>
+      <td><code>training/stage_b.py</code></td></tr>
+  <tr><td><strong>C — Policy</strong></td><td>thin rule layer</td>
+      <td>receding-horizon optimal stopping</td>
+      <td><code>policy/optimal_stopping.py</code></td></tr>
+</table>
+<div class="key"><strong>Core thesis.</strong> Pretrain on the full unlabeled universe by predicting
+future <em>latents</em> (JEPA), keep the representation from collapsing with a single
+regularizer (SIGReg), then attach thin supervised heads and a decision policy. The
+pretrained latent is the asset; everything downstream is a read-off from it.</div>
+
+<h3>The configuration object &nbsp;<span class="muted" style="font-size:.9rem">(§2)</span></h3>
+<p>Every experiment is exactly one choice of the seven-tuple</p>
+<p style="text-align:center;"><strong>𝒞 = ( 𝒱 , ℱ , 𝒯 , 𝒜 , 𝒪 , ℋ , π )</strong></p>
+<table>
+  <tr><th>Symbol</th><th>Axis</th><th>This system's default</th></tr>
+  <tr><td>𝒱</td><td>input views (resolutions, windows, anchors)</td><td>1 intraday view, τ=5min, L=79</td></tr>
+  <tr><td>ℱ</td><td>features / encodings / indicators</td><td>12 causal channels (§<a href="#features">④</a>)</td></tr>
+  <tr><td>𝒯</td><td>time representation</td><td>Time2Vec + weekday (relative only)</td></tr>
+  <tr><td>𝒜</td><td>architecture (encoder + predictor)</td><td>hybrid CNN→Transformer, d=256</td></tr>
+  <tr><td>𝒪</td><td>objective</td><td>multi-horizon JEPA + SIGReg (λ=0.1, γ=0.85)</td></tr>
+  <tr><td>ℋ</td><td>supervised heads</td><td>term-structure, extremum, forward-return</td></tr>
+  <tr><td>π</td><td>decision policy</td><td>receding-horizon optimal stopping</td></tr>
+</table>
+<p>The staged search (§<a href="#search">12</a>) is just coordinate descent over the fields of 𝒞;
+<code>training/experiment.py</code> is this tuple in code. The full menu for each axis is the
+<a href="#axes">design-space reference</a>.</p>
+<div class="key"><strong>Two different "predictions" — keep them straight.</strong> Stage A predicts
+<em>future latents</em> (self-supervised, no labels). Stage B predicts <em>whether an exit is
+profitable</em> (supervised, needs realised PnL). They share the same chunk/anchor structure,
+which is what keeps the system coherent. Time (𝒯) is injected in Stage A, so every downstream
+stage inherits it.</div>
+<div class="warn"><strong>Stock-agnostic, by design.</strong> The model is never told which
+ticker it is looking at. There is no per-stock embedding in the active configuration
+(<code>cond_mode="time"</code>), and absolute date/year is excluded from every feature.
+The model must learn transferable <em>intraday patterns</em>, not "NVDA goes up."
+This is what lets the same encoder serve all 7,659 names and generalise to unseen ones.</div>
+
+<h2 id="pipeline">End-to-end pipeline</h2>
+<div class="flow">
+  <div class="flow-row"><div class="flow-stage">RAW (read-only)</div><div class="flow-body">
+    <code>C:\Data\BQE-Dataset\...\stock_&lt;L&gt;_..._&lt;hash&gt;\TICKER\TICKER_YYYY.bqe</code><br>
+    1-minute OHLCV, BQE-compressed. <strong>Never copied or decompressed to disk.</strong></div></div>
+  <div class="arrowdown">▼ &nbsp; <span class="muted">bqe.read() — memory-mapped, all cores</span></div>
+  <div class="flow-row"><div class="flow-stage">PREPROCESS<br>(once)</div><div class="flow-body">
+    decode → resample to τ=5min → 12 causal features → per-session float16 shards<br>
+    <span class="sh">python scripts/preprocess.py --all --start 2000 --end 2026 --cache cache/prod</span><br>
+    output: <code>cache/prod/shards/*.npy</code> (~32 GB) + <code>index/</code> + <code>manifest.json</code> + <code>vocab.json</code></div></div>
+  <div class="arrowdown">▼</div>
+  <div class="flow-row"><div class="flow-stage">DATASET</div><div class="flow-body">
+    <code>ShardedSessionDataset</code> memory-maps shards → bounded RAM for 18.8 M sessions.<br>
+    purged/embargoed temporal split → DataLoader (random stock × random date, causal within sample)</div></div>
+  <div class="arrowdown">▼</div>
+  <div class="flow-row"><div class="flow-stage">STAGE A<br>(days)</div><div class="flow-body">
+    encoder + predictor, loss = L<sub>multi</sub> + λ·SIGReg, AdamW, AMP, step-based, checkpointed<br>
+    <span class="sh">python scripts/pretrain.py --cache cache/prod --max-steps 400000</span></div></div>
+  <div class="arrowdown">▼ &nbsp; <span class="muted">frozen backbone</span></div>
+  <div class="flow-row"><div class="flow-stage">STAGE B / C</div><div class="flow-body">
+    heads on hindsight labels → optimal-stopping policy</div></div>
+  <div class="arrowdown">▼</div>
+  <div class="flow-row"><div class="flow-stage">TRADING</div><div class="flow-body">
+    extract latent panel → fit return probe → backtest 6 strategies cost-aware → pick best Sharpe<br>
+    <span class="sh">python scripts/run_strategies.py --ckpt checkpoints/stage_a/best.pt</span></div></div>
+</div>
+
+<h2 id="findings">★ Findings &amp; experiment log</h2>
+<p class="lead">Every change as its own version — what was tried, what happened, what was decided.</p>
+<p>Chronological build &amp; experiment history. <span class="vtag">gold</span> = milestone,
+<span class="vtag" style="color:var(--green);border-color:rgba(93,200,122,.45);background:rgba(93,200,122,.12)">green</span> = change that improved things,
+<span class="vtag" style="color:var(--red);border-color:rgba(200,122,122,.45);background:rgba(200,122,122,.12)">red</span> = a bug found &amp; fixed,
+<span class="vtag" style="color:#7dd3fc;border-color:rgba(125,211,252,.45);background:rgba(125,211,252,.12)">blue</span> = in progress.</p>
+
+<div class="vlog">
+
+  <div class="ventry">
+    <h4><span class="vtag">v0.1</span> Data foundation</h4>
+    <div class="row"><span class="lbl">Change</span> BQEReader + catalog + OHLCVFrame + daily candlestick plot; read BQE in place (never copy).</div>
+    <div class="row"><span class="lbl">Finding</span> Warm decode ≈ 200 M bars/s and identical at 8/16/24 threads → decode is memory-bandwidth bound. Cold reads are disk-I/O bound, not codec-bound.</div>
+    <div class="row"><span class="lbl">Decision</span> Keep data in BQE; overlap cold I/O across tickers with a thread pool (<code>read_many</code>, ~2.6×).</div>
+  </div>
+
+  <div class="ventry">
+    <h4><span class="vtag">v0.2</span> Full three-stage architecture</h4>
+    <div class="row"><span class="lbl">Change</span> Implemented Stage A (multi-anchor/multi-horizon JEPA + SIGReg exactly per Appendix A), Stage B heads, Stage C policy, all backbones, Time2Vec, zero-init AdaLN.</div>
+    <div class="row"><span class="lbl">Finding</span> Trains end-to-end on a small universe; per-horizon skill-decay and SIGReg behave as designed.</div>
+    <div class="row"><span class="lbl">Decision</span> Proceed to full-universe scale.</div>
+  </div>
+
+  <div class="ventry">
+    <h4><span class="vtag">v0.3</span> Read-speed investigation</h4>
+    <div class="row"><span class="lbl">Question</span> "Data reading should be faster — is bqe used correctly?"</div>
+    <div class="row"><span class="lbl">Finding</span> The library was already optimal. The slow numbers were measuring <em>during</em> online thread-calibration (it deliberately tries 1/2/4 threads) plus a cold OS cache — both counted as "decode". Pure warm decode of 4.09 M AAPL bars is ~20 ms.</div>
+    <div class="row"><span class="lbl">Decision</span> Added <code>warmup_calibration</code> + an honest cold/warm benchmark; no library change needed.</div>
+  </div>
+
+  <div class="ventry">
+    <h4><span class="vtag">v0.4</span> Scalable preprocessing + sharded dataset</h4>
+    <div class="row"><span class="lbl">Change</span> Preprocess once → float16 memmap shards; <code>ShardedSessionDataset</code> memory-maps them so RAM stays bounded for the whole universe.</div>
+    <div class="row"><span class="lbl">Decision</span> "Preprocess once, mmap at train time" — features are not recomputed every step.</div>
+  </div>
+
+  <div class="ventry fix">
+    <h4><span class="vtag">v0.5</span> Correctness gate caught a lookahead bug</h4>
+    <div class="row"><span class="lbl">Change</span> Built <code>verify.py</code> (shapes, causality, SIGReg, purged split, checkpoint round-trip) to run before any long run.</div>
+    <div class="row"><span class="lbl">Finding</span> <code>prev_close</code> used a row-wise <code>shift(1)</code> after a day-grouped <code>last()</code>, leaking the <em>current</em> day's last close into earlier bars (max past delta 0.345 — a real future leak).</div>
+    <div class="row"><span class="lbl">Fix</span> Use the previous <em>day's</em> close, broadcast to all rows of the next day. Verifier now asserts perturbing the last bar changes no earlier feature (delta = 0).</div>
+  </div>
+
+  <div class="ventry fix">
+    <h4><span class="vtag">v0.6</span> Preprocessing bugs at scale</h4>
+    <div class="row"><span class="lbl">Finding</span> (1) <code>np.save</code> appended <code>.npy</code> to custom temp names → atomic rename failed. (2) Degenerate features (divide-by-near-zero) overflowed float16 → inf.</div>
+    <div class="row"><span class="lbl">Fix</span> Write via open file handles (no suffix munging); winsorise features to ±30 before the float16 cast.</div>
+  </div>
+
+  <div class="ventry">
+    <h4><span class="vtag">v0.7</span> First full-universe pretrain (stock-AWARE baseline)</h4>
+    <div class="row"><span class="lbl">Change</span> 7,659 tickers · 18.8 M sessions · 32 GB cache. Config: dim 256, batch 256, λ 0.1, <code>cond=time+stock</code> (per-stock embedding ON).</div>
+    <div class="row"><span class="lbl">Finding</span> Trains ~6.7 it/s on the RTX 3070; healthy early, but the model could key on stock identity.</div>
+  </div>
+
+  <div class="ventry fix">
+    <h4><span class="vtag">v0.8</span> Sharded-dataset RAM + Windows worker crash</h4>
+    <div class="row"><span class="lbl">Finding</span> The 18.8 M-session index as Python tuples cost several GB; and DataLoader workers (Windows <em>spawn</em>) crashed pickling the ~700 MB index (<code>OSError Errno 22 / "pickle data was truncated"</code>).</div>
+    <div class="row"><span class="lbl">Fix</span> Columnar NumPy index, persisted to disk and memory-mapped per worker (<code>__getstate__</code> drops the memmaps). Side benefit: dataset startup 85 s → 9 s.</div>
+  </div>
+
+  <div class="ventry win">
+    <h4><span class="vtag">v0.9</span> Stock-agnostic decision (removed the per-stock embedding)</h4>
+    <div class="row"><span class="lbl">Why</span> A per-stock embedding lets the model memorise "NVDA goes up" — identity, not a tradeable pattern, and it fails to transfer to unseen names.</div>
+    <div class="row"><span class="lbl">Change</span> <code>cond_mode</code> time+stock → <strong>time</strong> (intraday phase + weekday only). Fresh restart.</div>
+    <div class="row"><span class="lbl">Finding</span> Healthier than stock-aware — effrank ≈ 16 (vs 10.6), per-dim var ≈ 1.0. Confirmed the right call.</div>
+  </div>
+
+  <div class="ventry win">
+    <h4><span class="vtag">v0.10</span> OHLC candle-shape features (12 → 18)</h4>
+    <div class="row"><span class="lbl">Question</span> "Does the model even get OHLC?" — it only saw a close-centric view (open via session-open, high/low only via ATR).</div>
+    <div class="row"><span class="lbl">Change</span> Added 6 causal, normalised shape features: <code>body, range, close_pos, upper_wick, lower_wick, gap</code> — the full per-bar candle geometry.</div>
+    <div class="row"><span class="lbl">Finding</span> Verifier confirms causality holds (max past delta 0). Re-preprocessed → 44.7 GB, 18 features.</div>
+  </div>
+
+  <div class="ventry">
+    <h4><span class="vtag">v0.11</span> VRAM headroom</h4>
+    <div class="row"><span class="lbl">Finding</span> 18 features pushed VRAM to 7.9 / 8 GB — too tight.</div>
+    <div class="row"><span class="lbl">Change</span> batch 256 → 192 (resumed from the step-9000 checkpoint — batch size isn't in the checkpoint). VRAM 7.9 → 4.4 GB.</div>
+  </div>
+
+  <div class="ventry">
+    <h4><span class="vtag">v0.12</span> Autonomous orchestrator (auto-advance to Stage B)</h4>
+    <div class="row"><span class="lbl">Change</span> <code>orchestrate.py</code> watches Stage A; at the trigger step it auto-runs Stage-B head training then the strategy leaderboard. <code>monitor_eval.py</code> logs the trading edge every 15 min.</div>
+    <div class="row"><span class="lbl">Finding</span> Stage-B path smoke-tested end-to-end on the sharded dataset (heads train, checkpoint saves). Independent of any interactive session (but not a reboot).</div>
+  </div>
+
+  <div class="ventry fix">
+    <h4><span class="vtag">v0.13</span> Partial representational collapse detected</h4>
+    <div class="row"><span class="lbl">Config</span> dim 256, λ 0.1.</div>
+    <div class="row"><span class="lbl">Finding</span> Per-dim variance drifting <em>down</em> (1.0 → 0.5), effective rank flat at ~13 / 256, val pred loss → 0. That triad is the early signature of the trivial JEPA solution — SIGReg at λ=0.1 losing to the prediction term.</div>
+    <div class="row"><span class="lbl">Decision</span> Raise λ and reduce width.</div>
+  </div>
+
+  <div class="ventry win">
+    <h4><span class="vtag">v0.14</span> Anti-collapse fix — λ 0.1 → 0.3, dim 256 → 192</h4>
+    <div class="row"><span class="lbl">Change</span> Tripled the SIGReg weight; narrowed to the paper's ~184 width-saturation point (also lighter VRAM, faster).</div>
+    <div class="row"><span class="lbl">Finding</span> Effective rank rose to ~24 and started <strong>trending up</strong> (was flat at 13) — collapse trend reversed. Per-dim variance still ~0.3–0.6.</div>
+  </div>
+
+  <div class="ventry win">
+    <h4><span class="vtag">v0.15</span> λ 0.3 → 0.4 (best single config)</h4>
+    <div class="row"><span class="lbl">Finding</span> Per-dim variance now <em>starts</em> at 1.05 (λ did its job early) then drifts to ~0.6; effective rank the best yet, rising to ~29 / 192.</div>
+    <div class="row"><span class="lbl">Insight</span> The variance drift appears <strong>intrinsic</strong> to the objective (the prediction term shrinks the raw latents while the BatchNorm head re-normalises) — not fully fixable with λ. Rising effective rank is the decisive "not collapsing" signal, and it's healthy.</div>
+  </div>
+
+  <div class="ventry fix">
+    <h4><span class="vtag">v0.16</span> OneDrive crash → local storage</h4>
+    <div class="row"><span class="lbl">Finding</span> Training crashed with <code>PermissionError</code> on a cache shard. The cache lived under <code>...\OneDrive\...</code>; OneDrive periodically locked shard files to sync them, colliding with the DataLoader workers.</div>
+    <div class="row"><span class="lbl">Fix</span> Moved cache + checkpoints + logs to <code>C:\Data\marketjepa\</code> (local, same volume → instant) + a retry guard on the memmap open.</div>
+    <div class="row"><span class="lbl">Insight</span> Resume rule confirmed: <strong>λ / γ / lr / batch</strong> changes are resumable (runtime-only); <strong>dim / depth / backbone / feature-set</strong> changes require a fresh restart (architecture or input shape changed).</div>
+  </div>
+
+  <div class="ventry live">
+    <h4><span class="vtag">v0.17</span> Model-size sweep <span class="muted" style="font-size:.85rem">(in progress)</span></h4>
+    <div class="row"><span class="lbl">Change</span> <code>sweep.py</code> proxy search (§12) over {w192_d6, w192_d10, w256_d8, w384_d8}, 15 k steps each, sequential on one GPU, ranked by effective rank + probe IC.</div>
+    <div class="row"><span class="lbl">Hypothesis</span> Effective rank plateaued ~29 / 192 → usable signal rank ≈ 30, so adding <em>depth</em> may help more than <em>width</em> (which the paper says saturates ~184).</div>
+    <div class="row"><span class="lbl">Status</span> Running; leaderboard pending — will record the winner here and train it fully.</div>
+  </div>
+
+</div>
+
+<h2 id="reading">① Reading BQE — in place, no copy</h2>
+<p>The raw dataset stays in BQE format. <code>BQEReader</code> wraps the <code>bqe</code> Rust
+extension, which memory-maps each yearly file and decodes its independent row-bands
+across CPU cores. Decode is <strong>memory-bandwidth bound</strong>: warm throughput is
+~200 M bars/s and is identical at 8/16/24 threads. Cold reads pay disk I/O, which
+<code>read_many()</code> overlaps across tickers with a thread pool (the GIL is released
+during decode).</p>
+<table>
+  <tr><th>Regime</th><th class="r">Throughput</th><th>Meaning</th></tr>
+  <tr><td>Warm decode (cache hot)</td><td class="r">~200 M bars/s</td><td>pure codec speed — 4.09 M AAPL bars in ~20 ms</td></tr>
+  <tr><td>Cold sequential</td><td class="r">~29 M bars/s</td><td>first-touch disk I/O, not the codec</td></tr>
+  <tr><td>Cold parallel ×8</td><td class="r">~63 M bars/s</td><td><code>read_many()</code> overlaps disk seeks</td></tr>
+</table>
+<p>Thread count is auto-tuned once per machine via BQE online calibration
+(<code>start_online_calibration</code>); the optimum persists to <code>~/.bqe_threads</code>.
+On this box it settled on 8 threads.</p>
+
+<h2 id="preprocess">② Preprocess → memory-mapped cache</h2>
+<p>Computing 12 pandas indicators per ticker costs 0.1–0.5 s. Doing that every training
+step for days would starve the GPU, so we compute features <strong>once</strong> and persist
+them. The cache is a <em>derived</em> artifact — much smaller than the raw minute data —
+and is what training memory-maps.</p>
+
+<h4>Shard layout (per ticker)</h4>
+<div class="fm">
+  <div><span class="f">&lt;cache&gt;/manifest.json</span> <span class="d">— τ, max_tokens(L), n_features, feature_names, n_chunks, year range</span></div>
+  <div><span class="f">&lt;cache&gt;/vocab.json</span> <span class="d">— deterministic ticker→id (sorted; stable across reruns)</span></div>
+  <div><span class="f">&lt;cache&gt;/shards/TICKER.feat.npy</span> <span class="d">— float16 [T_tok, 12]  (winsorised ±30, memmap)</span></div>
+  <div><span class="f">&lt;cache&gt;/shards/TICKER.close.npy</span> <span class="d">— float32 [T_tok]  (raw close, for labels)</span></div>
+  <div><span class="f">&lt;cache&gt;/shards/TICKER.phase.npy</span> <span class="d">— float16 [T_tok]  (intraday phase u∈[0,1])</span></div>
+  <div><span class="f">&lt;cache&gt;/shards/TICKER.meta.npz</span> <span class="d">— offsets[n+1], weekday[n], dates[n], stock_id</span></div>
+  <div><span class="f">&lt;cache&gt;/index/{o0,o1,wd,sid,tidx,dts}.npy</span> <span class="d">— flat global session index (built once)</span></div>
+</div>
+<p>Sessions are stored <em>contiguously</em> (no padding wasted on disk); a session is the
+token slice <code>feat[offsets[s] : offsets[s+1]]</code>. Every write is atomic
+(<code>*.tmp</code> then <code>os.replace</code>), so a killed run never leaves a half shard —
+that is what makes preprocessing <strong>resumable</strong> (<code>is_done()</code> only sees
+complete shards; rerun the same command to finish stragglers).</p>
+<table>
+  <tr><th>Full universe, 2000–2026</th><th class="r">value</th></tr>
+  <tr><td>tickers with usable data</td><td class="r">7,647 shards / 7,659 vocab</td></tr>
+  <tr><td>sessions (one trading day × stock)</td><td class="r">18,808,686</td></tr>
+  <tr><td>cache size (float16)</td><td class="r">~32 GB</td></tr>
+  <tr><td>wall time, 8 worker processes</td><td class="r">~19 min</td></tr>
+</table>
+<div class="warn"><strong>Two real bugs this stage hit (fixed).</strong>
+(1) <code>np.save</code> appends <code>.npy</code> to a custom temp name → write to an open file
+handle instead. (2) Degenerate feature outliers (divide-by-near-zero) overflow float16 →
+winsorise to ±30 before the cast. Both surfaced only at full scale.</div>
+
+<h2 id="dataset">③ Sharded dataset &amp; batchloader</h2>
+<p>One <em>sample</em> = one (stock, trading-day) <strong>session</strong>. The dataset memory-maps
+the shards so only the rows of the requested session fault into RAM — 18.8 M sessions cost
+~1 GB resident, not the full 32 GB.</p>
+
+<h4>How a session is sampled</h4>
+<p>The DataLoader shuffles the training subset, so each batch is <strong>random stock × random
+date</strong>: a 2001 KO session and a 2022 NVDA session can sit in the same batch. This is
+correct because (a) every sample is causally self-contained — features at bar <em>t</em> use
+only bars ≤ <em>t</em> — and (b) chronology is enforced only where it matters: the train/val
+boundary (next section). Mixing eras is <em>intentional</em>: with no absolute-date feature,
+the model cannot memorise a regime and is forced to learn relative structure.</p>
+
+<h4>Purged, embargoed temporal split (anti-leakage)</h4>
+<p>Validation = the most recent ~20 % of calendar days. Training = earlier days, minus a
+<em>purge</em> window (label horizon) before the val block and an <em>embargo</em> band after it.
+Because multi-horizon labels overlap and autocorrelate, a naive split inflates significance —
+this is the López-de-Prado purged CV the design mandates. Result on the full cache:
+train 11.79 M / val 7.02 M sessions.</p>
+
+<div class="warn"><strong>Windows multiprocessing gotcha (fixed).</strong> DataLoader workers use
+<em>spawn</em> and pickle the dataset to each worker. Pickling the ~700 MB session index crashed
+with <code>OSError: [Errno 22] / pickle data was truncated</code>. Fix: persist the index to
+disk and memory-map it per worker (<code>__getstate__</code> drops the memmaps). Side benefit:
+dataset startup dropped 85 s → 9 s.</div>
+
+<h4>The batch dict</h4>
+<pre><span class="c"># collate output — every tensor batched on axis 0 (B = batch size, L = max_tokens = 79)</span>
+{
+  <span class="s">"features"</span>: float32[B, L, 12],   <span class="c"># causal features per token</span>
+  <span class="s">"phase"</span>   : float32[B, L],       <span class="c"># intraday fraction u in [0,1]</span>
+  <span class="s">"close"</span>   : float32[B, L],       <span class="c"># raw close (labels only, never an input)</span>
+  <span class="s">"valid"</span>   : bool[B, L],          <span class="c"># padding mask (short/half days)</span>
+  <span class="s">"weekday"</span> : long[B],             <span class="c"># 0..4 (Mon..Fri)</span>
+  <span class="s">"stock_id"</span>: long[B],             <span class="c"># carried but UNUSED in stock-agnostic mode</span>
+}
+</pre>
+
+<h2 id="features">④ Causal features (the 12 channels)</h2>
+<p>All features are <strong>strictly causal</strong> and computed on the resampled view, once, in
+<code>data/features.py</code>. They are relative/normalised — no absolute price level, no name.</p>
+<table>
+  <tr><th>Channel</th><th>Definition</th><th>Why</th></tr>
+  <tr><td><code>log_ret</code></td><td>log(c<sub>t</sub>/c<sub>t-1</sub>)</td><td>scale-free return</td></tr>
+  <tr><td><code>pct_prev_close</code></td><td>c<sub>t</sub>/prev<em>day</em>-close − 1</td><td>overnight-anchored level</td></tr>
+  <tr><td><code>norm_open</code></td><td>c<sub>t</sub>/session-open − 1</td><td>intraday drift from open</td></tr>
+  <tr><td><code>zscore</code></td><td>rolling 60-bar z-score of close</td><td>local standardisation</td></tr>
+  <tr><td><code>bb</code></td><td>Bollinger distance β(10,1,10)</td><td>band position</td></tr>
+  <tr><td><code>rsi</code></td><td>Wilder RSI(14)/100</td><td>momentum oscillator</td></tr>
+  <tr><td><code>ema_dist</code></td><td>(c−EMA<sub>20</sub>)/c</td><td>trend deviation</td></tr>
+  <tr><td><code>atr</code></td><td>ATR(14)/c</td><td>volatility</td></tr>
+  <tr><td><code>macd</code></td><td>(MACD−signal)/c</td><td>trend change</td></tr>
+  <tr><td><code>vwap_dist</code></td><td>c/session-VWAP − 1</td><td>fair-value distance</td></tr>
+  <tr><td><code>rvol</code></td><td>rolling 30-bar realised vol</td><td>vol regime</td></tr>
+  <tr><td><code>log_vol</code></td><td>log1p(volume)</td><td>liquidity/participation</td></tr>
+</table>
+<div class="warn"><strong>Lookahead bug the verifier caught.</strong> <code>prev_close</code> was first
+computed with a row-wise <code>shift(1)</code> after a day-grouped <code>transform("last")</code>,
+which leaked the <em>current</em> day's last close into earlier bars. Correct version: take each
+day's last close, shift by one <em>day</em>, broadcast to all rows of the next day.
+<code>scripts/verify.py</code> asserts that perturbing the last bar's price changes <em>no</em>
+earlier feature (max past delta = 0).</div>
+
+<h4>The indicator formulas (§6)</h4>
+<p>Each token vector is built from three sub-axes: <em>price fields</em>, <em>encodings</em>
+(stackable), and <em>indicator augmentations</em>. The active set above is a minimal informative
+subset; the full menu and formulas:</p>
+<pre><span class="c"># Encodings (all strictly causal, stackable):</span>
+log return        r_t   = log(c_t / c_{t-1})
+delta             Δp_t  = p_t - p_{t-1}
+norm-to-open      p̃_t  = p_t / o_session - 1
+%prev-close       p̃_t  = p_t / c_prevclose - 1
+rolling z-score   p̃_t  = (p_t - μ^w_t) / σ^w_t
+rank-Gaussianise  p̃_t  = Φ⁻¹( rank_s(p_t) / (S_t + 1) )   <span class="c"># cross-sectional</span>
+
+<span class="c"># Parameterised Bollinger distance β(ℓ,κ,ω) — length ℓ, deviation κ, offset ω:</span>
+μ = (1/ℓ) Σ_{i=0..ℓ-1} c_{t-ω-i};   σ = std of same;   β_t = (c_t - μ) / (κσ + ε)
+
+<span class="c"># RSI (length ℓ, Wilder smoothing):</span>
+Ū_t = (1-1/ℓ)Ū_{t-1} + (1/ℓ)·max(c_t-c_{t-1},0);   D̄_t analogous
+RSI_t = 100 - 100 / (1 + Ū_t/D̄_t)
+
+<span class="c"># EMA distance:</span>
+EMA_t = α·c_t + (1-α)·EMA_{t-1},  α = 2/(ℓ+1);   x_t = (c_t - EMA_t)/c_t
+</pre>
+<p>Other columns the design lists as worth testing: ATR, MACD, VWAP-distance, realised vol,
+order-flow imbalance. <strong>Ablation rule:</strong> add a channel only if it improves the cheap
+proxy metric (§<a href="#search">12</a>) beyond noise; prefer a minimal informative set (BB,
+z-score, EMA-distance are correlated). The cross-sectional <em>rank-Gaussianise</em> encoding is
+special — it makes a low-price and a high-price name directly comparable and makes the SIGReg
+Gaussian target natural.</p>
+
+<h2 id="views">⑤ Views, sessions &amp; chunk/anchor structure</h2>
+<p><strong>View (§4).</strong> The raw 1-min bars are clipped to regular hours (09:30–16:00) and
+resampled to timeframe τ (default <code>5min</code>) with proper OHLCV aggregation
+(open=first, high=max, low=min, close=last, volume=sum). At 5 min a full session is
+≤ <strong>L = 79</strong> tokens; sessions are padded/truncated to L with a validity mask.</p>
+<p><strong>Intraday phase (§5).</strong> Each token gets u = position/(len−1) ∈ [0,1] — relative
+time only, reset every day. Never the absolute date.</p>
+<p><strong>Chunks &amp; anchors (§8).</strong> The L tokens are partitioned into <strong>C = 6</strong>
+equal contiguous chunks. A chunk latent z<sup>(k)</sup> is the masked mean of its tokens'
+encoder outputs. Every chunk boundary is an <em>anchor</em> from which the predictor rolls
+forward to all later chunks — so the representation must be forecast-useful at every time of
+day, matching the hourly re-decision deployment.</p>
+
+<h2 id="time">⑥ Time encoding &amp; conditioning (stock-agnostic)</h2>
+<p>The only "side information" injected is <em>relative time</em>:</p>
+<ul>
+  <li><strong>Time2Vec(u)</strong> — a learned linear term + sinusoids over intraday phase
+  u∈[0,1]. The linear term captures monotone within-day drift (e.g. the close-auction ramp) and
+  is safe because u resets every session; the sinusoids learn the periods that matter (open
+  spike, lunch lull, close ramp) instead of us hard-coding "minute" and "hour".
+  <code>models/time_encoding.py</code>.
+  <pre style="margin-top:8px;">t2v(u)[i] = ω₀·u + φ₀          (i = 0,  linear)
+t2v(u)[i] = sin(ωᵢ·u + φᵢ)     (1 ≤ i ≤ K, learned frequencies)</pre></li>
+  <li><strong>Weekday embedding</strong> — a learned 5-row table (Mon–Fri); Friday→Monday is not
+  a smooth cycle (weekend gap), so a learned embedding is the honest encoding, not a sinusoid.</li>
+</ul>
+<p>Injection: the signal is projected by W<sub>π</sub> and <strong>added</strong> to every token
+embedding before the encoder — <code>x̃_t = x_t + W_π·[ t2v(u_t) ‖ e_{w(t)} ]</code>. Because the
+tokens are spaced by <em>real</em> elapsed time, this doubles as a resolution-aware positional
+signal (better than integer positions when mixing 1-min and daily tokens). A simpler baseline
+(raw sin/cos of minute-of-hour + hour-of-day) is kept for the ablation.</p>
+<div class="warn"><strong>Explicitly excluded from every variant:</strong> date, day-of-month,
+week-of-year, month, quarter, year, and any unbounded time index. Absolute calendar time lets
+the model key on a specific era's regime, which destroys walk-forward generalisation.</div>
+<p>This signal is projected and <strong>added</strong> to every token embedding before the encoder,
+and also summarised into the AdaLN conditioning vector. The conditioning axis (§9) is set to
+<code>cond_mode="time"</code>:</p>
+<table>
+  <tr><th><code>cond_mode</code></th><th>conditioning vector contains</th><th>status</th></tr>
+  <tr><td><code>none</code></td><td>—</td><td>ablation</td></tr>
+  <tr><td><code>time</code></td><td>time signal only</td><td><strong>active default — stock-agnostic</strong></td></tr>
+  <tr><td><code>time+stock</code></td><td>time + per-stock embedding</td><td>ablation only (name leakage)</td></tr>
+  <tr><td><code>full</code></td><td>time + stock + (sector/index hook)</td><td>ablation only</td></tr>
+</table>
+<div class="key"><strong>Why no stock embedding.</strong> A per-stock vector lets the model key on
+identity ("this is NVDA, which historically rose") — memorisation, not a tradeable pattern,
+and it fails to transfer to new tickers. Removing it also makes the latent space directly
+comparable across names, which is exactly what the cross-sectional strategies need.</div>
+
+<h2 id="model">⑦ Model architecture</h2>
+<p>Default: a <strong>hybrid</strong> backbone (CNN stem → Transformer), width d = 256, depth 6,
+8 heads, dropout 0.1 — ~5.77 M parameters. The objective is backbone-agnostic; MLP / TCN /
+Transformer are drop-in alternatives (<code>models/backbones.py</code>).</p>
+<table>
+  <tr><th>Component</th><th>Role</th><th>File</th></tr>
+  <tr><td>Input projection</td><td>Linear 12 → d, then + time signal</td><td><code>models/marketjepa.py</code></td></tr>
+  <tr><td>Conditioning encoder</td><td>builds AdaLN vector from time (stock-agnostic)</td><td><code>models/conditioning.py</code></td></tr>
+  <tr><td>Encoder f<sub>θ</sub></td><td>causal hybrid: dilated causal convs → AdaLN Transformer blocks</td><td><code>models/backbones.py</code></td></tr>
+  <tr><td>Chunk pool</td><td>masked mean of tokens → chunk latents z<sup>(k)</sup></td><td><code>data/chunks.py</code></td></tr>
+  <tr><td>Predictor g<sub>φ</sub></td><td>residual step over chunk latents, AdaLN-gated, rolled forward</td><td><code>models/predictor.py</code></td></tr>
+  <tr><td>Projection head</td><td>Linear→BatchNorm1d for SIGReg (a final LayerNorm would flatten it)</td><td><code>models/projection.py</code></td></tr>
+</table>
+<div class="key"><strong>Zero-init AdaLN.</strong> Conditioning enters via Adaptive LayerNorm whose
+output projection is initialised to zero, so each block starts as an identity residual and
+<em>learns</em> to use time. No EMA target, no stop-gradient — SIGReg alone prevents collapse.</div>
+
+<h4>Backbone families (§7) — the objective is backbone-agnostic</h4>
+<p>LeWorldModel showed JEPA+SIGReg works across ViT and ResNet, so encoder/predictor families
+are swappable while the loss stays fixed. All implemented in <code>models/backbones.py</code>:</p>
+<table>
+  <tr><th>Family</th><th>Notes</th></tr>
+  <tr><td>MLP / feed-forward</td><td>cheapest baseline; no temporal bias</td></tr>
+  <tr><td>Temporal CNN / TCN (wav2vec stem)</td><td>strong, fast local pattern detector</td></tr>
+  <tr><td>LSTM / GRU</td><td>natural streaming; weaker very-long-range</td></tr>
+  <tr><td>Transformer (causal, AdaLN)</td><td>best long-range; default building block</td></tr>
+  <tr><td><strong>Hybrid (CNN stem → Transformer)</strong></td><td>the wav2vec recipe; <strong>strong default</strong></td></tr>
+</table>
+<p><strong>Shared mechanics from LeWM:</strong> a BatchNorm projection head before SIGReg (a final
+LayerNorm would kill the structure SIGReg shapes); zero-init AdaLN conditioning; predictor
+dropout ≈ 0.1; <strong>no EMA, no stop-gradient</strong>. Width d ∈ {256, 768, 1024} — d saturates
+past a threshold (LeWM observed ~184), so tune it by probing rather than assuming bigger is
+better.</p>
+
+<h2 id="forward">⑧ The forward pass — exact shapes</h2>
+<p>For one batch (B sessions, L=79 tokens, d=256, C=6 chunks):</p>
+<pre><span class="k">x</span>  = input_proj(features)            <span class="c"># [B,79,12] -> [B,79,256]</span>
+<span class="k">x</span>  = x + time_proj(t2v(phase) ‖ weekday_emb)   <span class="c"># inject relative time</span>
+<span class="k">a</span>  = cond(time_raw)                  <span class="c"># [B,128]  AdaLN conditioning (NO stock id)</span>
+<span class="k">z</span>  = encoder(x, a, valid)            <span class="c"># [B,79,256] per-token latents (causal)</span>
+<span class="k">zc</span>, cv = pool_chunks(z, chunk_ids, valid, C)   <span class="c"># [B,6,256], [B,6] valid mask</span>
+<span class="k">pred</span> = rollout(zc, a)               <span class="c"># [B,6,6,256]  pred[:,k,j] = forecast of chunk j from anchor k</span>
+<span class="k">proj</span> = bn_head(zc)                  <span class="c"># [6,B,256]  per-chunk SIGReg embeddings</span>
+</pre>
+<p>The rollout is autoregressive in chunk space: from the <em>true</em> anchor latent z<sup>(k)</sup>
+it predicts z<sup>(k+1)</sup>, then feeds its own prediction forward to z<sup>(k+2)</sup> … z<sup>(C)</sup>.
+Only entries with j &gt; k are used.</p>
+
+<h2 id="loss">⑨ The loss: multi-horizon JEPA + SIGReg</h2>
+<h4>Multi-anchor, multi-horizon prediction (§8)</h4>
+<p style="text-align:center;">L<sub>multi</sub> = (1/Z) Σ<sub>k=1..C-1</sub> Σ<sub>j=k+1..C</sub> γ<sup>j-k</sup> ‖ ẑ<sup>(j|k)</sup> − z<sup>(j)</sup> ‖²</p>
+<p>Mean-squared error between each rolled-forward prediction and the true later chunk latent,
+discounted by horizon (γ = 0.85; far horizons compound error). Pairs touching an invalid
+chunk are masked. Per-horizon MSE is logged separately — it should <em>rise</em> with horizon
+(the skill-decay curve). No stop-gradient on the targets.</p>
+
+<h4>SIGReg — the anti-collapse spine (Appendix A, implemented exactly)</h4>
+<p>Without a regularizer, predicting your own latents collapses them to a constant. SIGReg pushes
+the per-chunk embedding distribution toward an isotropic Gaussian 𝒩(0,I) using 1-D normality
+tests along random projections (Cramér–Wold). For each chunk index, on the BatchNorm-projected
+embeddings Z ∈ ℝ<sup>B×d</sup>:</p>
+<pre><span class="c"># resample M=1024 random unit directions every step</span>
+g ~ N(0,I_d);  u = g/‖g‖;  h = Z·u            <span class="c"># [B, M]  projections</span>
+A(ν)=mean_n cos(ν·h_n);  S(ν)=mean_n sin(ν·h_n)   <span class="c"># empirical char. fn</span>
+φ0(ν)=exp(-ν²/2)                                <span class="c"># standard-normal target</span>
+T = 2 Σ_q Δ_q·w(ν_q)·[(A-φ0)² + S²]            <span class="c"># Epps–Pulley, trapezoid on [0.2,4], Q=17</span>
+SIGReg = mean over directions, then over chunk indices
+</pre>
+<p>Every term is differentiable through h = Z·u, so gradients flow with no stop-gradient.
+<code>verify.py</code> asserts SIGReg ≈ 0 on a true Gaussian, large on a collapsed batch, and
+finite-gradient. <strong>Total: L<sub>A</sub> = L<sub>multi</sub> + λ·SIGReg, λ = 0.1</strong> — λ is the
+one sensitive knob; raise it if effective rank falls.</p>
+
+<h2 id="loop">⑩ The training step</h2>
+<p>Training is <strong>step-based</strong>, not epoch-based, so it is naturally interruptible. An
+infinite batch iterator cycles the (reshuffled) loader until <code>max_steps</code>.</p>
+<table>
+  <tr><th>Setting</th><th>Default</th><th>Note</th></tr>
+  <tr><td>optimizer</td><td>AdamW, wd 0.05</td><td>—</td></tr>
+  <tr><td>lr schedule</td><td>linear warmup 2000 → cosine to 0</td><td>peak 3e-4</td></tr>
+  <tr><td>batch size</td><td>256</td><td>~5 GB / 8 GB VRAM</td></tr>
+  <tr><td>precision</td><td>AMP (autocast + GradScaler)</td><td>fp16 on CUDA</td></tr>
+  <tr><td>grad clip</td><td>1.0</td><td>after unscale</td></tr>
+  <tr><td>max_steps</td><td>400,000</td><td>~17 h at ~6.7 it/s on an RTX 3070</td></tr>
+  <tr><td>log / val / ckpt</td><td>every 100 / 2000 / 1000 steps</td><td>—</td></tr>
+</table>
+<pre><span class="k">for</span> batch <span class="k">in</span> infinite_loader:
+    lr = warmup_cosine(step)
+    <span class="k">with</span> autocast:
+        out  = model(batch, chunk_ids)
+        loss = multi_horizon(out.preds, out.z_chunk, out.chunk_valid, γ) + λ·sigreg(out.proj)
+    scaler.scale(loss).backward();  unscale;  clip_grad(1.0);  scaler.step();  scaler.update()
+    <span class="k">if</span> step % val_every == 0:  validate();  checkpoint(is_best=...)
+    <span class="k">elif</span> step % ckpt_every == 0:  checkpoint()
+</pre>
+
+<h2 id="ckpt">⑪ Checkpoint &amp; resume — survive any interruption</h2>
+<p>On an 8 GB card a multi-day run <em>will</em> be stopped. The contract: after any save, the
+next process start restores the <strong>exact</strong> state. <code>training/checkpoint.py</code>.</p>
+<table>
+  <tr><th>Saved in every checkpoint</th><th>Why</th></tr>
+  <tr><td>model state_dict</td><td>weights</td></tr>
+  <tr><td>optimizer state_dict</td><td>AdamW moments</td></tr>
+  <tr><td>AMP scaler state</td><td>loss-scale continuity</td></tr>
+  <tr><td>global step + best metric</td><td>schedule position &amp; best.pt tracking</td></tr>
+  <tr><td>Python / NumPy / Torch / CUDA RNG</td><td>identical data order &amp; SIGReg directions</td></tr>
+  <tr><td>model config</td><td>rebuild architecture when loading for inference</td></tr>
+</table>
+<div class="ok"><strong>Atomic &amp; verified.</strong> Writes go to <code>*.tmp</code> then
+<code>os.replace</code> — a crash mid-write can never corrupt <code>latest.pt</code>. Files:
+<code>latest.pt</code> (every ckpt_every), <code>best.pt</code> (on val improvement), and 3 rolling
+<code>step_*.pt</code>. To resume after any stop/reboot, rerun the identical command — it prints
+<code>RESUMED at step N</code>. RNG ByteTensors are coerced back to CPU on load (a CUDA
+map_location otherwise breaks <code>set_rng_state</code>).</div>
+
+<h2 id="health">⑫ Health diagnostics — what "good" looks like</h2>
+<p>Every validation logs the signals the design says to watch (<code>training/metrics.py</code>).
+On the live full-universe run at step 2000:</p>
+<table>
+  <tr><th>Metric</th><th>Meaning</th><th>Healthy trend</th></tr>
+  <tr><td>pred loss</td><td>latent prediction MSE</td><td>falls smoothly (0.0091 @2k)</td></tr>
+  <tr><td>per-horizon MSE</td><td>error vs forecast distance</td><td><strong>rises with horizon</strong> (0.0020→0.0064 h1→h5) ✓</td></tr>
+  <tr><td>effective rank</td><td>exp(entropy of singular-value spectrum)</td><td>stays high / climbs (≈1 = collapse)</td></tr>
+  <tr><td>per-dim variance</td><td>mean variance of projected dims</td><td>trends toward 1 under the prior</td></tr>
+  <tr><td>SIGReg value</td><td>distance from Gaussian</td><td>drops then plateaus</td></tr>
+  <tr><td>surprise</td><td>‖ẑ−z‖² one-step error (§13.4)</td><td>drops; spikes = regime break</td></tr>
+</table>
+<div class="warn"><strong>The one thing to watch.</strong> If effective rank collapses toward 1 or
+per-dim variance → 0, the representation is collapsing — stop and raise <code>--lam</code> (e.g.
+0.2). Everything else is informational.</div>
+
+<h2 id="heads">⑬ Stage B — supervised heads</h2>
+<p>On the frozen backbone (or lightly fine-tuned), small heads are trained on hindsight labels
+(<code>training/labels.py</code>, <code>models/heads.py</code>). All operate on the contextual
+embedding c<sub>t</sub> at a decision point.</p>
+<pre><span class="c"># 10.1 Profitability term structure — one head answers ALL horizons via φ_{j-k}</span>
+P̂(k→j) = σ( MLP_P(c_{t_k}, φ_{j-k}) )        <span class="c"># prob. of a profitable exit</span>
+r̂(k→j) =    MLP_r(c_{t_k}, φ_{j-k})          <span class="c"># expected return (+ a variance head for risk)</span>
+label   y(k→j) = 1[ (c_{t_j} - c_{t_k}) / c_{t_k} &gt; τ_cost ]    <span class="c"># long side</span>
+<span class="c"># {r̂(k→j)}_{j&gt;k} is the model's forecast curve from "now".</span>
+
+<span class="c"># 10.2 Real-time extremum / exit-timing — nowcast, not a forecast</span>
+ŷHI_t = P( c_t = max c | F_t ),   ŷLO_t = P( c_t = min c | F_t )
+<span class="c"># exact extrema are sparse -> focal loss and/or a soft proximity target:</span>
+ỹHI_t = exp( -(c_t - max c)² / (2δ²) )
+<span class="c"># or the smoother continuous framing — remaining intraday move:</span>
+m_t = log(c_N / c_t)            <span class="c"># ≤0 near the top, ≥0 near the bottom</span>
+
+<span class="c"># 10.3 Forward-return regression (auxiliary), h ∈ {5,15,60}</span>
+μ̂ʰ_t = wₕᵀ c_t ≈ E[ log(c_{t+h}/c_t) | F_t ]
+
+<span class="c"># 10.4 Losses</span>
+focal:  L = -Σ [ y(1-ŷ)^ζ log ŷ + (1-y) ŷ^ζ log(1-ŷ) ],  ζ = 2
+returns: Huber
+</pre>
+<div class="warn"><strong>Select on validation Sharpe, not accuracy.</strong> Under this extreme
+class imbalance accuracy is meaningless; a 50.1%-chance-of-tiny-gain signal is worthless after
+costs, which is why the term-structure head also emits a variance/quantile output for risk.</div>
+
+<h2 id="policy">⑭ Stage C — optimal-stopping policy</h2>
+<p>Decisions are re-made at each chunk close (receding horizon). For an open long entered at
+chunk e, price p<sub>e</sub>, closing now pays g<sub>k</sub> = (c<sub>t<sub>k</sub></sub> − p<sub>e</sub>)/p<sub>e</sub> − cost.
+The hold/close choice is an optimal-stopping problem with value</p>
+<pre>V_k = max( g_k ,  E[ V_{k+1} | F_{t_k} ] − ρ·Risk_k )
+</pre>
+<p>The practical greedy rule uses the §10.1 forecast curve directly
+(<code>policy/optimal_stopping.py</code>):</p>
+<pre><span class="c"># flat -> enter if best risk-adjusted forecast clears a threshold</span>
+ENTER  iff  max_j ( r̂(k→j) − cost )  &gt;  entry_threshold
+<span class="c"># long -> hold if the best future risk-adjusted return beats closing now</span>
+HOLD   iff  max_{j&gt;k} ( r̂(e→j) − cost ) − ρ·Var̂  &gt;  g_k
+</pre>
+<p>then re-evaluate at the next chunk. Equivalently one can run LeWM-style CEM/MPC rollouts in
+latent space and pick the exit time minimising cost — the head is the fast learned version of
+that planning step. The extremum head (§10.2) is the special case "the best exit is now."
+Position sizing: fixed-fractional risk with broker volume-limit clamping, stop distance in price
+units.</p>
+
+<h2 id="strategies">⑮ Trading models &amp; selection</h2>
+<p>The pretrained latent supports several orthogonal strategies (companion paper). Each maps the
+latent panel → a net-of-cost per-period return series; the selector ranks by net Sharpe
+(<code>strategies/</code>, <code>scripts/run_strategies.py</code>).</p>
+<table>
+  <tr><th>Strategy</th><th>Latent property</th><th>Signal</th></tr>
+  <tr><td>Cross-sectional value (§1)</td><td>shared encoder</td><td>rank universe, dollar-neutral L/S</td></tr>
+  <tr><td>Cross-sectional reversal (§4)</td><td>cross-name geometry</td><td>convergence bet (−alpha)</td></tr>
+  <tr><td>NN-analog (§2)</td><td>geometry</td><td>"what happened last time it looked like this"</td></tr>
+  <tr><td>Novelty-gated (§3)</td><td>known 𝒩(0,I) prior</td><td>shrink size in atypical states</td></tr>
+  <tr><td>Trajectory momentum (§9)</td><td>latent straightening</td><td>ride persistent latent velocity</td></tr>
+  <tr><td>Directional probe</td><td>—</td><td>baseline (what the structure adds over it)</td></tr>
+</table>
+<p>The signal direction comes from a ridge linear probe z → forward-return, fit on the
+<strong>train</strong> panel and applied on <strong>val</strong> (the §13.1 probe). NN-analog retrieves
+neighbours only from the temporally-earlier train panel — strictly the past.</p>
+<div class="warn"><strong>Honest caveat.</strong> SNR is brutal. On an undertrained model the
+leaderboard IC sits near zero — that is expected. Real edge requires the full pretraining run,
+purged CV, and a cost-aware walk-forward backtest before any capital.</div>
+
+<h2 id="monitor">⑯ The live monitor</h2>
+<p><code>scripts/monitor_eval.py</code> runs alongside training. Every ~15 min it loads
+<code>latest.pt</code>, extracts capped train/val panels, fits the probe, backtests all
+strategies, and appends a row to <code>logs/strategy_eval.csv</code> — so the developing edge is
+visible <em>during</em> training, not only at the end. It shares the GPU briefly, skips
+unchanged checkpoints, and stops on <code>logs/stop_monitor</code>.</p>
+
+<h2 id="axes">Design space — the full axis menu <span class="muted" style="font-size:1rem">(§15)</span></h2>
+<p class="lead">Everything that can be swept. The defaults in this build are <strong>bold</strong>.</p>
+<table>
+  <tr><th>Group</th><th>Axis</th><th>Options</th></tr>
+  <tr><td rowspan="6"><strong>Input 𝒱</strong></td><td>grounding length X</td><td>15 / 30 / 60 / 120 / full</td></tr>
+  <tr><td>timeframe set</td><td><strong>{1}</strong> / {1,5} / {1,5,15,60} / {1,60,1d}</td></tr>
+  <tr><td>lookback days D</td><td>0 / 1 / 5 / 20 / 60</td></tr>
+  <tr><td>lookback resolution</td><td>1min / hourly / daily / mixed</td></tr>
+  <tr><td>window length L</td><td>32 / 64 / 128 / 256 (here L=79 @ 5min)</td></tr>
+  <tr><td>fusion</td><td><strong>token-soup</strong> / parallel+fuse / hierarchical</td></tr>
+  <tr><td rowspan="3"><strong>Features ℱ</strong></td><td>price fields</td><td>close / OHLC / <strong>OHLCV</strong> / +shape</td></tr>
+  <tr><td>encoding</td><td>raw / log-ret / delta / norm-to-open / %prev-close / z-score / rank-Gauss (stackable)</td></tr>
+  <tr><td>indicators</td><td>BB(ℓ,κ,ω) / RSI / EMA-dist / ATR / MACD / VWAP-dist / OFI</td></tr>
+  <tr><td rowspan="2"><strong>Time 𝒯</strong></td><td>intraday</td><td><strong>Time2Vec</strong> / cyclical minute+hour</td></tr>
+  <tr><td>weekday</td><td><strong>learned embedding</strong> / one-hot &nbsp;·&nbsp; <em>excluded:</em> date/month/year</td></tr>
+  <tr><td rowspan="2"><strong>Arch 𝒜</strong></td><td>family</td><td>MLP / TCN / LSTM / Transformer / <strong>hybrid</strong></td></tr>
+  <tr><td>width d</td><td><strong>256</strong> / 768 / 1024</td></tr>
+  <tr><td rowspan="3"><strong>Objective 𝒪</strong></td><td>terms</td><td><strong>multi-horizon JEPA</strong> / +contrastive+diversity</td></tr>
+  <tr><td>masking</td><td>masked-span / <strong>causal next-step</strong></td></tr>
+  <tr><td>γ discount · λ SIGReg</td><td>γ 0.7/<strong>0.85</strong>/0.95 · λ bisection around <strong>0.1</strong></td></tr>
+  <tr><td><strong>Conditioning</strong></td><td>a</td><td>none / <strong>time</strong> / time+stock / full</td></tr>
+  <tr><td rowspan="2"><strong>Heads ℋ</strong></td><td>targets</td><td>term-structure / HI-LO extremum / remaining-move / fwd-return</td></tr>
+  <tr><td>loss</td><td>BCE / <strong>focal</strong> / Huber</td></tr>
+  <tr><td><strong>Policy π</strong></td><td>rule</td><td>greedy threshold / <strong>optimal-stopping</strong> / CEM-MPC</td></tr>
+</table>
+
+<h2 id="search">Search strategy <span class="muted" style="font-size:1rem">(§12 — do not grid-search everything)</span></h2>
+<p>Staged, proxy-driven coordinate descent over axis groups, in this order:</p>
+<ol>
+  <li>Fix a reasonable backbone (CNN-stem → small Transformer) + pure multi-horizon JEPA.</li>
+  <li><strong>Search input/features/time first</strong> (𝒱, ℱ, 𝒯) — where the alpha most plausibly lives.</li>
+  <li>Freeze those; search architecture 𝒜 and sizing.</li>
+  <li>Freeze 𝒜; tune objective 𝒪 (masking, γ, λ, optional quantizer) and heads ℋ.</li>
+  <li>Only then run full cost-aware walk-forward backtests on finalists.</li>
+</ol>
+<p><strong>Fast proxy metrics</strong> rank configs on the <em>frozen</em> representation before any
+backtest: linear-probe forward-return Pearson r and probe MSE; SIGReg health (smooth early drop
+then plateau; effective rank not collapsing); extremum / term-structure AUC. Use random search →
+Bayesian optimisation / successive halving over the discrete axes, and log every config + metric
+so the matrix becomes an analysable dataset.</p>
+
+<h2 id="eval">Evaluation methodology <span class="muted" style="font-size:1rem">(§13)</span></h2>
+<h4>13.1 Representation probing (before any backtest)</h4>
+<p>Linear and MLP probes recover realised vol, forward-return sign, trend, and VWAP distance from
+the frozen latent; report MSE and Pearson r against raw-feature, PCA, and from-scratch-supervised
+baselines. <code>strategies/panel.fit_return_probe</code> is the forward-return probe.</p>
+<h4>13.2 Horizon-skill &amp; calibration ("how well does it predict the future")</h4>
+<ul>
+  <li><strong>Calibration:</strong> reliability curve + Brier score Brier(Δ)=mean(P̂−y)² — when the
+  head says 70%, does it happen ~70%? Recalibrate (temperature / isotonic) walk-forward.</li>
+  <li><strong>Skill-decay curve</strong> skill(Δ): AUC / return-correlation vs horizon. This curve
+  <em>is</em> the test of "maybe only the next hour is reliable" — if skill collapses past Δ=1 the
+  policy correctly becomes near-horizon with frequent re-evaluation.</li>
+</ul>
+<h4>13.3 Anti-collapse diagnostics</h4>
+<p>Effective rank, per-dim variance, and the SIGReg value over training — smooth, unlike a noisy
+multi-term VICReg objective. <code>training/metrics.py</code>; logged every validation.</p>
+<h4>13.4 Surprise detector (violation-of-expectation)</h4>
+<p>Surprise<sub>t</sub> = ‖ẑ<sub>t</sub>−z<sub>t</sub>‖² spikes on genuine structural breaks (gaps,
+halts, flash crashes) → a risk-off / flatten trigger and regime flag; shippable as a standalone
+monitor independent of any trading signal.</p>
+<h4>13.5 Trading backtest</h4>
+<p>Strict temporal walk-forward; full costs (spread, slippage, borrow); net Sharpe / Sortino /
+max-DD / turnover / capacity; ablated vs no-pretraining, an indicator baseline, and a random-entry
+control.</p>
+
+<h2 id="risks">Risks &amp; failure modes <span class="muted" style="font-size:1rem">(§14)</span></h2>
+<table>
+  <tr><th>Risk</th><th>Mitigation in this build</th></tr>
+  <tr><td><strong>Non-stationarity dominates</strong></td><td>retrain walk-forward continuously; surprise detector as regime flag</td></tr>
+  <tr><td><strong>Brutal SNR</strong> — the edge is small and lives mostly in risk management, exit timing, execution</td><td>cost-aware selection; novelty/confidence gating overlays</td></tr>
+  <tr><td><strong>Label leakage — the #1 silent killer.</strong> Multi-horizon labels overlap and autocorrelate</td><td>strictly causal features (verified); purged + embargoed temporal CV (§<a href="#dataset">③</a>)</td></tr>
+  <tr><td><strong>Cost vs uncertainty tension</strong> — costs dominate short horizons, uncertainty dominates long ones</td><td>the skill curve (13.2) reveals the sweet-spot horizon</td></tr>
+  <tr><td><strong>SIGReg over-regularization</strong> in very low-dim sub-universes</td><td>tune λ / d per regime; watch effective rank</td></tr>
+</table>
+<div class="warn"><strong>Standing caveat.</strong> Research design only — no profitability implied. A
+latent that looks beautiful in-sample can still encode no tradeable, cost-surviving edge.</div>
+
+<h2 id="catalogue">Strategy catalogue — all 12 read-offs <span class="muted" style="font-size:1rem">(companion paper)</span></h2>
+<p>A pretrained, SIGReg-regularised latent has four properties the forward-prediction heads barely
+use, and each unlocks a strategy family:</p>
+<ul>
+  <li><strong>Geometry</strong> — distances and angles are meaningful (prediction loss → smooth;
+  SIGReg → isotropic).</li>
+  <li><strong>Known density</strong> — SIGReg forces z∼𝒩(0,I), so likelihood/novelty is calibrated.</li>
+  <li><strong>Shared encoder</strong> — all names live in one comparable space at every minute.</li>
+  <li><strong>Generative dynamics</strong> — the predictor is a simulator you can roll forward and sample from.</li>
+</ul>
+<table>
+  <tr><th>#</th><th>Strategy</th><th>Latent property</th><th>Signal</th><th>Robust</th><th>Main risk</th><th>Built?</th></tr>
+  <tr><td>1</td><td>Cross-sectional relative value</td><td>shared encoder</td><td>continuous L/S</td><td>high</td><td>factor contamination, borrow</td><td>✓</td></tr>
+  <tr><td>2</td><td>Nearest-neighbor analog</td><td>geometry</td><td>empirical conditional</td><td>high</td><td>NN leakage, stale regimes</td><td>✓</td></tr>
+  <tr><td>3</td><td>Density / novelty + trust gate</td><td>known prior</td><td>risk/entry overlay</td><td>med-high</td><td>novel ≠ profitable</td><td>✓</td></tr>
+  <tr><td>4</td><td>Latent stat-arb (cointegration)</td><td>cross-name geometry</td><td>convergence</td><td>medium</td><td>relationship breakdown</td><td>✓*</td></tr>
+  <tr><td>5</td><td>MC imagination rollouts</td><td>generative</td><td>distributional risk/sizing</td><td>medium</td><td>needs calibrated stochasticity</td><td>—</td></tr>
+  <tr><td>6</td><td>Model-based RL (Dreamer-style)</td><td>generative</td><td>learned policy</td><td>low-med</td><td>reward hacking</td><td>—</td></tr>
+  <tr><td>7</td><td>Goal-conditioned planning</td><td>generative+geometry</td><td>heading</td><td>low-med</td><td>defining the goal</td><td>—</td></tr>
+  <tr><td>8</td><td>Regime clustering + transitions</td><td>structure</td><td>regime tilt / conditioning</td><td>medium</td><td>regime instability</td><td>—</td></tr>
+  <tr><td>9</td><td>Latent trajectory geometry</td><td>straightening</td><td>momentum / turning</td><td>medium</td><td>noise, needs direction</td><td>✓</td></tr>
+  <tr><td>10</td><td>Latent feature-store (GBM)</td><td>features</td><td>any label</td><td>high</td><td>no temporal bias</td><td>—</td></tr>
+  <tr><td>11</td><td>Rapid probes / few-shot</td><td>task-agnostic</td><td>prototyping</td><td>tooling</td><td>probe ≠ tradeable</td><td>✓†</td></tr>
+  <tr><td>12</td><td>Confidence-gated execution</td><td>generative+prior</td><td>always-on overlay</td><td>high</td><td>over-gating</td><td>partial</td></tr>
+</table>
+<p class="muted" style="font-size:.85rem">✓ implemented in <code>strategies/</code> · ✓* simplified
+cross-sectional convergence flavour · ✓† the ridge return-probe is the §11 few-shot tool · the
+generative families (5–8) need a latent decoder / stochastic predictor and are roadmap items.</p>
+<p><strong>Suggested sequencing &amp; combination.</strong> Start with 2 (analog) and 1
+(cross-sectional) — simplest, least overfit-prone. Add 3 and 12 as the risk/sizing overlay and 5
+for distributional sizing. Layer 8/9 as conditioning. Treat 6 (RL) as a long-horizon bet behind a
+working world model and heavy pessimism penalties. The natural stack: cross-sectional or analog
+signal for <em>direction</em>, MC-rollout distribution for <em>sizing &amp; stops</em>, regime label
+for <em>conditioning</em>, confidence gate as an always-on <em>multiplier</em>, surprise detector as
+the <em>kill switch</em> — all read off one frozen latent, which is why a strong Stage A pays for
+all of them at once.</p>
+
+<h2 id="vq">Optional module — discrete regime tokens (VQ) <span class="muted" style="font-size:1rem">(Appendix B)</span></h2>
+<div class="key"><strong>Status: optional, not in the default objective.</strong> Use only if you want
+interpretable discrete "market regime" codes, codeword features for the surprise/regime detector,
+or a contrastive baseline to benchmark against JEPA+SIGReg. It adds a codebook-collapse failure
+mode that the diversity loss exists to prevent.</div>
+<pre><span class="c"># Product quantization with straight-through Gumbel-softmax (G groups × V entries)</span>
+p_{g,v} = softmax_v( (ℓ_{g,v} + n_v)/τ ),   n = -log(-log u),  u~U(0,1)
+<span class="c"># forward = hard argmax; backward = soft p. Concatenate chosen entries -> project to q.</span>
+
+<span class="c"># Contrastive loss (replaces/supplements MSE) — true target q_t among K distractors</span>
+L_m = -log [ exp(sim(c_t,q_t)/κ) / Σ_{q̃∈Q_t} exp(sim(c_t,q̃)/κ) ]
+
+<span class="c"># Diversity loss prevents codebook collapse (p̄_g = batch-avg softmax, no Gumbel)</span>
+L_d = (1/GV) Σ_g Σ_v  p̄_{g,v} log p̄_{g,v}
+<span class="c"># Combined: L = L_m + α·L_d (+ optional λ·SIGReg).  Typical: G=2, V=320, κ=0.1, α=0.1</span>
+</pre>
+
+<h2 id="roadmap">Build roadmap <span class="muted" style="font-size:1rem">(§16)</span></h2>
+<table>
+  <tr><th>#</th><th>Step</th><th>Status here</th></tr>
+  <tr><td>1</td><td>Airtight causal data layer — adjusted, survivorship-aware, multi-resolution view loader, chunk/anchor indexing, purged-CV splitter</td><td>✓ done</td></tr>
+  <tr><td>2</td><td>Stage A on a small universe — pure multi-horizon JEPA; confirm clean SIGReg curves + probes beating baselines; tune γ</td><td>✓ scaled to full universe</td></tr>
+  <tr><td>3</td><td>Stage-2 input/feature/time search via proxy metrics</td><td>tooling ready</td></tr>
+  <tr><td>4</td><td>Scale to the full universe + (optional) embedding table</td><td>✓ 7,659 names</td></tr>
+  <tr><td>5</td><td>Stage B heads — term structure, extremum/exit, returns + calibration</td><td>✓ core</td></tr>
+  <tr><td>6</td><td>Surprise monitor — lowest-risk standalone deliverable</td><td>✓ <code>metrics.surprise</code></td></tr>
+  <tr><td>7</td><td>Stage C policy — optimal-stopping exit + risk sizing; paper-trade</td><td>✓ rule-based</td></tr>
+  <tr><td>8</td><td>Walk-forward backtest with costs; only then live capital</td><td>next</td></tr>
+</table>
+
+<h2 id="repro">Reproduce it</h2>
+<pre><span class="c"># 0. correctness gate (always run first)</span>
+python scripts/verify.py
+
+<span class="c"># 1. preprocess once (resumable; rerun to finish stragglers)</span>
+python scripts/preprocess.py --all --start 2000 --end 2026 --workers 8 --cache cache/prod
+
+<span class="c"># 2. pretrain Stage A (resumable: rerun the SAME command to continue)</span>
+python scripts/pretrain.py --cache cache/prod --ckpt-dir checkpoints/stage_a \
+    --backbone hybrid --cond-mode time --dim 256 --batch-size 256 \
+    --max-steps 400000 --warmup 2000 --ckpt-every 1000 --val-every 2000 --workers 4
+
+<span class="c"># 3. watch the edge develop</span>
+python scripts/monitor_eval.py --cache cache/prod --ckpt checkpoints/stage_a/latest.pt --interval 900
+
+<span class="c"># 4. pick the best trading model</span>
+python scripts/run_strategies.py --cache cache/prod --ckpt checkpoints/stage_a/best.pt
+</pre>
+<p class="muted">On Windows: run python via PowerShell (Git Bash has no python on PATH), set
+<code>PYTHONUNBUFFERED=1</code> for live logs, and <code>PYTHONIOENCODING=utf-8</code>
+(console is cp1252).</p>
+
+<h2 id="filemap">File map</h2>
+<div class="fm">
+  <div><span class="d">marketjepa/</span></div>
+  <div><span class="f">  config.py</span> <span class="d">— dataset paths + immutable BQE format facts</span></div>
+  <div><span class="f">  data/reader.py</span> <span class="d">— BQEReader: calibrated, parallel, in-place reads</span></div>
+  <div><span class="f">  data/preprocess.py</span> <span class="d">— build the memmap feature cache (resumable)</span></div>
+  <div><span class="f">  data/sharded.py</span> <span class="d">— ShardedSessionDataset (bounded RAM, worker-safe)</span></div>
+  <div><span class="f">  data/features.py</span> <span class="d">— 12 causal features (§6)</span></div>
+  <div><span class="f">  data/views.py</span> <span class="d">— resample + session windows (§4)</span></div>
+  <div><span class="f">  data/chunks.py</span> <span class="d">— chunk pooling / anchor structure (§8)</span></div>
+  <div><span class="f">  data/splits.py</span> <span class="d">— purged + embargoed temporal CV (§14)</span></div>
+  <div><span class="f">  data/loader.py</span> <span class="d">— prefetching DataLoader factory</span></div>
+  <div><span class="f">  models/time_encoding.py</span> <span class="d">— Time2Vec + weekday (§5)</span></div>
+  <div><span class="f">  models/conditioning.py</span> <span class="d">— zero-init AdaLN (§9)</span></div>
+  <div><span class="f">  models/backbones.py</span> <span class="d">— MLP / TCN / Transformer / hybrid (§7)</span></div>
+  <div><span class="f">  models/predictor.py</span> <span class="d">— multi-horizon rollout g_φ (§8)</span></div>
+  <div><span class="f">  models/projection.py</span> <span class="d">— BatchNorm head for SIGReg</span></div>
+  <div><span class="f">  models/heads.py</span> <span class="d">— Stage-B heads (§10)</span></div>
+  <div><span class="f">  models/marketjepa.py</span> <span class="d">— assembled Stage-A model</span></div>
+  <div><span class="f">  losses/{sigreg,jepa,heads}.py</span> <span class="d">— SIGReg (App. A), multi-horizon, focal/Huber</span></div>
+  <div><span class="f">  training/trainer.py</span> <span class="d">— step-based resumable Stage-A trainer</span></div>
+  <div><span class="f">  training/checkpoint.py</span> <span class="d">— atomic checkpoint + RNG restore</span></div>
+  <div><span class="f">  training/stage_b.py · labels.py · metrics.py</span> <span class="d">— heads, labels, diagnostics</span></div>
+  <div><span class="f">  policy/optimal_stopping.py</span> <span class="d">— Stage-C policy (§11)</span></div>
+  <div><span class="f">  strategies/*</span> <span class="d">— latent panel + 6 strategies + net-Sharpe selector</span></div>
+  <div><span class="d">scripts/</span> <span class="d">— verify · preprocess · pretrain · monitor_eval · run_strategies · plot_stock · benchmark_read</span></div>
+</div>
+
+<p class="muted" style="margin-top:40px;text-align:center;">
+MarketJEPA training internals · companion to <code>README.md</code> and <code>TRAINING.md</code> ·
+design source <code>Papers/MarketJEPA_design_v3.md</code> &amp; <code>Papers/TradingJEPASpace.md</code>.
+Research design only — no profitability implied.</p>
+
+</div>
+</body>
+</html>
