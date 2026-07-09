@@ -24,24 +24,24 @@
     <div id="era-hegemon"></div>
     <div id="era-text"></div>
     <div class="era-section" id="era-denken-wrap">
-      <h3>💭 Denkweisen &amp; Ideen</h3>
+      <h3 id="h-denken">💭 Denkweisen &amp; Ideen</h3>
       <div id="era-denken"></div>
     </div>
     <div class="era-section" id="era-kunst-wrap">
-      <h3>🎨 Kunst, Architektur &amp; Denker</h3>
+      <h3 id="h-kunst">🎨 Kunst, Architektur &amp; Denker</h3>
       <div id="era-kunst"></div>
       <ul id="era-koepfe"></ul>
     </div>
     <div class="era-section" id="era-konflikte-wrap">
-      <h3>⚔️ Große Konflikte</h3>
+      <h3 id="h-konflikte">⚔️ Große Konflikte</h3>
       <ul id="era-konflikte"></ul>
     </div>
     <div class="era-section" id="era-chronik-wrap">
-      <h3>🗓️ Chronik – was geschah wann</h3>
+      <h3 id="h-chronik">🗓️ Chronik – was geschah wann</h3>
       <div id="era-chronik"></div>
     </div>
     <div class="era-section" id="era-schlaglichter-wrap">
-      <h3>🔍 Schlaglichter – klicke die Regionen an!</h3>
+      <h3 id="h-schlag">🔍 Schlaglichter – klicke die Regionen an!</h3>
       <ul id="era-schlaglichter"></ul>
     </div>
   </div>
@@ -63,10 +63,10 @@
 <div id="timebar">
   <div id="timebar-controls">
     <button id="btn-prev" title="Früher (←)">◀</button>
-    <button id="btn-play" title="Abspielen">▶︎▶︎</button>
     <button id="btn-next" title="Später (→)">▶</button>
     <button id="btn-events" title="Ereignis-Marker ein-/ausblenden">📍</button>
     <button id="btn-capitals" title="Hauptstädte ein-/ausblenden">🏛️</button>
+    <button id="btn-lang" title="Sprache wechseln / Switch language">DE</button>
     <div id="year-label"></div>
   </div>
   <div id="slider-wrap">
@@ -78,7 +78,9 @@
 <div id="attribution">Grenzen: <a href="https://github.com/aourednik/historical-basemaps" target="_blank">historical-basemaps</a> (grobe, umstrittene Näherungen!) · Texte: kuratiert + Wikipedia</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/eras.js"></script>
+<script src="js/eras_en.js"></script>
 <script src="js/reports.js"></script>
 <script src="js/events.js"></script>
 <script src="js/capitals.js"></script>

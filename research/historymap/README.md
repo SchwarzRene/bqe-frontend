@@ -10,12 +10,13 @@ HistoryMap combines historical border data with hand-written history content int
 
 It's meant for self-directed learning — the kind of "wait, what was happening in France while this was going on in China?" curiosity that a static textbook timeline can't satisfy.
 
-Content is currently written in **German**.
+The UI and era reports are **bilingual (German/English)**; the in-depth region reports, chronicle entries and event markers are currently German-only.
 
 ## Features
 
 - **48 map snapshots** of historical borders (3000 BC – 2010 AD), denser around major turning points (1492, 1600, 1650, 1715, 1783, 1815, 1914, 1938, 1945 …)
-- **Time slider** with keyboard control (`←` / `→`) and an **auto-play** mode
+- **Time slider** with keyboard control (`←` / `→`)
+- **Bilingual UI (German/English)**: one click switches the interface, era reports, region names and Wikipedia integration; the choice is remembered
 - **21 era reports**: who held dominance and why they lost it, the dominant schools of thought, the major conflicts of the age, plus the era's defining architecture, art and thinkers
 - **~70 region reports**: click an empire for its rulers, wars, factions, rise and fall
 - **220+ map markers** for specific events — battles, inventions, architecture, religious turning points, upheavals — each with a short explanation, spanning prehistory to 2022
@@ -45,7 +46,7 @@ Then open **http://localhost:8173**.
 | Control | Action |
 |---|---|
 | **Slider** (bottom) | Jump to a year (or use `←` / `→`) |
-| **▶︎▶︎** | Auto-play: one step every 2 seconds |
+| **DE/EN** | Switch language (German/English) |
 | **📍** | Toggle event markers on/off |
 | **Left panel** | Era overview: dominance, schools of thought, conflicts, chronicle |
 | **Click a region** | Opens a report + live Wikipedia summary (right panel) |
@@ -59,7 +60,9 @@ HistoryMap/
 ├── css/style.css           # All styling (dark theme)
 ├── js/
 │   ├── app.js               # Map rendering, slider, sidebar, Wikipedia fetch
-│   ├── eras.js               # 21 era reports
+│   ├── i18n.js               # UI strings (de/en) + language switch helpers
+│   ├── eras.js               # 21 era reports (German)
+│   ├── eras_en.js            # English translations of the era reports
 │   ├── reports.js            # Region reports + name translations
 │   ├── events.js             # Map markers (coordinates, text, links)
 │   ├── chronicle.js          # Dated chronicle entries

@@ -202,7 +202,15 @@ const WIKI_TERMS = {
   "Dada": "Dadaismus", "Bauhaus": "Bauhaus", "Pop-Art": "Pop-Art", "Streetart": "Street Art"
 };
 
-function linkify(html) {
+function linkify(html, lang = 'de') {
+  if (lang === 'en') {
+    // Englische Texte: fette Begriffe auf en.wikipedia verlinken
+    // (Special:Search leitet bei eindeutigen Treffern direkt zum Artikel weiter)
+    return html.replace(/<b>([^<]+?)(:?)<\/b>/g, (match, name, colon) => {
+      const href = 'https://en.wikipedia.org/wiki/Special:Search?search=' + encodeURIComponent(name);
+      return `<b><a class="inline-wiki" href="${href}" target="_blank" rel="noopener">${name}</a>${colon}</b>`;
+    });
+  }
   return html.replace(/<b>([^<]+?)(:?)<\/b>/g, (match, name, colon) => {
     const title = WIKI_TERMS[name];
     if (!title) return match;

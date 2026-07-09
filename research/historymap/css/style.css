@@ -215,6 +215,18 @@ html, body {
 
 .hidden { display: none !important; }
 
+/* Hinweis auf (noch) deutschsprachige Detailtexte im EN-Modus */
+.lang-note {
+  color: var(--text-dim);
+  font-size: .8rem;
+  font-style: italic;
+  background: rgba(111,179,224,.08);
+  border-left: 3px solid rgba(111,179,224,.4);
+  padding: 5px 10px;
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 10px;
+}
+
 /* ---------- Zeitleiste ---------- */
 #timebar {
   position: absolute;
@@ -246,7 +258,7 @@ html, body {
   font-size: .85rem;
 }
 #timebar-controls button:hover { background: #2a3b55; border-color: var(--accent2); }
-#btn-play.playing { background: var(--accent); color: #14202e; border-color: var(--accent); }
+#btn-lang { font-weight: 700; letter-spacing: .03em; color: var(--accent2); }
 
 #year-label {
   font-family: Georgia, serif;
@@ -329,18 +341,24 @@ html, body {
 }
 
 /* ---------- Ereignis-Marker ---------- */
+/* Leaflets Icon-Box behält ihre feste Größe (Ankerpunkt!) – der sichtbare
+   Kreis darin wird per --marker-scale mit der Zoomstufe skaliert und bleibt zentriert */
+.leaflet-marker-icon { display: flex; align-items: center; justify-content: center; }
+
 .event-marker {
-  width: 30px; height: 30px;
+  width: calc(30px * var(--marker-scale, 1));
+  height: calc(30px * var(--marker-scale, 1));
   border-radius: 50%;
   background: rgba(18, 27, 40, 0.92);
   border: 2px solid var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: calc(15px * var(--marker-scale, 1));
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0,0,0,.5);
-  transition: transform .15s;
+  transition: transform .15s, width .2s, height .2s, font-size .2s;
+  flex-shrink: 0;
 }
 .event-marker:hover { transform: scale(1.25); }
 
@@ -348,19 +366,21 @@ html, body {
 
 /* ---------- Hauptstadt-Marker ---------- */
 .capital-marker {
-  width: 18px; height: 18px;
+  width: calc(18px * var(--marker-scale, 1));
+  height: calc(18px * var(--marker-scale, 1));
   border-radius: 50%;
   background: rgba(18, 27, 40, 0.92);
   border: 2px solid var(--accent2);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: calc(10px * var(--marker-scale, 1));
   line-height: 1;
   color: var(--accent2);
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0,0,0,.5);
-  transition: transform .15s;
+  transition: transform .15s, width .2s, height .2s, font-size .2s;
+  flex-shrink: 0;
 }
 .capital-marker:hover { transform: scale(1.3); }
 

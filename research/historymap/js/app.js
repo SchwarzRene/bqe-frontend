@@ -24,17 +24,28 @@ let currentLayer = null;
 let selectedLayer = null;
 const geoCache = new Map();
 
+// Marker-Größe an Zoomstufe koppeln: weit herausgezoomt = kleine Marker
+function updateMarkerScale() {
+  const z = map.getZoom();
+  const scale = z <= 2 ? 0.5 : z === 3 ? 0.65 : z === 4 ? 0.8 : z === 5 ? 1 : 1.1;
+  document.documentElement.style.setProperty('--marker-scale', scale);
+}
+map.on('zoomend', updateMarkerScale);
+updateMarkerScale();
+
 // ===== Hilfsfunktionen =====
 function fileForYear(y) {
   return 'data/world_' + (y < 0 ? 'bc' + Math.abs(y) : y) + '.geojson';
 }
 
 function formatYear(y) {
+  if (LANG === 'en') return y < 0 ? Math.abs(y).toLocaleString('en-US') + ' BC' : 'AD ' + y;
   return y < 0 ? Math.abs(y).toLocaleString('de-DE') + ' v. Chr.' : y + ' n. Chr.';
 }
 
-function germanName(name) {
-  return NAME_DE[name] || name;
+// Anzeigename einer Region: Deutsch übersetzt, Englisch = Originalname der Kartendaten
+function displayName(name) {
+  return LANG === 'en' ? name : (NAME_DE[name] || name);
 }
 
 // Stabile Farbe pro Reichsname
@@ -84,7 +95,7 @@ function updateEvents(year) {
     });
     marker.bindPopup(
       `<div class="event-popup"><h4>${ev.icon} ${escapeHtml(ev.title)}</h4><p>${ev.text}</p>` +
-      `<a href="https://de.wikipedia.org/wiki/${encodeURIComponent(ev.wiki.replace(/ /g, '_'))}" target="_blank" rel="noopener">Mehr auf Wikipedia ↗</a></div>`,
+      `<a href="https://de.wikipedia.org/wiki/${encodeURIComponent(ev.wiki.replace(/ /g, '_'))}" target="_blank" rel="noopener">${T().wikiMore}</a></div>`,
       { maxWidth: 320 }
     );
     eventLayer.addLayer(marker);
@@ -107,13 +118,17 @@ function updateCapitals(year) {
         iconAnchor: [9, 9]
       })
     });
+    const st = stateName(c.state);
+    const wikiHref = LANG === 'en'
+      ? 'https://en.wikipedia.org/wiki/Special:Search?search=' + encodeURIComponent(c.name)
+      : 'https://de.wikipedia.org/wiki/' + encodeURIComponent(c.wiki.replace(/ /g, '_'));
     marker.bindTooltip(
-      `<b>${escapeHtml(c.name)}</b><br><small>Hauptstadt: ${escapeHtml(c.state)}</small>`,
+      `<b>${escapeHtml(c.name)}</b><br><small>${T().capitalTip}: ${escapeHtml(st)}</small>`,
       { className: 'region-tip' }
     );
     marker.bindPopup(
-      `<div class="event-popup"><h4>🏛️ ${escapeHtml(c.name)}</h4><p>Hauptstadt von <b>${escapeHtml(c.state)}</b></p>` +
-      `<a href="https://de.wikipedia.org/wiki/${encodeURIComponent(c.wiki.replace(/ /g, '_'))}" target="_blank" rel="noopener">Mehr auf Wikipedia ↗</a></div>`,
+      `<div class="event-popup"><h4>🏛️ ${escapeHtml(c.name)}</h4><p>${T().capitalOf} <b>${escapeHtml(st)}</b></p>` +
+      `<a href="${wikiHref}" target="_blank" rel="noopener">${T().wikiMore}</a></div>`,
       { maxWidth: 280 }
     );
     capitalLayer.addLayer(marker);
@@ -147,8 +162,8 @@ async function showYear(year) {
       const p = feature.properties;
       const name = p.NAME || '?';
       const ent = entityName(p);
-      let tip = '<b>' + escapeHtml(germanName(name)) + '</b>';
-      if (ent !== name) tip += '<br><small>Teil von: ' + escapeHtml(germanName(ent)) + '</small>';
+      let tip = '<b>' + escapeHtml(displayName(name)) + '</b>';
+      if (ent !== name) tip += '<br><small>' + T().partOf + ': ' + escapeHtml(displayName(ent)) + '</small>';
       layer.bindTooltip(tip, { sticky: true, className: 'region-tip' });
 
       layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.92, weight: 1.6, color: '#e8b04b' }));
@@ -176,28 +191,33 @@ function updateEraPanel(year) {
   if (era === lastEra) return;
   lastEra = era;
 
+  // Englische Fassung (falls vorhanden) über die parallele ERAS_EN-Liste
+  const idx = ERAS.indexOf(era);
+  const c = (LANG === 'en' && typeof ERAS_EN !== 'undefined' && ERAS_EN[idx]) ? ERAS_EN[idx] : era;
+
   document.getElementById('era-range').textContent =
     formatYear(era.from) + ' – ' + formatYear(Math.min(era.to, 2025));
-  document.getElementById('era-title').textContent = era.title;
-  document.getElementById('era-hegemon').innerHTML = '🏆 <b>Vorherrschaft:</b> ' + linkify(era.hegemon);
-  document.getElementById('era-text').innerHTML = linkify(era.text);
-  document.getElementById('era-denken').innerHTML = linkify(era.denken);
+  document.getElementById('era-title').textContent = c.title;
+  document.getElementById('era-hegemon').innerHTML = '🏆 <b>' + T().hegemonLabel + ':</b> ' + linkify(c.hegemon, LANG);
+  document.getElementById('era-text').innerHTML = linkify(c.text, LANG);
+  document.getElementById('era-denken').innerHTML = linkify(c.denken, LANG);
 
-  document.getElementById('era-kunst').innerHTML = linkify(era.kunst || '');
+  document.getElementById('era-kunst').innerHTML = linkify(c.kunst || '', LANG);
   const koepfe = document.getElementById('era-koepfe');
-  koepfe.innerHTML = (era.koepfe || []).map(k => '<li>' + linkify(k) + '</li>').join('');
+  koepfe.innerHTML = (c.koepfe || []).map(k => '<li>' + linkify(k, LANG) + '</li>').join('');
 
   const kon = document.getElementById('era-konflikte');
-  kon.innerHTML = era.konflikte.map(k => '<li>' + linkify(k) + '</li>').join('');
+  kon.innerHTML = c.konflikte.map(k => '<li>' + linkify(k, LANG) + '</li>').join('');
   const schlag = document.getElementById('era-schlaglichter');
-  schlag.innerHTML = era.schlaglichter.map(s => '<li>' + linkify(s) + '</li>').join('');
+  schlag.innerHTML = c.schlaglichter.map(s => '<li>' + linkify(s, LANG) + '</li>').join('');
 
-  // Chronik: datierte Ereignisse dieser Epoche
+  // Chronik: datierte Ereignisse dieser Epoche (Texte derzeit deutsch)
   const entries = CHRONICLE
     .filter(e => e.y >= era.from && e.y < era.to)
     .sort((a, b) => a.y - b.y);
+  const bc = LANG === 'en' ? ' BC' : ' v. Chr.';
   document.getElementById('era-chronik').innerHTML = entries.map(e => {
-    const yr = e.y < 0 ? Math.abs(e.y) + ' v. Chr.' : e.y;
+    const yr = e.y < 0 ? Math.abs(e.y) + bc : e.y;
     const link = e.w
       ? ` <a class="chron-link" href="https://de.wikipedia.org/wiki/${encodeURIComponent(e.w.replace(/ /g, '_'))}" target="_blank" rel="noopener" title="Wikipedia: ${escapeHtml(e.w)}">↗</a>`
       : '';
@@ -236,43 +256,51 @@ async function openSidebar(props, year) {
   sb.classList.remove('hidden');
   sb.scrollTop = 0;
 
-  document.getElementById('sb-title').textContent = germanName(name);
+  document.getElementById('sb-title').textContent = displayName(name);
   let sub = formatYear(year);
-  if (ent !== name) sub += ' · Teil von: ' + germanName(ent);
+  if (ent !== name) sub += ' · ' + T().partOf + ': ' + displayName(ent);
   if (props.PARTOF && props.PARTOF !== name && props.PARTOF !== ent)
-    sub += ' · Zugehörig zu: ' + germanName(props.PARTOF);
+    sub += ' · ' + T().belongsTo + ': ' + displayName(props.PARTOF);
   document.getElementById('sb-subtitle').textContent = sub;
 
-  // Kuratierter Bericht
+  // Kuratierter Bericht (Texte derzeit deutsch – im EN-Modus mit Hinweis)
   const report = findReport(name, ent, year);
   const repEl = document.getElementById('sb-report');
   if (report) {
-    repEl.innerHTML = '<h3 style="margin-top:0">📜 ' + escapeHtml(report.title) + '</h3>'
-      + linkify(report.html)
-      + '<div class="wiki-links"><b style="font-size:.8rem;color:var(--text-dim)">Vertiefen:</b><br>' + wikiChips(report.wiki) + '</div>';
+    repEl.innerHTML = T().langNote
+      + '<h3 style="margin-top:0">📜 ' + escapeHtml(report.title) + '</h3>'
+      + linkify(report.html, 'de')
+      + '<div class="wiki-links"><b style="font-size:.8rem;color:var(--text-dim)">' + T().deepen + '</b><br>' + wikiChips(report.wiki) + '</div>';
   } else {
-    repEl.innerHTML = '<p style="color:var(--text-dim);font-size:.9rem">Zu dieser Region liegt für ' + formatYear(year) +
-      ' kein kuratierter Bericht vor – die Wikipedia-Zusammenfassung unten liefert den Einstieg. Beachte auch das Epochen-Panel links!</p>';
+    repEl.innerHTML = '<p style="color:var(--text-dim);font-size:.9rem">' + T().noReport(formatYear(year)) + '</p>';
   }
 
-  // Wikipedia-Zusammenfassung
+  // Wikipedia-Zusammenfassung: bevorzugte Sprache zuerst
   const loading = document.getElementById('sb-wiki-loading');
+  loading.textContent = T().loading;
   const content = document.getElementById('sb-wiki-content');
   loading.classList.remove('hidden');
   content.innerHTML = '';
 
-  const wikiTitle = WIKI_DE[name] || NAME_DE[name] || WIKI_DE[ent] || NAME_DE[ent] || name;
-  const summary = await fetchWiki(wikiTitle) || await fetchWiki(name) || await fetchWiki(name, 'en');
+  let summary;
+  if (LANG === 'en') {
+    // Kartennamen sind nativ englisch – direkt auf en.wikipedia nachschlagen
+    summary = await fetchWiki(name, 'en') || (ent !== name && await fetchWiki(ent, 'en')) ||
+      await fetchWiki(WIKI_DE[name] || NAME_DE[name] || name, 'de');
+  } else {
+    const wikiTitle = WIKI_DE[name] || NAME_DE[name] || WIKI_DE[ent] || NAME_DE[ent] || name;
+    summary = await fetchWiki(wikiTitle) || await fetchWiki(name) || await fetchWiki(name, 'en');
+  }
   loading.classList.add('hidden');
 
   if (summary) {
     const img = summary.thumbnail ? `<img src="${summary.thumbnail.source}" alt="">` : '';
     const url = summary.content_urls.desktop.page;
     content.innerHTML = img + '<p>' + escapeHtml(summary.extract) + '</p>' +
-      `<a href="${url}" target="_blank" rel="noopener">Ganzen Wikipedia-Artikel lesen ↗</a>` +
-      '<p class="wiki-src" style="clear:both">Quelle: Wikipedia (' + (summary.lang || 'de') + ')</p>';
+      `<a href="${url}" target="_blank" rel="noopener">${T().readFull}</a>` +
+      '<p class="wiki-src" style="clear:both">' + T().source + ': Wikipedia (' + (summary.lang || 'de') + ')</p>';
   } else {
-    content.innerHTML = '<p class="wiki-src">Keine Wikipedia-Zusammenfassung gefunden.</p>';
+    content.innerHTML = '<p class="wiki-src">' + T().noWiki + '</p>';
   }
 }
 
@@ -310,22 +338,6 @@ function step(delta) {
 document.getElementById('btn-prev').addEventListener('click', () => step(-1));
 document.getElementById('btn-next').addEventListener('click', () => step(1));
 
-// Abspielen
-let playTimer = null;
-const playBtn = document.getElementById('btn-play');
-playBtn.addEventListener('click', () => {
-  if (playTimer) { stopPlay(); return; }
-  playBtn.classList.add('playing');
-  playBtn.textContent = '⏸';
-  playTimer = setInterval(() => { if (!step(1)) stopPlay(); }, 2200);
-});
-function stopPlay() {
-  clearInterval(playTimer);
-  playTimer = null;
-  playBtn.classList.remove('playing');
-  playBtn.textContent = '▶︎▶︎';
-}
-
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') { step(-1); e.preventDefault(); }
   if (e.key === 'ArrowRight') { step(1); e.preventDefault(); }
@@ -347,18 +359,50 @@ capitalsBtn.addEventListener('click', () => {
   updateCapitals(YEARS[+slider.value]);
 });
 
+// ===== Sprache =====
+function applyUILang() {
+  const t = T();
+  document.documentElement.lang = LANG;
+  document.getElementById('h-denken').textContent = t.hDenken;
+  document.getElementById('h-kunst').textContent = t.hKunst;
+  document.getElementById('h-konflikte').textContent = t.hKonflikte;
+  document.getElementById('h-chronik').textContent = t.hChronik;
+  document.getElementById('h-schlag').textContent = t.hSchlag;
+  document.getElementById('btn-prev').title = t.tPrev;
+  document.getElementById('btn-next').title = t.tNext;
+  document.getElementById('btn-events').title = t.tEvents;
+  document.getElementById('btn-capitals').title = t.tCapitals;
+  document.getElementById('btn-lang').title = t.tLang;
+  document.getElementById('btn-lang').textContent = LANG.toUpperCase();
+  document.getElementById('era-toggle').title = t.tCollapse;
+  document.getElementById('attribution').innerHTML = t.attribution;
+  buildTicks();
+}
+
+document.getElementById('btn-lang').addEventListener('click', () => {
+  LANG = LANG === 'de' ? 'en' : 'de';
+  localStorage.setItem('hm-lang', LANG);
+  applyUILang();
+  lastEra = null;                       // Epochen-Panel neu rendern erzwingen
+  document.getElementById('sidebar-close').click(); // Sidebar schließen (Inhalt wäre gemischt)
+  showYear(YEARS[+slider.value]);
+});
+
 // Tick-Beschriftungen unter dem Regler
 const TICKS = [-3000, -1, 500, 1000, 1500, 1715, 1914, 2010];
-const ticksEl = document.getElementById('slider-ticks');
-TICKS.forEach(y => {
-  const idx = YEARS.indexOf(y);
-  if (idx < 0) return;
-  const el = document.createElement('div');
-  el.className = 'tick';
-  el.style.left = (idx / (YEARS.length - 1) * 100) + '%';
-  el.textContent = y < 0 ? Math.abs(y) + ' v.Chr.' : y;
-  ticksEl.appendChild(el);
-});
+function buildTicks() {
+  const ticksEl = document.getElementById('slider-ticks');
+  ticksEl.innerHTML = '';
+  TICKS.forEach(y => {
+    const idx = YEARS.indexOf(y);
+    if (idx < 0) return;
+    const el = document.createElement('div');
+    el.className = 'tick';
+    el.style.left = (idx / (YEARS.length - 1) * 100) + '%';
+    el.textContent = y < 0 ? Math.abs(y) + ' ' + T().bc : y;
+    ticksEl.appendChild(el);
+  });
+}
 
 // Auf schmalen Bildschirmen startet das Epochen-Panel eingeklappt, damit die Karte sichtbar bleibt
 if (window.innerWidth <= 800) {
@@ -366,4 +410,5 @@ if (window.innerWidth <= 800) {
 }
 
 // ===== Start =====
+applyUILang();
 showYear(START_YEAR);
