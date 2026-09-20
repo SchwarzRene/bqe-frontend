@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Tape — A Model-Sourced Broadcast Rundown for Fed Events and Earnings</title>
+<style>
+  :root{
+    --fg:#B8B8B8; --fg-strong:#FFFFFF; --muted:#6B7280;
+    --accent:#C4A86B; --accent-light:#D4B87B; --accent-dark:#9E8A55;
+    --bg:#0A0A0A; --bg-soft:#131313; --bg-muted:#1F1F1F; --card:#131313;
+    --border:rgba(196,168,107,0.18); --navy:rgba(26,43,74,0.5);
+    --green:#5dc87a; --red:#c87a7a;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg);}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px 96px;}
+  header{background:var(--bg-soft);border-top:3px solid var(--accent);border-bottom:3px solid var(--accent);color:var(--fg-strong);padding:64px 24px 56px;text-align:center;position:relative;}
+  header::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(196,168,107,.05) 0%,transparent 50%,rgba(196,168,107,.05) 100%);pointer-events:none;}
+  header h1{margin:0 0 8px;font-size:2.6rem;letter-spacing:-.5px;color:var(--accent);position:relative;}
+  header p{margin:0;font-size:1.12rem;color:var(--fg);position:relative;}
+  .badges{margin-top:22px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;position:relative;}
+  .badge{background:rgba(196,168,107,.08);border:1px solid rgba(196,168,107,.35);border-radius:999px;padding:6px 16px;font-size:.9rem;font-weight:600;color:var(--accent);}
+  h2{font-size:1.7rem;margin:56px 0 0;letter-spacing:-.3px;color:var(--fg-strong);background:var(--bg-soft);border-top:3px solid var(--accent);border-bottom:1px solid var(--border);padding:20px 24px;scroll-margin-top:12px;}
+  h2 .num{color:var(--accent);font-weight:800;}
+  h3{font-size:1.2rem;margin:32px 0 4px;color:var(--fg-strong);}
+  h4{font-size:1rem;margin:22px 0 2px;color:var(--accent-light);}
+  p{color:var(--fg);} p.lead{color:var(--muted);margin-top:4px;} strong{color:var(--fg-strong);}
+  a{color:var(--accent);} a:hover{color:var(--accent-light);}
+  code,pre{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;}
+  code{background:var(--bg-muted);color:var(--accent-light);padding:2px 6px;border-radius:5px;font-size:.9em;}
+  pre{background:#0f172a;color:#e2e8f0;padding:18px 20px;border-radius:10px;overflow:auto;font-size:.85rem;line-height:1.5;border:1px solid var(--border);}
+  pre .k{color:#7dd3fc;} pre .s{color:#86efac;} pre .c{color:#94a3b8;font-style:italic;} pre .n{color:#fca5a5;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px 26px;margin:18px 0;}
+  table{border-collapse:collapse;width:100%;margin:18px 0;font-size:.93rem;}
+  th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;color:var(--fg);vertical-align:top;}
+  th{background:var(--navy);color:var(--accent);font-weight:600;}
+  td.r,th.r{text-align:right;}
+  .pill{display:inline-block;background:var(--bg-muted);border:1px solid var(--border);border-radius:6px;padding:1px 8px;font-size:.85em;font-family:monospace;color:var(--accent-light);}
+  .key{border-left:4px solid var(--accent);background:rgba(196,168,107,.06);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;color:var(--fg);}
+  .key strong{color:var(--accent);}
+  .warn{border-left:4px solid var(--red);background:rgba(200,122,122,.07);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;}
+  .warn strong{color:var(--red);}
+  .ok{border-left:4px solid var(--green);background:rgba(93,200,122,.07);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;}
+  .ok strong{color:var(--green);}
+  nav.toc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 24px;margin:28px 0;}
+  nav.toc strong{color:var(--fg-strong);} nav.toc a{color:var(--accent);text-decoration:none;} nav.toc a:hover{color:var(--accent-light);text-decoration:underline;}
+  nav.toc ol{margin:6px 0;padding-left:22px;columns:2;} @media(max-width:640px){nav.toc ol{columns:1;}}
+  .muted{color:var(--muted);}
+  /* flow diagram */
+  .flow{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:20px 0;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;}
+  .flow-row{display:flex;align-items:stretch;border-bottom:1px solid var(--border);}
+  .flow-row:last-child{border-bottom:none;}
+  .flow-stage{flex:0 0 160px;padding:12px 14px;background:rgba(196,168,107,.10);color:var(--accent);font-weight:700;border-right:1px solid var(--border);display:flex;align-items:center;}
+  .flow-body{flex:1;padding:12px 14px;color:var(--fg);}
+  .flow-body .sh{color:var(--green);}
+  .arrowdown{text-align:center;color:var(--accent);font-size:1.1rem;padding:4px;}
+  /* file map */
+  .fm{border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:"SF Mono",monospace;font-size:.8rem;margin:18px 0;}
+  .fm div{padding:6px 14px;border-bottom:1px solid var(--border);}
+  .fm div:last-child{border-bottom:none;}
+  .fm .f{color:var(--accent-light);} .fm .d{color:var(--muted);}
+  @media(max-width:640px){header h1{font-size:2rem;} .flow-stage{flex-basis:108px;}}
+
+  /* ── Version / findings log ──────────────────────────────────────── */
+  .vlog{margin:18px 0;}
+  .ventry{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 20px;margin:14px 0;}
+  .ventry h4{margin:0 0 8px;color:var(--fg-strong);font-size:1.05rem;}
+  .vtag{display:inline-block;background:rgba(196,168,107,.15);border:1px solid rgba(196,168,107,.4);color:var(--accent);border-radius:6px;padding:1px 9px;font-family:monospace;font-size:.82rem;font-weight:700;margin-right:10px;}
+  .ventry .row{margin:5px 0;font-size:.94rem;}
+  .ventry .lbl{color:var(--accent);font-weight:700;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;margin-right:6px;}
+  .ventry.fix{border-left-color:var(--red);} .ventry.fix .vtag{color:var(--red);border-color:rgba(200,122,122,.45);background:rgba(200,122,122,.12);}
+  .ventry.fix .lbl{color:var(--red);}
+  .ventry.win{border-left-color:var(--green);} .ventry.win .vtag{color:var(--green);border-color:rgba(93,200,122,.45);background:rgba(93,200,122,.12);}
+  .ventry.win .lbl{color:var(--green);}
+  .ventry.live .vtag{background:rgba(125,211,252,.12);border-color:rgba(125,211,252,.45);color:#7dd3fc;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Market Tape</h1>
+  <p>A broadcast-style rundown of Fed events and earnings calls — where the schedule,
+  the live feeds and the reported numbers are not pulled from a market-data vendor,<br>
+  but resolved at runtime by a language model with web search.</p>
+  <div class="badges">
+    <span class="badge">single React component</span>
+    <span class="badge">no data vendor, no API keys</span>
+    <span class="badge">three JSON prompt contracts</span>
+    <span class="badge">DST-correct without a tz library</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section style="margin-top:34px;">
+  <h3 style="margin:0 0 12px;">What is Market Tape?</h3>
+  <p>Market Tape is a live event board built the way a control room builds a rundown: a
+  timed list of what is about to happen, a lamp next to whatever is currently on air, a
+  countdown to the next cue, and a stage that opens the feed and fills in the numbers the
+  moment they land. It covers the two event classes that actually move the tape intraday —
+  <strong>Federal Reserve appearances</strong> (FOMC decisions, the Chair's press conference,
+  congressional testimony, governor speeches) and <strong>earnings releases</strong> for a
+  user-defined watchlist.</p>
+
+  <p>The interesting part is not the interface. It is where the data comes from. There is no
+  calendar API, no earnings-date vendor, no IR-webcast registry and no wire feed behind this
+  page. Every schedule row, every stream URL and every reported figure is produced at runtime
+  by <strong>Claude with the web-search tool</strong>, under a strict JSON response contract,
+  and then normalized and validated by the client. The application is, in effect, a typed UI
+  layer over a search-grounded model — an experiment in how far <em>the model as the data
+  source</em> can be pushed for a domain that normally requires four separate paid
+  integrations.</p>
+
+  <div class="key">
+    <strong>The thesis:</strong> for low-frequency, publicly-announced, text-shaped data —
+    event calendars, webcast links, headline figures against consensus — a search-grounded
+    model with a hard output schema can replace the vendor integration entirely, provided the
+    client treats every response as untrusted and degrades honestly when it is wrong.
+  </div>
+</section>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#shape">① The shape of the app</a></li>
+    <li><a href="#contracts">② Three prompt contracts</a></li>
+    <li><a href="#json">③ Surviving imperfect JSON</a></li>
+    <li><a href="#time">④ Exchange time without a tz library</a></li>
+    <li><a href="#state">⑤ The on-air state machine</a></li>
+    <li><a href="#stage">⑥ The stage: feeds and readouts</a></li>
+    <li><a href="#fail">⑦ Failure behaviour</a></li>
+    <li><a href="#limits">⑧ Limits &amp; what it is not</a></li>
+    <li><a href="#files">File map</a></li>
+  </ol>
+</nav>
+
+<h2 id="shape"><span class="num">①</span> The shape of the app</h2>
+
+<p>The whole thing is one <code>MarketTape()</code> component — roughly 820 lines including its
+own stylesheet — with two subviews (<code>Readout</code> for the results block) and a handful of
+pure helpers. There is no router, no state library and no build-time data. Startup is a single
+call into <code>load()</code>, which fires the Fed query and the earnings query in parallel and
+merges the two result sets into one time-ordered rundown.</p>
+
+<div class="flow">
+  <div class="flow-row">
+    <div class="flow-stage">load()</div>
+    <div class="flow-body"><span class="sh">Promise.allSettled</span>( fedPrompt(today), earningsPrompt(today, watchlist) )</div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">askClaude()</div>
+    <div class="flow-body">POST /v1/messages with <span class="sh">web_search_20250305</span> → text blocks</div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">extractJSON()</div>
+    <div class="flow-body">balanced-brace scan · truncation salvage · <span class="sh">JSON.parse</span></div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">normalize()</div>
+    <div class="flow-body">drop rows without date/title · coerce <span class="sh">kind</span> · filter link URLs · resolve ET → epoch ms</div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">render</div>
+    <div class="flow-body">day-grouped rundown · lamp state per row · countdown to the next cue</div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">on selection</div>
+    <div class="flow-body">streamPrompt (find feed + links) · resultPrompt (pull the numbers, repeat every 90 s while live)</div>
+  </div>
+</div>
+
+<p>Two things follow from this design. First, the app has <em>no persistent dataset</em> — state
+is the current rundown plus a per-event result cache keyed by event id, both discarded on reload.
+Second, correctness is a client-side concern: the model is treated as an unreliable upstream, and
+every field it returns passes through <code>normalize()</code> before it reaches the DOM.</p>
+
+<h2 id="contracts"><span class="num">②</span> Three prompt contracts</h2>
+
+<p>All three prompts share the same discipline: state today's date explicitly (the model cannot be
+trusted to know it), demand <em>only</em> compact JSON with no prose and no markdown fences, cap
+the item count, fix the exact key set with an inline example, and constrain the enumerations.</p>
+
+<table>
+  <tr><th>Contract</th><th>When</th><th>Returns</th><th>Window</th></tr>
+  <tr>
+    <td><code>fedPrompt</code></td>
+    <td>on load / refresh</td>
+    <td>≤ 6 Fed events: decisions, pressers, testimony, speeches</td>
+    <td>today → +10 days</td>
+  </tr>
+  <tr>
+    <td><code>earningsPrompt</code></td>
+    <td>on load / watchlist change</td>
+    <td>≤ 6 confirmed earnings dates for the watchlist tickers</td>
+    <td>today → +21 days</td>
+  </tr>
+  <tr>
+    <td><code>streamPrompt</code></td>
+    <td>on demand, per event</td>
+    <td>a primary feed URL plus ≤ 4 labelled links</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td><code>resultPrompt</code></td>
+    <td>on demand, then every 90 s while live</td>
+    <td>headline, ≤ 4 metrics vs. estimate, ≤ 3 bullets, price reaction, as-of stamp</td>
+    <td>—</td>
+  </tr>
+</table>
+
+<h3>The anti-hallucination clauses</h3>
+
+<p>Three rules do most of the work of keeping the board honest:</p>
+
+<pre><span class="c">// every schedule and stream prompt ends with some form of:</span>
+streamUrl must be a real URL you saw in the search results — <span class="n">never invent a URL</span>.
+skip any ticker with <span class="n">no scheduled date</span>.
+if the date is estimated rather than confirmed, start the note with <span class="s">"Est:"</span>.</pre>
+
+<p>The omission rule matters more than it looks. Without it, a model asked for "earnings dates for
+these five tickers" will tend to return five rows, because five were asked for — inventing a
+plausible date for the one company that has not announced. Explicitly licensing an empty result is
+what turns the response from a guess back into a report. The <code>"Est:"</code> prefix is the same
+idea applied to confidence: the note field carries its own uncertainty marker straight into the UI
+rather than dropping it silently.</p>
+
+<p>The result contract has one further clause — <code>"Write every field in your own words — do not
+quote source text"</code> — and a dedicated <code>status: "not_yet"</code> value, so that "the
+numbers are not out" is a first-class answer with an empty metrics array instead of a fabricated
+table. The readout renders that state as an explicit <em>nothing published yet</em> panel with a
+re-check button.</p>
+
+<h3>Metric verdicts</h3>
+
+<p>Each metric returns <code>{label, actual, estimate, verdict}</code> with <code>verdict</code>
+constrained to <code>beat</code> / <code>miss</code> / <code>inline</code>, which the UI maps
+directly to colour. The prompt shape differs by event class — four earnings slots (EPS, revenue,
+a segment or margin, guidance) versus four Fed slots (target range, vote split, dot-plot median,
+balance sheet) — so a rate decision and a quarterly report render through the same component
+without a branch in the view layer.</p>
+
+<h2 id="json"><span class="num">③</span> Surviving imperfect JSON</h2>
+
+<p>A model told to emit only JSON will still occasionally wrap it in a fence, prefix it with a
+sentence, or — the failure that actually hurts — get cut off by the token limit mid-array. The
+parser handles all three without a retry:</p>
+
+<pre><span class="c">// find the first [ or {, then walk the string tracking depth,</span>
+<span class="c">// string state and escapes — braces inside strings must not count</span>
+<span class="k">if</span> (c === <span class="s">'"'</span>) { inStr = <span class="k">true</span>; <span class="k">continue</span>; }
+<span class="k">if</span> (c === <span class="s">"["</span> || c === <span class="s">"{"</span>) depth++;
+<span class="k">else if</span> (c === <span class="s">"]"</span> || c === <span class="s">"}"</span>) {
+  depth--;
+  <span class="k">if</span> (depth === 1 &amp;&amp; open === <span class="s">"["</span>) lastItem = i;  <span class="c">// last complete element</span>
+  <span class="k">if</span> (depth === 0) { end = i; <span class="k">break</span>; }
+}</pre>
+
+<p>If the scan closes cleanly, the balanced slice is parsed. If it never closes and the payload is
+an array, the parser falls back to <code>s.slice(0, lastItem + 1) + "]"</code> — everything up to
+the last element that <em>did</em> close, re-terminated. A truncated response therefore degrades to
+a shorter rundown instead of an error banner. Fences are stripped first; leading prose is skipped by
+seeking the first bracket; and the string-state tracking is what keeps a <code>]</code> inside a
+note field from ending the scan early.</p>
+
+<div class="ok">
+  <strong>Design note:</strong> salvage beats retry here. A retry costs another search round-trip
+  and can come back differently; recovering four of six scheduled events immediately is the better
+  trade for a board whose whole value is being up to date.
+</div>
+
+<h2 id="time"><span class="num">④</span> Exchange time without a tz library</h2>
+
+<p>Every event in this domain is announced in New York wall-clock time — "2:00 p.m. ET", "after the
+close" — but must be rendered as a countdown in the viewer's own local time, and the two differ by
+an offset that changes twice a year. The app carries no timezone database. Instead it inverts
+<code>Intl.DateTimeFormat</code>:</p>
+
+<pre><span class="c">// what does this instant look like in New York?</span>
+<span class="k">function</span> tzOffsetMin(ts) {
+  <span class="k">const</span> p = tzParts(ts);                       <span class="c">// formatToParts in America/New_York</span>
+  <span class="k">const</span> asUTC = Date.UTC(+p.year, +p.month-1, +p.day, +p.hour, +p.minute, +p.second);
+  <span class="k">return</span> (asUTC - ts) / 60000;
+}
+
+<span class="c">// invert it: from a New York wall clock back to a real instant</span>
+<span class="k">let</span> ts = naive - tzOffsetMin(naive) * 60000;   <span class="c">// first guess</span>
+ts     = naive - tzOffsetMin(ts)    * 60000;   <span class="c">// re-solve at that instant</span></pre>
+
+<p>The forward direction — instant to New York parts — is something every browser already does
+correctly, DST included. The inverse is a fixed-point solve: guess the offset using the naive
+timestamp, then recompute it at the resulting instant. The second pass is what gets the hours
+immediately around a DST transition right, where the first guess lands on the wrong side of the
+change. Two iterations converge for every case that matters here, and the whole timezone layer
+costs about fifteen lines with no dependency.</p>
+
+<p>The same primitives drive the rest of the clock furniture: <code>etToday()</code> for the date
+handed to every prompt, <code>etClock()</code> for the ticking ET readout in the header,
+<code>dayLabel()</code> for <em>Today</em> / <em>Tomorrow</em> / weekday grouping in the rundown, and
+<code>countdown()</code> for the <code>T− 00:14:32</code> cue.</p>
+
+<h2 id="state"><span class="num">⑤</span> The on-air state machine</h2>
+
+<p>Each row resolves to one of three states, recomputed every second against a 1 Hz clock tick:</p>
+
+<table>
+  <tr><th>State</th><th>Condition</th><th>Rendering</th></tr>
+  <tr><td><code>live</code></td><td><code>start ≤ now &lt; start + window</code></td><td>pulsing red lamp, <em>On air</em> tag, auto-refreshing readout</td></tr>
+  <tr><td><code>done</code></td><td><code>now ≥ end</code></td><td>hollow lamp, <em>Done</em> tag</td></tr>
+  <tr><td><code>scheduled</code></td><td>otherwise</td><td>grey lamp; amber if it is the next cue</td></tr>
+</table>
+
+<p>Two details make this behave like a real rundown rather than a calendar. First, earnings have
+<em>two</em> timestamps — <code>releaseET</code>, when the numbers hit the wire, and
+<code>timeET</code>, when the call starts — and the live window opens at
+<code>min(releaseTs, ts)</code>, because the market reacts to the press release, not to the webcast
+half an hour later. The row surfaces both (<em>Numbers 16:30 · call 17:00</em>) and the countdown
+targets whichever comes first. Second, the window length is per class:</p>
+
+<pre><span class="k">const</span> LIVE_WINDOW_MIN = { fed: <span class="n">95</span>, earnings: <span class="n">80</span> };</pre>
+
+<p>A statement plus a Chair press conference runs longer than a typical earnings call, and the
+window is what decides how long the app keeps polling for results — so it is sized to the event,
+not to a global default.</p>
+
+<p>The header countdown is fed by a <code>next</code> selector that prefers any live event over the
+nearest upcoming one, and the hairline progress bar under the header ramps across the final three
+hours before the cue (<code>span = 3 × 3600000</code>), pinned to 4 % beyond that so it never reads
+as empty.</p>
+
+<h2 id="stage"><span class="num">⑥</span> The stage: feeds and readouts</h2>
+
+<h3>Feeds are classified, not assumed</h3>
+
+<p>Every event carries a <code>streamKind</code> of <code>video</code>, <code>audio</code> or
+<code>page</code>, and the stage says plainly which one it got. Only a recognized YouTube id — matched
+against watch, <code>live/</code>, <code>embed/</code> and <code>youtu.be</code> forms — offers
+in-page playback. Most earnings calls are listen-only IR webcasts that refuse to embed, so the app
+tells the user exactly that and hands them an <em>Open live stream ↗</em> button instead of an empty
+black rectangle. When no usable feed was found, a <em>Find stream &amp; links</em> button runs
+<code>streamPrompt</code> on demand and merges the result back into that one event.</p>
+
+<div class="warn">
+  <strong>Anti-pattern avoided:</strong> silently rendering an iframe that will be refused by the
+  host. Classifying the feed up front and saying why it opens in a new tab is the difference between
+  an app that looks broken and one that is merely honest about the web.
+</div>
+
+<h3>The readout auto-refreshes only while it matters</h3>
+
+<pre><span class="k">useEffect</span>(() =&gt; {
+  <span class="k">if</span> (!auto || !sel || !selLive) <span class="k">return</span>;
+  fetchResult(sel);
+  <span class="k">const</span> t = setInterval(() =&gt; fetchResult(sel), <span class="n">90000</span>);
+  <span class="k">return</span> () =&gt; clearInterval(t);
+}, [auto, sel &amp;&amp; sel.id, selLive, fetchResult]);</pre>
+
+<p>Polling is bounded on three sides: it runs only for the selected event, only while that event is
+inside its live window, and only while the user leaves the <em>Auto</em> toggle on. Everything else is
+a manual <em>Get result</em> press. Each poll is a fresh search — which is the point, since a readout
+taken two minutes after the release and one taken at the end of the call are genuinely different
+answers — and results are cached per event id so switching rows costs nothing.</p>
+
+<h3>Watchlist</h3>
+
+<p>The watchlist is capped at twelve tickers, sanitized to <code>[A-Z0-9.-]</code>, de-duplicated,
+persisted through the host storage API and — importantly — <em>reloads the rundown on every
+change</em>, because the earnings query is parameterized by exactly that list. Four always-on
+channels (the Fed's own broadcast page, Bloomberg TV, Yahoo Finance, Schwab Network) are hard-coded
+as a fallback for when nothing scheduled is on air.</p>
+
+<h2 id="fail"><span class="num">⑦</span> Failure behaviour</h2>
+
+<p>The board is built to be partially wrong in public rather than blank. Four layers:</p>
+
+<ul>
+  <li><strong>Independent queries.</strong> <code>Promise.allSettled</code> means a failed Fed lookup
+  does not take the earnings rows down with it; the banner names what is missing
+  (<em>"Couldn't load Fed events. The rest of the rundown is current."</em>) and the rest renders.</li>
+  <li><strong>Row-level validation.</strong> <code>normalize()</code> drops anything without a date and
+  title, coerces the event class, discards links that are not <code>http(s)</code> URLs, and filters
+  out rows whose timestamp fails to resolve — a malformed date removes one row, not the page.</li>
+  <li><strong>Seed fallback.</strong> If the live lookup returns nothing usable at all, a small
+  hard-coded set of scheduled FOMC dates renders with an explicit banner saying the lookup came back
+  empty. The board degrades to a calendar rather than to an error screen.</li>
+  <li><strong>Per-event errors stay local.</strong> A failed result fetch is stored under that event's
+  id with its own retry button, leaving every other row untouched.</li>
+</ul>
+
+<p>Accessibility and motion get the same treatment as correctness: rows are real
+<code>&lt;button&gt;</code> elements with <code>aria-pressed</code>, focus outlines are defined for every
+interactive element, and both the pulsing live lamp and the loading blink are disabled under
+<code>prefers-reduced-motion</code>.</p>
+
+<h2 id="limits"><span class="num">⑧</span> Limits &amp; what it is not</h2>
+
+<ul>
+  <li><strong>It is not a data feed.</strong> Schedules, links and figures come from live web search
+  and can be stale, incomplete or simply wrong. The footer of the app says so, and every figure is
+  rendered with its as-of stamp. Nothing here is checked against a primary source automatically.</li>
+  <li><strong>Latency is search latency.</strong> A readout appears when a search-grounded model can
+  find a published number — seconds to minutes behind the wire, not milliseconds. This is a board for
+  watching events, not for reacting to them.</li>
+  <li><strong>Coverage is whatever the search returns.</strong> Six Fed events and six earnings rows
+  are hard caps, and a company that has not announced simply does not appear.</li>
+  <li><strong>It needs a model-backed runtime.</strong> The component calls the Messages API with the
+  web-search tool and uses a host-provided <code>storage</code> API for the watchlist, so it runs
+  inside an environment that supplies both. It is published here as source and as a write-up, not as
+  a live page on this static site.</li>
+  <li><strong>No trading, no advice.</strong> There is no order path, no position state and no
+  recommendation anywhere in it. Research and instrumentation only.</li>
+</ul>
+
+<h2 id="files">File map</h2>
+<div class="fm">
+  <div><span class="f">market-tape.jsx</span> <span class="d">— the entire application (~820 lines)</span></div>
+  <div><span class="f">  CSS</span> <span class="d">— inline stylesheet, control-room palette, reduced-motion aware</span></div>
+  <div><span class="f">  tzParts · tzOffsetMin · etToTs</span> <span class="d">— ET wall clock ⇄ epoch, two-pass DST solve (§4)</span></div>
+  <div><span class="f">  etToday · etClock · dayLabel · countdown</span> <span class="d">— clock furniture for header and rundown</span></div>
+  <div><span class="f">  collectText · extractJSON</span> <span class="d">— balanced-brace parser with truncation salvage (§3)</span></div>
+  <div><span class="f">  askClaude</span> <span class="d">— Messages API + web_search tool, JSON-only round trip</span></div>
+  <div><span class="f">  fedPrompt · earningsPrompt</span> <span class="d">— schedule contracts, 10-day / 21-day windows (§2)</span></div>
+  <div><span class="f">  streamPrompt · resultPrompt</span> <span class="d">— feed discovery and the metrics readout (§2)</span></div>
+  <div><span class="f">  MarketTape()</span> <span class="d">— load, statusOf, next, fetchResult, findStream, watchlist (§1, §5)</span></div>
+  <div><span class="f">  Readout()</span> <span class="d">— headline, metric tiles with beat/miss verdicts, bullets, reaction</span></div>
+  <div><span class="f">  normalize · hostOf · youtubeId</span> <span class="d">— validation and feed classification (§6, §7)</span></div>
+  <div><span class="f">  SEED · CHANNELS · LIVE_WINDOW_MIN</span> <span class="d">— fallback rundown, always-on feeds, per-class windows</span></div>
+</div>
+
+<p style="margin-top:22px;">
+  <a href="markettape.jsx" download>Download the source (<code>market-tape.jsx</code>) →</a>
+</p>
+
+<p class="muted" style="margin-top:40px;text-align:center;">
+Market Tape · React · Claude Messages API with web search · no market-data vendor.<br>
+Schedules, links and figures are model-sourced from live web search and can be wrong or stale —
+confirm anything you trade on against the primary source. Research instrumentation only; no
+profitability or advice implied.</p>
+
+</div>
+</body>
+</html>
