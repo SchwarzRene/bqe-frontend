@@ -46,7 +46,16 @@ jobs:
           git add stack/data
           if git diff --quiet --cached; then
             echo "nothing changed"
-          else
-            git commit -m "Market data $(date -u +'%Y-%m-%d')"
-            git push
+            exit 0
           fi
+          git commit -m "Market data $(date -u +'%Y-%m-%d')"
+          # Someone may have pushed while the fetch ran; rebase onto them and retry.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected, rebasing onto the remote (attempt $attempt)"
+            git pull --rebase --autostash origin "${{ github.ref_name }}" || exit 1
+            sleep 5
+          done
+          exit 1
