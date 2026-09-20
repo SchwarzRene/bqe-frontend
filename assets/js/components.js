@@ -43,22 +43,18 @@ document.addEventListener('DOMContentLoaded', async () => {
  * Helps screen reader users understand which page they're on
  */
 function setActiveNavLink() {
-  const currentPath = window.location.pathname
-    .replace(/\/$/, '') // Remove trailing slash
+  // Reduce a path to its last segment without the .html extension, so that
+  // "/research/", "/research/index.html" and "/research" all compare equal.
+  const nameOf = (path) => (path || '')
+    .replace(/\/$/, '')
     .split('/')
-    .pop() // Get filename
-    || 'index.html'; // Default to index.html if root
+    .pop()
+    .replace(/\.html$/, '') || 'index';
 
-  // Ensure .html extension
-  const activePath = currentPath.includes('.html') ? currentPath : `${currentPath}.html`;
+  const activePath = nameOf(window.location.pathname);
 
   document.querySelectorAll('nav a').forEach((link) => {
-    const linkHref = link.getAttribute('href')
-      .replace(/\/$/, '')
-      .split('/')
-      .pop();
-
-    if (linkHref === activePath || (activePath === 'index.html' && linkHref === '/index.html')) {
+    if (nameOf(link.getAttribute('href')) === activePath) {
       link.setAttribute('aria-current', 'page');
     } else {
       link.removeAttribute('aria-current');
