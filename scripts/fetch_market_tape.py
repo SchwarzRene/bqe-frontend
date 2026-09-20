@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -194,6 +195,12 @@ def main() -> int:
     ap.add_argument("--no-results", action="store_true", help="skip the results pass")
     ap.add_argument("--max-results", type=int, default=6, help="most events to price out in one run")
     args = ap.parse_args()
+
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
+        print("No ANTHROPIC_API_KEY in the environment. Add it as a repository secret "
+              "(Settings -> Secrets and variables -> Actions) and run this workflow again.",
+              file=sys.stderr)
+        return 1
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
