@@ -92,7 +92,12 @@
 
 <div class="wrap">
 
-<section style="margin-top:34px;">
+<div class="ok" style="margin-top:34px;">
+  <strong>The board is live:</strong> <a href="/research/markettape/">open Market Tape →</a>
+  &nbsp;·&nbsp; this page explains how it is built.
+</div>
+
+<section style="margin-top:26px;">
   <h3 style="margin:0 0 12px;">What is Market Tape?</h3>
   <p>Market Tape is a live event board built the way a control room builds a rundown: a
   timed list of what is about to happen, a lamp next to whatever is currently on air, a
@@ -129,7 +134,8 @@
     <li><a href="#state">⑤ The on-air state machine</a></li>
     <li><a href="#stage">⑥ The stage: feeds and readouts</a></li>
     <li><a href="#fail">⑦ Failure behaviour</a></li>
-    <li><a href="#limits">⑧ Limits &amp; what it is not</a></li>
+    <li><a href="#published">⑧ The published board</a></li>
+    <li><a href="#limits">⑨ Limits &amp; what it is not</a></li>
     <li><a href="#files">File map</a></li>
   </ol>
 </nav>
@@ -396,7 +402,62 @@ as a fallback for when nothing scheduled is on air.</p>
 interactive element, and both the pulsing live lamp and the loading blink are disabled under
 <code>prefers-reduced-motion</code>.</p>
 
-<h2 id="limits"><span class="num">⑧</span> Limits &amp; what it is not</h2>
+<h2 id="published"><span class="num">⑧</span> The published board: prefetch instead of live calls</h2>
+
+<p>The component above queries the model from the browser, which needs a runtime that
+supplies API credentials. A page on a static host has neither, and shipping a key to every
+visitor is not an option — so the version published here inverts the data flow, the same way
+<a href="/stack/">Stack</a> handles prices: <strong>the searches run ahead of time, server-side,
+and the page reads their output as static JSON.</strong></p>
+
+<div class="flow">
+  <div class="flow-row">
+    <div class="flow-stage">GitHub Actions</div>
+    <div class="flow-body">weekdays 12:10 and 22:10 UTC, or on demand</div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">fetch_market_tape.py</div>
+    <div class="flow-body">the same four prompts, via the Messages API with <span class="sh">web_search</span></div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">validation</div>
+    <div class="flow-body">balanced-JSON salvage · field clamping · rows without a parsable date dropped</div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">commit</div>
+    <div class="flow-body"><span class="sh">data/schedule.json</span> · <span class="sh">data/results.json</span></div>
+  </div>
+  <div class="arrowdown">↓</div>
+  <div class="flow-row">
+    <div class="flow-stage">the page</div>
+    <div class="flow-body">fetches both, then runs the clock: live windows, countdown, day grouping, lamps</div>
+  </div>
+</div>
+
+<p>What moves to the server is only the part that needs a key and a search: the prompt contracts
+(§2), the JSON salvage (§3) and the row validation, all reimplemented in
+<code>scripts/fetch_market_tape.py</code>. Everything time-dependent stays in the browser, because
+it has to: a committed file cannot know whether a press conference is on air right now. The ET
+conversion (§4), the state machine (§5) and the 1 Hz countdown run client-side against the
+viewer's own clock, exactly as described above.</p>
+
+<p>Two behaviours change as a result. The readout no longer refreshes itself every 90 seconds
+while an event is live — it is as fresh as the last job run, and the page says when that was.
+And the per-event <em>Find stream &amp; links</em> button is gone: link discovery happens in the
+same prefetch, so the links are simply there or not.</p>
+
+<div class="key">
+  <strong>Running it:</strong> add an <code>ANTHROPIC_API_KEY</code> repository secret, allow
+  Actions to write to the repository, then run the <em>Market tape</em> workflow once by hand.
+  Until that first run the board renders empty and says so, with the always-on channels still
+  working. A run costs a handful of search-grounded requests — two schedule queries plus at most
+  six result queries.
+</div>
+
+<h2 id="limits"><span class="num">⑨</span> Limits &amp; what it is not</h2>
 
 <ul>
   <li><strong>It is not a data feed.</strong> Schedules, links and figures come from live web search
@@ -407,10 +468,9 @@ interactive element, and both the pulsing live lamp and the loading blink are di
   watching events, not for reacting to them.</li>
   <li><strong>Coverage is whatever the search returns.</strong> Six Fed events and six earnings rows
   are hard caps, and a company that has not announced simply does not appear.</li>
-  <li><strong>It needs a model-backed runtime.</strong> The component calls the Messages API with the
-  web-search tool and uses a host-provided <code>storage</code> API for the watchlist, so it runs
-  inside an environment that supplies both. It is published here as source and as a write-up, not as
-  a live page on this static site.</li>
+  <li><strong>Freshness is the job's cadence.</strong> The published board is as current as the last
+  refresh — twice a day on weekdays — not as current as the wire. The original component, which
+  queries the model from the browser, still needs a runtime that supplies API credentials.</li>
   <li><strong>No trading, no advice.</strong> There is no order path, no position state and no
   recommendation anywhere in it. Research and instrumentation only.</li>
 </ul>
@@ -431,12 +491,22 @@ interactive element, and both the pulsing live lamp and the loading blink are di
   <div><span class="f">  SEED · CHANNELS · LIVE_WINDOW_MIN</span> <span class="d">— fallback rundown, always-on feeds, per-class windows</span></div>
 </div>
 
+<div class="fm" style="margin-top:14px;">
+  <div><span class="d">the published board (§8)</span></div>
+  <div><span class="f">research/markettape/index.html</span> <span class="d">— the page shell</span></div>
+  <div><span class="f">research/markettape/app.js</span> <span class="d">— the ported component, bundled</span></div>
+  <div><span class="f">research/markettape/data/</span> <span class="d">— generated: schedule.json + results.json</span></div>
+  <div><span class="f">scripts/fetch_market_tape.py</span> <span class="d">— prompts, JSON salvage and validation, server-side</span></div>
+  <div><span class="f">.github/workflows/market-tape.yml</span> <span class="d">— weekday refresh + manual run</span></div>
+</div>
+
 <p style="margin-top:22px;">
   <a href="markettape.jsx" download>Download the source (<code>market-tape.jsx</code>) →</a>
 </p>
 
 <p class="muted" style="margin-top:40px;text-align:center;">
 Market Tape · React · Claude Messages API with web search · no market-data vendor.<br>
+<a href="/research/markettape/">Open the live board →</a><br>
 Schedules, links and figures are model-sourced from live web search and can be wrong or stale —
 confirm anything you trade on against the primary source. Research instrumentation only; no
 profitability or advice implied.</p>
