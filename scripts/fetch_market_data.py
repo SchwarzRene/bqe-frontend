@@ -28,12 +28,16 @@ import json
 import sys
 import time
 from datetime import datetime, timezone
+from io import StringIO
 from pathlib import Path
 
 import pandas as pd
+import requests
 import yfinance as yf
 
 WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+# Wikipedia answers 403 to the default urllib/pandas agent, so identify the job.
+HEADERS = {"User-Agent": "schwarzrene.github.io market-data (+https://schwarzrene.github.io/stack/)"}
 OHLC = ("Open", "High", "Low", "Close")
 
 
@@ -45,9 +49,25 @@ def yahoo_symbol(sym: str) -> str:
     return sym.strip().upper().replace(".", "-")
 
 
-def constituents() -> list[dict]:
+def constituents(retries: int = 3) -> list[dict]:
     """Current S&P 500 members. Returns [{s, f, n, sec}]."""
-    tables = pd.read_html(WIKI_URL)
+    last: Exception | None = None
+    html = None
+    for attempt in range(retries):
+        try:
+            res = requests.get(WIKI_URL, headers=HEADERS, timeout=30)
+            res.raise_for_status()
+            html = res.text
+            break
+        except Exception as exc:                           # noqa: BLE001
+            last = exc
+            wait = 3 * (attempt + 1)
+            print(f"  wiki retry {attempt+1}/{retries} after {exc!r} (sleep {wait}s)", file=sys.stderr)
+            time.sleep(wait)
+    if html is None:
+        raise RuntimeError(f"could not read the constituent list: {last!r}")
+
+    tables = pd.read_html(StringIO(html))
     df = next(t for t in tables if "Symbol" in t.columns and "GICS Sector" in t.columns)
     out = []
     for _, row in df.iterrows():
