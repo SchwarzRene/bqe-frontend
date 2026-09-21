@@ -255,12 +255,15 @@
 }
 
 /* A black seam between the hero and the maths band. Both canvases end and
-   begin on #050810, so the divider is pure black to stay visible against
-   them. */
+   begin on #050810, so the divider is pure black to stay visible against them.
+   shared.css gives every <section> a border-bottom, so the hero already draws
+   a rule above this band; the divider is a <div> and gets none, so it repeats
+   that same rule below itself and the black band reads as a framed seam. */
 .band-divider {
   height: 5vh;
   min-height: 24px;
   background: #000;
+  border-bottom: 1px solid var(--color-gray-400);
 }
 
 /* Informative copy over the artwork, not a headline: set left against the

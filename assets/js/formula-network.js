@@ -517,7 +517,7 @@
   var IMPULSE_STRENGTH = 420;
   var CLICK_TICK_RADIUS = 220;
   var CLICK_TICK_COUNT = 3;
-  var CLICK_TICK_INTERVAL = 0.42; // seconds between ticks in a burst
+  var CLICK_TICK_INTERVAL = 0.5; // seconds between ticks in a burst
   var clickBursts = [];
 
   function applyClickTick(b) {

@@ -257,7 +257,9 @@ single frame under `prefers-reduced-motion`. Two things are its own:
 - Its gradient starts on the hero's ground and climbs to the lighter blue, in both
   `drawBackground()` and the `.formula-network` CSS fallback; the two must agree. A
   `.band-divider` of pure black separates it from the hero, since both canvases meet
-  on `#050810` and would otherwise run together. Nodes bounce off it; formulas fade down as they cross it rather than
+  on `#050810` and would otherwise run together. It repeats the `border-bottom` that
+  `shared.css` puts on every `<section>`, so the black band is framed by the same rule
+  top and bottom — the divider is a `<div>` and would not get one otherwise. Nodes bounce off it; formulas fade down as they cross it rather than
   sitting behind the words, and `FLOATER_PAD` widens it for them alone, since a formula
   is anchored at its left edge but runs a long way right of it. Change the copy freely —
   the zone follows.

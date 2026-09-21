@@ -383,7 +383,7 @@
   var clickBursts = [];
   var CLICK_TICK_RADIUS = 220;
   var CLICK_TICK_COUNT = 3;
-  var CLICK_TICK_INTERVAL = 0.42; // seconds between ticks in a burst
+  var CLICK_TICK_INTERVAL = 0.5; // seconds between ticks in a burst
 
   function applyClickTick(b) {
     for (var i = 0; i < nodes.length; i++) {
