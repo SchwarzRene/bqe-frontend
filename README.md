@@ -244,8 +244,8 @@ single frame under `prefers-reduced-motion`. Two things are its own:
 - A click here also shoves nearby formulas outward, on top of the ripple and tick burst
   the hero does. As in the hero, the listener is on the section and the canvas is
   `pointer-events: none`. Anything layered over it needs a positive `z-index`: the
-  canvas sits at 0, `.formula-vignette` and `.formula-hint` at 1, `.formula-content`
-  at 2.
+  canvas sits at 0 and `.formula-content` at 2. Nothing announces the interaction —
+  the band carries no hint line, so a click is there to be found.
 - It has **no** keep-out zone, unlike the hero. Its copy is set left and in grey —
   informative text, not a title — on a `.formula-copy` panel in the hero's own ground
   colour (`--color-black` / `#050810`), and that panel carries the contrast instead, so

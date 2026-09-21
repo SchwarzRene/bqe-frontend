@@ -314,26 +314,6 @@
   }
 }
 
-.formula-hint {
-  position: absolute;
-  left: var(--space-4);
-  bottom: var(--space-4);
-  z-index: 1;
-  margin: 0;
-  font-size: var(--text-xs);
-  letter-spacing: 0.02em;
-  color: rgba(210, 220, 240, 0.4);
-  pointer-events: none;
-  user-select: none;
-}
-
-@media (min-width: 768px) {
-  .formula-hint {
-    left: var(--space-6);
-    bottom: var(--space-6);
-  }
-}
-
 /* Call to Action Buttons */
 .cta-buttons {
   display: flex;
