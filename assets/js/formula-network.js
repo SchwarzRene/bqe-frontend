@@ -624,12 +624,6 @@
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    var glow = ctx.createRadialGradient(W * 0.78, H * 0.12, 0, W * 0.78, H * 0.12, W * 0.55);
-    glow.addColorStop(0, 'rgba(214,163,86,0.10)');
-    glow.addColorStop(1, 'rgba(214,163,86,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, W, H);
-
     var glow2 = ctx.createRadialGradient(W * 0.2, H * 0.75, 0, W * 0.2, H * 0.75, W * 0.5);
     glow2.addColorStop(0, 'rgba(90,150,200,0.06)');
     glow2.addColorStop(1, 'rgba(90,150,200,0)');
@@ -638,7 +632,15 @@
   }
 
   function drawGrid(t) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    // Absent at the top of the band and strongest at the bottom. One canvas
+    // gradient does both line families in a single stroke: a vertical line
+    // fades along its own length, and a horizontal one picks up the alpha at
+    // its own y.
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.28, 'rgba(255,255,255,0)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.055)');
+    ctx.strokeStyle = grad;
     ctx.lineWidth = 1;
     var spacing = 58;
     var offset = (t * 5) % spacing;
