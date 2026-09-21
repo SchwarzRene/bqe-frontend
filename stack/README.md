@@ -65,6 +65,13 @@ Tapping a row drops you back on that stock in the feed, lifting any search or
 sector filter that would have hidden it. The bookmark in the filter row still
 does what it did before — narrow the feed to marked charts.
 
+Each entry also takes a **theory**: tap *+ Add theory* and write why you want to
+buy or sell it — the setup, the level that invalidates it, what you are waiting
+for. ⌘/Ctrl+Enter saves, Escape cancels, and the text is stored with the
+bookmarks and drawings (browser storage on this host, per device, plus the
+shared workspace document when one is available). Unmarking a chart keeps its
+theory, so re-marking brings it back.
+
 The price axis is the 46-pixel strip on the right of each pane. The newest
 candle sits a few slots left of it, so it is never jammed against the axis and
 there is room to draw ahead of price.

@@ -138,9 +138,9 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 }
 .sv-row:hover{border-color:var(--focus)}
 .sv-id{min-width:0;flex:1 1 auto}
-.sv-sym{font-size:17px;font-weight:800;font-stretch:112%;line-height:1.1}
-.sv-nm{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sv-lines{font-size:10.5px;color:var(--mark)}
+.sv-sym{display:block;font-size:17px;font-weight:800;font-stretch:112%;line-height:1.1}
+.sv-nm{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-lines{display:block;font-size:10.5px;color:var(--mark);margin-top:1px}
 .sv-spark{flex:0 0 auto;width:96px;height:34px;display:block}
 .sv-q{flex:0 0 auto;text-align:right;line-height:1.2}
 .sv-px{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
@@ -150,6 +150,27 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   font:inherit;font-size:18px;line-height:1;padding:4px 2px;
 }
 .sv-drop:hover{color:var(--down)}
+.sv-item{margin-bottom:10px}
+.sv-item .sv-row{margin-bottom:0;border-radius:10px 10px 0 0;border-bottom:0}
+.sv-th{
+  background:var(--chrome);border:1px solid var(--rule);border-top:0;
+  border-radius:0 0 10px 10px;padding:8px 12px 10px;
+}
+.sv-th-text{margin:0 0 6px;font-size:13px;line-height:1.55;white-space:pre-wrap;color:var(--fg)}
+.sv-th-when{font-size:10.5px;color:var(--muted)}
+.sv-th-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sv-th-btn{
+  background:none;border:0;padding:2px 0;font:inherit;font-size:12px;font-weight:600;
+  color:var(--focus);cursor:pointer;
+}
+.sv-th-btn.danger{color:var(--down)}
+.sv-th-btn:hover{text-decoration:underline}
+.sv-th textarea{
+  width:100%;box-sizing:border-box;font:inherit;font-size:13px;line-height:1.5;
+  color:var(--fg);background:var(--pane);border:1px solid var(--rule);border-radius:8px;
+  padding:8px 10px;min-height:86px;resize:vertical;
+}
+.sv-th textarea:focus{outline:2px solid var(--focus);outline-offset:1px}
 .sv-empty{padding:40px 22px;text-align:center;color:var(--muted);font-size:14px;line-height:1.6}
 .sv-hint{padding:4px 4px 14px;text-align:center;color:var(--muted);font-size:11.5px}
 
@@ -975,7 +996,8 @@ function markSource(){
   el.classList.add("live");
 }
 function refreshSymbol(sym){
-  if (savedOpen && isSaved(sym)) renderSaved();
+  // never re-render under a half-typed theory
+  if (savedOpen && !editingNote && isSaved(sym)) renderSaved();
   const card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
   if (card && mounted.has(card)){
     card._views = defaultViews();
@@ -992,7 +1014,7 @@ function refreshSymbol(sym){
    3. Saved state: bookmarks + drawings
    ============================================================ */
 const LSKEY = "stack.v1";
-let state = { saved: [], draw: {}, locator: false };
+let state = { saved: [], draw: {}, notes: {}, locator: false };
 let db = null, downloads = null;
 
 try {
@@ -1002,6 +1024,7 @@ try {
     if (p && typeof p === "object"){
       state.saved = Array.isArray(p.saved) ? p.saved : [];
       state.draw  = (p.draw && typeof p.draw === "object") ? p.draw : {};
+      state.notes = (p.notes && typeof p.notes === "object") ? p.notes : {};
       state.locator = !!p.locator;
     }
   }
@@ -1017,7 +1040,7 @@ function persist(){
   clearTimeout(dbTimer);
   dbTimer = setTimeout(() => {
     db.doc("workspace/main")
-      .set({ saved: state.saved, draw: state.draw, updated: Date.now() })
+      .set({ saved: state.saved, draw: state.draw, notes: state.notes, updated: Date.now() })
       .catch(() => {});
   }, 700);
 }
@@ -1040,6 +1063,7 @@ function lines(sym){ return state.draw[sym] || (state.draw[sym] = []); }
       if (snap.exists && snap.data){
         if (Array.isArray(snap.data.saved)) state.saved = snap.data.saved;
         if (snap.data.draw && typeof snap.data.draw === "object") state.draw = snap.data.draw;
+        if (snap.data.notes && typeof snap.data.notes === "object") state.notes = snap.data.notes;
         persistLocal();
         redrawAll();
         document.querySelectorAll(".star").forEach(b => {
@@ -1363,6 +1387,51 @@ function sparkline(cv, bars){
   ctx.stroke();
 }
 
+function noteOf(sym){ return state.notes[sym] || null; }
+function setNote(sym, text){
+  const clean = String(text||"").trim().slice(0, 4000);
+  if (clean) state.notes[sym] = { text: clean, updated: Date.now() };
+  else delete state.notes[sym];
+  persist();
+}
+function whenText(ms){
+  if (!ms) return "";
+  const d = new Date(ms);
+  return isNaN(d) ? "" : "Written " + d.toLocaleDateString(undefined,
+    { month:"short", day:"numeric", year:"numeric" });
+}
+function esc(t){
+  return String(t).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+}
+
+/* The reason a chart is on this page — why you would buy or sell it. */
+let editingNote = null;                       // symbol whose theory is open for editing
+function theoryHTML(sym){
+  const n = noteOf(sym);
+  if (editingNote === sym){
+    return `<textarea class="sv-th-in" data-sym="${sym}" rows="4"
+              placeholder="Why this one? The setup, the level that invalidates it, what you are waiting for."
+              >${n ? esc(n.text) : ""}</textarea>
+      <div class="sv-th-row" style="margin-top:6px">
+        <button class="sv-th-btn" data-act="save" data-sym="${sym}">Save theory</button>
+        <button class="sv-th-btn" data-act="cancel" data-sym="${sym}">Cancel</button>
+        <span class="sv-th-when">⌘/Ctrl + Enter saves · Esc cancels</span>
+      </div>`;
+  }
+  if (n){
+    return `<p class="sv-th-text">${esc(n.text)}</p>
+      <div class="sv-th-row">
+        <button class="sv-th-btn" data-act="edit" data-sym="${sym}">Edit theory</button>
+        <button class="sv-th-btn danger" data-act="clear" data-sym="${sym}">Remove</button>
+        <span class="sv-th-when">${whenText(n.updated)}</span>
+      </div>`;
+  }
+  return `<div class="sv-th-row">
+      <button class="sv-th-btn" data-act="add" data-sym="${sym}">+ Add theory</button>
+      <span class="sv-th-when">Why you want to buy or sell it</span>
+    </div>`;
+}
+
 function renderSaved(){
   const syms = state.saved.slice();
   document.getElementById("svN").textContent =
@@ -1396,8 +1465,19 @@ function renderSaved(){
         </span>
       </span>
       <span class="sv-drop" role="button" tabindex="0" aria-label="Unmark ${sym}">×</span>`;
-    svList.appendChild(row);
+    const item = document.createElement("div");
+    item.className = "sv-item";
+    item.appendChild(row);
+    const th = document.createElement("div");
+    th.className = "sv-th";
+    th.innerHTML = theoryHTML(sym);
+    item.appendChild(th);
+    svList.appendChild(item);
     sparkline(row.querySelector("canvas"), bars);
+    if (editingNote === sym){
+      const ta = th.querySelector("textarea");
+      if (ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }
   }
   const hint = document.createElement("p");
   hint.className = "sv-hint";
@@ -1415,6 +1495,7 @@ function openSaved(){
 function closeSaved(){
   if (!savedOpen) return;
   savedOpen = false;
+  editingNote = null;
   svEl.classList.remove("open");
   svEl.setAttribute("aria-hidden", "true");
 }
@@ -1434,7 +1515,32 @@ function jumpTo(sym){
   if (card) card.scrollIntoView({ block:"start", behavior:"auto" });
 }
 
+svList.addEventListener("keydown", e => {
+  const ta = e.target.closest(".sv-th-in");
+  if (!ta) return;
+  if (e.key === "Escape"){
+    e.stopPropagation(); editingNote = null; renderSaved();
+  } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)){
+    e.preventDefault(); setNote(ta.dataset.sym, ta.value); editingNote = null; renderSaved();
+  }
+});
 svList.addEventListener("click", e => {
+  const th = e.target.closest("[data-act]");
+  if (th){
+    const sym = th.dataset.sym;
+    if (th.dataset.act === "add" || th.dataset.act === "edit") editingNote = sym;
+    else if (th.dataset.act === "cancel") editingNote = null;
+    else if (th.dataset.act === "save"){
+      const ta = svList.querySelector('.sv-th-in[data-sym="'+CSS.escape(sym)+'"]');
+      setNote(sym, ta ? ta.value : "");
+      editingNote = null;
+    } else if (th.dataset.act === "clear"){
+      setNote(sym, "");
+      editingNote = null;
+    }
+    renderSaved();
+    return;
+  }
   const drop = e.target.closest(".sv-drop");
   if (drop){
     e.stopPropagation();
@@ -1455,6 +1561,7 @@ document.addEventListener("pointerdown", e => {
   swipe = null;
   if (!fsEl.hidden) return;                       // the full-screen chart owns its gestures
   if (savedOpen){
+    if (e.target.closest(".sv-th")) return;      // typing or selecting, not swiping
     swipe = { x:e.clientX, y:e.clientY, mode:"close" };
     return;
   }
