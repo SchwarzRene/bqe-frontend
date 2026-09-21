@@ -10,7 +10,7 @@
     <title>Startseite - Black Quant Empire</title>
 
     <link rel="stylesheet" href="/assets/css/shared.css?v=2" />
-    <link rel="stylesheet" href="/assets/css/pages/home.css?v=4" />
+    <link rel="stylesheet" href="/assets/css/pages/home.css?v=5" />
     <link rel="icon" href="/assets/images/logo.png" type="image/png" />
   </head>
 
@@ -38,51 +38,12 @@
         </div>
       </section>
 
-      <!-- What We Do -->
-      <section>
-        <div class="container">
-          <h2>Was wir tun</h2>
-
-          <div class="what-we-do-grid">
-            <!-- Text Content -->
-            <div class="what-we-do-text">
-              <p>
-                Bei Black Quant Empire nutzen wir ausgefeilte mathematische Modelle, um Marktdaten zu analysieren
-                und Handelsgelegenheiten zu identifizieren. Unser Ansatz basiert auf
-                quantitativer Analyse, datengestützten Entscheidungen und diszipliniertem Risikomanagement.
-              </p>
-
-              <h3>Unser Fokus</h3>
-              <p>
-                - <strong>Gold-Futures (CFDs):</strong> Edelmetallhandel mit algorithmischer Präzision<br>
-                - <strong>NASDAQ-Futures (CFDs):</strong> Technologiesektor-Engagement durch quantitative Modelle<br>
-                - <strong>Swing- &amp; Day-Trading:</strong> Mittelfristige und Intraday-Strategien<br>
-                - <strong>Einzelne Aktien:</strong> Ausweitung unserer Abdeckung auf Einzelaktien
-              </p>
-
-              <p>
-                <strong>Warnung:</strong> Handel birgt erhebliche finanzielle Risiken. Die Wertentwicklung in der Vergangenheit
-                ist kein Garantie für zukünftige Ergebnisse. <a href="/disclaimer.html">Vollständige Warnung lesen.</a>
-              </p>
-            </div>
-
-            <!-- Video as GIF -->
-            <div class="what-we-do-video">
-              <video
-                width="100%"
-                height="auto"
-                autoplay
-                muted
-                loop
-                class="video-gif"
-              >
-                <source src="/assets/video.mp4" type="video/mp4" />
-                <track kind="captions" src="/assets/captions/de.vtt" srclang="de" label="Deutsch" />
-                Ihr Browser unterstützt das HTML5 Video-Element nicht.
-              </video>
-            </div>
-          </div>
-        </div>
+      <!-- Formula Network -->
+      <!-- Generated formulas drifting over the market mesh; click sends a
+           ripple through it. See assets/js/formula-network.js -->
+      <section class="formula-network" aria-label="Mathematik in Bewegung">
+        <canvas class="formula-canvas"></canvas>
+        <p class="formula-hint">Klicken Sie, um eine Welle durch das Netz zu senden</p>
       </section>
 
       <!-- Why Choose Us -->
@@ -140,6 +101,7 @@
     <script src="/assets/js/components.js"></script>
     <script src="/assets/js/navigation.js"></script>
     <script src="/assets/js/hero-network.js"></script>
+    <script src="/assets/js/formula-network.js"></script>
 
     <div id="cookie-banner" class="cookie-banner" style="display: none;">
       <div class="container">

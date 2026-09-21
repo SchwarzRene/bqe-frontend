@@ -34,7 +34,7 @@ Consequences worth remembering:
 ## Repository layout
 
 ```
-├── index.html              Start page (animated market-network hero)
+├── index.html              Start page (market-network hero, formula-network band)
 ├── about.html              Über uns — brand and trademark documentation
 ├── strategy.html           Trading strategy
 ├── careers.html            Open roles
@@ -58,10 +58,11 @@ Consequences worth remembering:
 │   │   ├── components.js   Injects header/footer, sets aria-current, fills the year
 │   │   ├── navigation.js   Burger menu + login modal
 │   │   ├── hero-network.js Start page hero animation (canvas)
+│   │   ├── formula-network.js Start page formula band animation (canvas)
 │   │   └── form.js         Contact form validation (WCAG error handling)
 │   ├── images/             Page imagery, each as .webp + .jpg/.png fallback
 │   ├── captions/de.vtt     Captions for assets/video.mp4
-│   └── video.mp4           "Was wir tun" clip
+│   └── video.mp4           Unused since the "Was wir tun" section was replaced
 │
 ├── research/               Research write-ups, one file or folder per project
 │   ├── index.html          Research index
@@ -213,6 +214,28 @@ Three things to keep intact when touching it:
   fallback gradient in `home.css`, deliberately: the canvas cannot read CSS tokens, and
   the two must agree. They are where the site's palette came from — change them and the
   tokens in `shared.css` together, or the page splits into two colour schemes.
+
+### The start page formula band
+
+Below the hero, `.formula-network` is a second canvas animation
+(`assets/js/formula-network.js`). It replaced the old "Was wir tun" section: the focus
+list it carried lives in full on `strategy.html`, and the risk warning it ended with is
+in the site-wide footer, so nothing moved out of reach.
+
+Formulas are generated from templates in `LINE_TEMPLATES`, not drawn from a fixed list —
+add a template and it joins the rotation. Behind them runs the same mesh as the hero,
+with a shared market regime (calm, bull, bear, crash) biasing every node's tick at once.
+
+It follows the same rules as the hero — sizes to its section rather than the viewport,
+re-fits through a `ResizeObserver`, runs only while on screen and visible, and paints a
+single frame under `prefers-reduced-motion`. Two things are its own:
+
+- The canvas takes pointer events (the hero's does not): a click sends a ripple through
+  the mesh and shoves nearby formulas outward. Anything layered over it needs a positive
+  `z-index`; the canvas sits at 0 and `.formula-hint` at 1.
+- Floater count and type size follow the canvas area (`measureDensity`), so a phone gets
+  a legible scattering instead of a desktop's worth of formulas. A wide canvas lands back
+  on the reference numbers: 30 floaters, line sizes up to 26px.
 
 ### A research project
 
