@@ -188,6 +188,25 @@
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
+/* Card artwork. The sources are square and their subjects are centred, so the
+   image keeps a 1:1 box rather than being cropped to a letterbox. width/height
+   are on the <img> too, so the grid reserves the space before the file lands
+   and the cards do not jump as they load. */
+.feature-media {
+  display: block;
+  margin-bottom: var(--space-5);
+}
+
+.feature-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background-color: var(--color-black);
+}
+
 .feature h3 {
   color: var(--color-white);
   margin-top: 0;
@@ -197,7 +216,26 @@
 }
 
 @media (min-width: 768px) {
-  .feature h3 {
+  /* Card artwork. The sources are square and their subjects are centred, so the
+   image keeps a 1:1 box rather than being cropped to a letterbox. width/height
+   are on the <img> too, so the grid reserves the space before the file lands
+   and the cards do not jump as they load. */
+.feature-media {
+  display: block;
+  margin-bottom: var(--space-5);
+}
+
+.feature-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background-color: var(--color-black);
+}
+
+.feature h3 {
     font-size: var(--text-lg);
   }
 }
