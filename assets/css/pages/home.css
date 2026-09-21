@@ -4,20 +4,53 @@
 
 /* Hero Section */
 .hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--color-black) 0%, rgba(26, 43, 74, 0.4) 100%);
   padding: var(--space-12) var(--space-4);
   text-align: center;
 }
 
+/* Background Video - sits behind the headline */
+.hero-video {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
+  pointer-events: none;
+}
+
+/* Scrim - keeps the headline readable over the moving footage */
+.hero-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(10, 10, 10, 0.55) 0%, rgba(10, 10, 10, 0.75) 100%),
+    linear-gradient(135deg, rgba(10, 10, 10, 0.4) 0%, rgba(26, 43, 74, 0.35) 100%);
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+}
+
 @media (min-width: 768px) {
   .hero {
     padding: var(--space-16) var(--space-6);
+    min-height: 52vh;
   }
 }
 
 @media (min-width: 1024px) {
   .hero {
     padding: var(--space-24) 0;
+    min-height: 60vh;
   }
 }
 
@@ -295,5 +328,28 @@ main > section:nth-of-type(2) {
   .video-gif {
     max-width: 100%;
     height: auto;
+  }
+}
+
+/* Reduced Motion - freeze the hero on its poster frame */
+@media (prefers-reduced-motion: reduce) {
+  .hero {
+    background-image:
+      linear-gradient(135deg, var(--color-black) 0%, rgba(26, 43, 74, 0.4) 100%),
+      url("/assets/images/hero-poster.jpg");
+    background-size: cover;
+    background-position: center;
+  }
+
+  .hero-video {
+    display: none;
+  }
+}
+
+/* Forced Colours - drop the footage, keep the plain background */
+@media (forced-colors: active) {
+  .hero-video,
+  .hero-scrim {
+    display: none;
   }
 }

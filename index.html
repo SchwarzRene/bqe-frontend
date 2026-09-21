@@ -25,7 +25,23 @@
     <main id="main-content">
       <!-- Hero Section -->
       <section class="hero">
-        <div class="container text-center">
+        <!-- Background video (decorative, muted, looping) -->
+        <video
+          class="hero-video"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="auto"
+          poster="/assets/images/hero-poster.jpg"
+          aria-hidden="true"
+          tabindex="-1"
+        >
+          <source src="/assets/hero.mp4" type="video/mp4" />
+        </video>
+        <div class="hero-scrim" aria-hidden="true"></div>
+
+        <div class="container text-center hero-content">
           <h1>Black Quant Empire</h1>
           <p class="lead">
             Quantitativer Handel auf Basis von Mathematik. Swing- und Day-Trading-Strategien
