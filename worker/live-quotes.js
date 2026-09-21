@@ -20,6 +20,7 @@ const ALLOWED_ORIGINS = [
   "http://localhost:8000",
 ];
 
+const UPSTREAM = "https://query1.finance.yahoo.com";   // override with a YAHOO_BASE var when testing
 const DAILY = { range: "10y", interval: "1d", unit: 86400000 };
 const HOURLY = { range: "60d", interval: "60m", unit: 60000 };
 const EDGE_TTL = 60;          // seconds a response is reused for everyone
@@ -46,9 +47,10 @@ export default {
 
     let payload;
     try {
+      const upstream = (env && env.YAHOO_BASE) || UPSTREAM;
       const [daily, hourly] = await Promise.all([
-        chart(symbol, DAILY),
-        chart(symbol, HOURLY).catch(() => null),   // intraday is a bonus, not a requirement
+        chart(symbol, DAILY, upstream),
+        chart(symbol, HOURLY, upstream).catch(() => null),  // intraday is a bonus, not a requirement
       ]);
       if (!daily || daily.t.length < 40) return json({ error: "no data" }, 502, cors);
       payload = { s: symbol, updated: new Date().toISOString(), live: true, d: daily };
@@ -67,8 +69,8 @@ export default {
 };
 
 /** One Yahoo range, returned in the page's column format. */
-async function chart(symbol, spec) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`
+async function chart(symbol, spec, upstream) {
+  const url = `${upstream}/v8/finance/chart/${encodeURIComponent(symbol)}`
             + `?range=${spec.range}&interval=${spec.interval}&includePrePost=false`;
   const res = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; stack-live-quotes/1.0)" },
