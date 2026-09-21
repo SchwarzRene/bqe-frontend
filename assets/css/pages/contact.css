@@ -24,7 +24,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(10, 10, 10, 0.2);
+  background: rgba(var(--rgb-black), 0.2);
   z-index: 1;
 }
 
@@ -53,7 +53,7 @@
   margin-right: calc(-50vw + 50%);
   padding: var(--space-8) var(--space-6);
   background-image:
-    linear-gradient(rgba(10, 10, 10, 0.7), rgba(10, 10, 10, 0.7)),
+    linear-gradient(rgba(var(--rgb-black), 0.7), rgba(var(--rgb-black), 0.7)),
     url('/assets/images/apply.jpg');
   background-size: cover;
   background-position: center;

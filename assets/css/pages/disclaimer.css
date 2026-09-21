@@ -94,7 +94,7 @@ footer.mt-12 {
   height: 100%;
   object-fit: cover;
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(196, 168, 107, 0.15);
+  box-shadow: 0 4px 12px rgba(var(--rgb-gold), 0.15);
 }
 
 .image-right {
@@ -105,7 +105,7 @@ footer.mt-12 {
   height: 100%;
   object-fit: cover;
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(196, 168, 107, 0.15);
+  box-shadow: 0 4px 12px rgba(var(--rgb-gold), 0.15);
 }
 
 @media (max-width: 768px) {

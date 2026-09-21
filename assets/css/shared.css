@@ -8,36 +8,47 @@
    ───────────────────────────────────────────────────────────────── */
 
 :root {
-  /* === COLORS === */
-  /* Primary: Black Tones */
-  --color-black: #0A0A0A;
-  --color-black-soft: #131313;
-  --color-black-muted: #1F1F1F;
+  /* === COLORS ===
+     Taken from the start page hero: the canvas gradient gives the three
+     grounds, the quote nodes the gold, the price line the blue accent,
+     and the headline ink the grey ramp. A ratio is noted where it is what
+     fixes the value. */
 
-  /* Secondary: Gold (Reduced & Refined) */
-  --color-gold: #C4A86B;
-  --color-gold-light: #D4B87B;
-  --color-gold-dark: #9E8A55;
+  /* Grounds */
+  --color-black: #050810;
+  --color-black-soft: #070b15;
+  --color-black-muted: #0f1a2c;
 
-  /* Tertiary: Navy Blue */
-  --color-navy: #1A2B4A;
-  --color-navy-mid: #243660;
-  --color-navy-light: #5B8AC5;
+  /* Gold: the quote nodes */
+  --color-gold: #f0b429;         /* 10.74:1 on the page ground */
+  --color-gold-light: #ffd166;
+  --color-gold-dark: #c88f14;
 
-  /* Neutral */
-  --color-white: #FFFFFF;
-  --color-gray-50: #F9F9F9;
-  --color-gray-100: #F5F5F5;
-  --color-gray-200: #E0E0E0;
-  --color-gray-300: #B8B8B8;
-  --color-gray-400: #999999;
-  --color-gray-500: #6B7280;
-  --color-gray-700: #374151;
+  /* Blue: the price line */
+  --color-navy: #13233d;
+  --color-navy-mid: #1b3354;
+  --color-navy-light: #59c0ff;   /* 9.93:1 on the page ground */
 
-  /* Semantic */
-  --color-error: #EF4444;
-  --color-success: #10B981;
-  --color-focus: #C4A86B;
+  /* Ink */
+  --color-white: #eef2f8;
+  --color-gray-50: #f4f7fb;
+  --color-gray-100: #e8edf5;
+  --color-gray-200: #d4dce8;
+  --color-gray-300: #a8b6c9;     /* body copy, 8.47:1 on a card */
+  --color-gray-400: #7c8da6;     /* meta text, 5.16:1 on a card */
+  --color-gray-500: #5a7098;     /* control borders, 3.49:1 on a card */
+  --color-gray-700: #1e2c44;
+
+  /* Semantic: the hero canvas already uses these for an up and a down tick */
+  --color-error: #f87171;
+  --color-success: #6ee796;
+  --color-focus: #59c0ff;
+
+  /* Channel triplets, so rgba() overlays and glows follow the palette
+     instead of pinning the colour they were written against. */
+  --rgb-black: 5, 8, 16;
+  --rgb-gold: 240, 180, 41;
+  --rgb-navy: 19, 35, 61;
 
   /* === TYPOGRAPHY === */
   --font-heading: "Georgia", "Times New Roman", serif;
@@ -482,7 +493,7 @@ header {
 .nav-link.nav-cta[aria-current="page"]:hover {
   background-color: var(--color-gold-light) !important;
   border-color: var(--color-gold-light) !important;
-  box-shadow: 0 4px 12px rgba(196, 168, 107, 0.2);
+  box-shadow: 0 4px 12px rgba(var(--rgb-gold), 0.2);
 }
 
 /* Login Button */
@@ -502,9 +513,9 @@ header {
 }
 
 .login-button:hover {
-  background-color: rgba(26, 43, 74, 0.8);
+  background-color: rgba(var(--rgb-navy), 0.8);
   border-color: var(--color-white);
-  box-shadow: 0 4px 12px rgba(26, 43, 74, 0.3);
+  box-shadow: 0 4px 12px rgba(var(--rgb-navy), 0.3);
 }
 
 .login-button:active {
@@ -606,7 +617,7 @@ header {
   outline: none;
   border-color: var(--color-gold);
   background-color: var(--color-black-soft);
-  box-shadow: 0 0 0 2px rgba(196, 168, 107, 0.2);
+  box-shadow: 0 0 0 2px rgba(var(--rgb-gold), 0.2);
 }
 
 .login-submit {
@@ -622,9 +633,9 @@ header {
 }
 
 .login-submit:hover {
-  background-color: rgba(26, 43, 74, 0.8);
+  background-color: rgba(var(--rgb-navy), 0.8);
   border-color: var(--color-white);
-  box-shadow: 0 4px 12px rgba(26, 43, 74, 0.3);
+  box-shadow: 0 4px 12px rgba(var(--rgb-navy), 0.3);
 }
 
 .login-submit:active {
@@ -770,7 +781,7 @@ header {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(196, 168, 107, 0.05) 0%, transparent 50%, rgba(196, 168, 107, 0.05) 100%);
+  background: linear-gradient(135deg, rgba(var(--rgb-gold), 0.05) 0%, transparent 50%, rgba(var(--rgb-gold), 0.05) 100%);
   pointer-events: none;
 }
 
@@ -890,7 +901,7 @@ section:last-child {
 }
 
 section:nth-child(even) {
-  background-color: rgba(26, 43, 74, 0.3);
+  background-color: rgba(var(--rgb-navy), 0.3);
 }
 
 section .container {
@@ -1030,7 +1041,7 @@ button:active,
 .btn-primary:hover {
   background-color: var(--color-gold-light);
   border-color: var(--color-gold-light);
-  box-shadow: 0 4px 12px rgba(196, 168, 107, 0.2);
+  box-shadow: 0 4px 12px rgba(var(--rgb-gold), 0.2);
 }
 
 .btn-secondary {
@@ -1513,7 +1524,7 @@ table th {
   padding: var(--space-2);
   font-weight: var(--weight-bold);
   text-align: left;
-  background-color: rgba(26, 43, 74, 0.3);
+  background-color: rgba(var(--rgb-navy), 0.3);
 }
 
 /* Table with width distribution */
@@ -1611,8 +1622,8 @@ hr {
   bottom: 0;
   left: 0;
   width: 100%;
-  background-color: #1a1a1a; /* Dunkler Hintergrund, passend zu Black Quant Empire */
-  color: #ffffff;
+  background-color: var(--color-black-soft);
+  color: var(--color-white);
   padding: 15px 0;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.5);
   z-index: 9999;

@@ -141,6 +141,7 @@ change is made once in `components/header.html` and applies everywhere.
 | Headings | Exactly one `<h1>` per page, in the hero. Sections use `<h2>`, subsections `<h3>` — never skip a level. |
 | Title | `Seitenname - Black Quant Empire` |
 | Styling | Colours, spacing, type sizes come from the `:root` tokens in `shared.css`. Use `var(--space-4)`, not `16px`. |
+| Overlays | A translucent overlay or glow uses the channel triplets — `rgba(var(--rgb-gold), 0.2)`, `--rgb-navy`, `--rgb-black` — so it follows the palette instead of pinning the colour it was written against. `rgba(0,0,0,…)` shadows are fine as they are. |
 | Page CSS | One file per page in `assets/css/pages/`, loaded *after* `shared.css`; page-specific rules live there, not in a `<style>` block. |
 | Accessibility | Skip link, `aria-label` on every `<nav>`, alt text on every image, visible focus. The site publishes an accessibility statement — keep it honest. |
 | Images | Ship `.webp` plus a `.jpg`/`.png` fallback of the same name, and set `loading="lazy" decoding="async"` below the fold. |
@@ -208,6 +209,10 @@ Three things to keep intact when touching it:
 - It only runs while the hero is on screen and the tab is visible (`IntersectionObserver`
   plus `visibilitychange`), and under `prefers-reduced-motion` it paints one static
   frame and never starts the loop.
+- Its colours are written literally in `hero-network.js` and mirrored by the `.hero`
+  fallback gradient in `home.css`, deliberately: the canvas cannot read CSS tokens, and
+  the two must agree. They are where the site's palette came from — change them and the
+  tokens in `shared.css` together, or the page splits into two colour schemes.
 
 ### A research project
 
