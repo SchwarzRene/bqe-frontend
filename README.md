@@ -210,6 +210,12 @@ Three things to keep intact when touching it:
 - It only runs while the hero is on screen and the tab is visible (`IntersectionObserver`
   plus `visibilitychange`), and under `prefers-reduced-motion` it paints one static
   frame and never starts the loop.
+- A click is a trade at that point: an expanding ring brightens the edges it sweeps
+  over, and nearby vertices take a burst of ticks in one direction, a beat apart. The
+  listener is on `.hero`, not the canvas, so clicks over the headline count too — and
+  because nodes are drawn under an ambient camera translate, the click is put back into
+  node space (`lastCam`) before it is matched against them. The formula band below
+  shares this behaviour.
 - Its colours are written literally in `hero-network.js` and mirrored by the `.hero`
   fallback gradient in `home.css`, deliberately: the canvas cannot read CSS tokens, and
   the two must agree. They are where the site's palette came from — change them and the
@@ -230,9 +236,16 @@ It follows the same rules as the hero — sizes to its section rather than the v
 re-fits through a `ResizeObserver`, runs only while on screen and visible, and paints a
 single frame under `prefers-reduced-motion`. Two things are its own:
 
-- The canvas takes pointer events (the hero's does not): a click sends a ripple through
-  the mesh and shoves nearby formulas outward. Anything layered over it needs a positive
-  `z-index`; the canvas sits at 0 and `.formula-hint` at 1.
+- A click here also shoves nearby formulas outward, on top of the ripple and tick burst
+  the hero does. As in the hero, the listener is on the section and the canvas is
+  `pointer-events: none`. Anything layered over it needs a positive `z-index`: the
+  canvas sits at 0, `.formula-vignette` and `.formula-hint` at 1, `.formula-content`
+  at 2.
+- Its keep-out zone is measured from the `.formula-content` box, like the hero's from
+  `.hero-content`. Nodes bounce off it; formulas fade down as they cross it rather than
+  sitting behind the words, and `FLOATER_PAD` widens it for them alone, since a formula
+  is anchored at its left edge but runs a long way right of it. Change the copy freely —
+  the zone follows.
 - Floater count and type size follow the canvas area (`measureDensity`), so a phone gets
   a legible scattering instead of a desktop's worth of formulas. A wide canvas lands back
   on the reference numbers: 30 floaters, line sizes up to 26px.

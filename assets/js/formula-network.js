@@ -26,6 +26,7 @@
 
   var section = document.querySelector('.formula-network');
   var canvas = section && section.querySelector('.formula-canvas');
+  var content = section && section.querySelector('.formula-content');
   if (!section || !canvas || !canvas.getContext) return;
 
   var ctx = canvas.getContext('2d');
@@ -36,6 +37,48 @@
 
   var NET_MAX_NEIGHBORS = 3;
 
+  // ── keep-out zone ─────────────────────────────────────────────────────────
+  // Measured from the headline block itself rather than a hardcoded ellipse,
+  // so it keeps matching the copy at every breakpoint. Nodes bounce off it,
+  // and formulas drifting across it fade down instead of sitting behind the
+  // words. FLOATER_PAD widens it for the formulas only: a line is anchored at
+  // its left edge but runs a couple of hundred pixels to the right of it.
+  var textCX = 0, textCY = 0, textRX = 0, textRY = 0;
+  var FLOATER_PAD = 110;
+
+  function measureText() {
+    if (!content) { textRX = 0; textRY = 0; return; }
+    var sb = section.getBoundingClientRect();
+    var cb = content.getBoundingClientRect();
+    textCX = cb.left - sb.left + cb.width / 2;
+    textCY = cb.top - sb.top + cb.height / 2;
+    textRX = Math.min(cb.width / 2 + 48, W * 0.48);
+    textRY = Math.min(cb.height / 2 + 36, H * 0.44);
+  }
+
+  function pushOutsideText(p) {
+    if (!textRX || !textRY) return false;
+    var dx = (p.x - textCX) / textRX;
+    var dy = (p.y - textCY) / textRY;
+    var d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1 && d > 0.0001) {
+      var scale = 1 / d;
+      p.x = textCX + dx * textRX * scale;
+      p.y = textCY + dy * textRY * scale;
+      return true;
+    }
+    return d === 0;
+  }
+
+  // 1 well clear of the copy, falling to 0 at its centre.
+  function keepOutFactor(x, y) {
+    if (!textRX || !textRY) return 1;
+    var dx = (x - textCX) / (textRX + FLOATER_PAD);
+    var dy = (y - textCY) / textRY;
+    var d2 = dx * dx + dy * dy;
+    return d2 >= 1 ? 1 : d2;
+  }
+
   function resize() {
     W = section.clientWidth;
     H = section.clientHeight;
@@ -43,6 +86,7 @@
     canvas.width = Math.floor(W * DPR);
     canvas.height = Math.floor(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    measureText();
     measureDensity();
     netBuildNodes();
   }
@@ -238,7 +282,7 @@
     ctx.textBaseline = 'alphabetic';
     for (var i = 0; i < floaters.length; i++) {
       var f = floaters[i];
-      var a = alphaFor(f);
+      var a = alphaFor(f) * keepOutFactor(f.x, f.y);
       if (a <= 0.003) continue;
       if (f.kind === 'hex') {
         ctx.font = f.size + "px 'SFMono-Regular', Consolas, Menlo, monospace";
@@ -305,6 +349,7 @@
         var jx = (Math.random() - 0.5) * cellW * 0.85;
         var jy = (Math.random() - 0.5) * cellH * 0.85;
         var node = netMakeNode(cellW * (c + 0.5) + jx, cellH * (r + 0.5) + jy);
+        pushOutsideText(node);
         node.spawnT = 1; // already arrived on first build, no pop-in
         netNodes.push(node);
         made++;
@@ -398,6 +443,17 @@
       if (node.x > W) { node.x = W; node.vx *= -1; }
       if (node.y < 0) { node.y = 0; node.vy *= -1; }
       if (node.y > H) { node.y = H; node.vy *= -1; }
+      // and bounce off the keep-out zone, so nothing drifts behind the copy
+      var kx = (node.x - textCX) / (textRX || 1);
+      var ky = (node.y - textCY) / (textRY || 1);
+      if (textRX && kx * kx + ky * ky < 1) {
+        pushOutsideText(node);
+        var klen = Math.sqrt(kx * kx + ky * ky) || 1;
+        var knx = kx / klen, kny = ky / klen;
+        var vDotN = node.vx * knx + node.vy * kny;
+        node.vx -= 2 * vDotN * knx;
+        node.vy -= 2 * vDotN * kny;
+      }
 
       if (node.spawnT < 1) node.spawnT = Math.min(1, node.spawnT + dt / NET_SPAWN_DUR);
 
@@ -436,7 +492,9 @@
         netSpawnTimer = 0.35 + Math.random() * 0.75;
         netPendingSpawns--;
         var margin = Math.min(W, H) * 0.08;
-        netNodes.push(netMakeNode(margin + Math.random() * (W - margin * 2), margin + Math.random() * (H - margin * 2)));
+        var spawned = netMakeNode(margin + Math.random() * (W - margin * 2), margin + Math.random() * (H - margin * 2));
+        pushOutsideText(spawned);
+        netNodes.push(spawned);
       }
     }
 
@@ -555,9 +613,9 @@
     }
   }
 
-  canvas.addEventListener('pointerdown', function (e) {
+  section.addEventListener('pointerdown', function (e) {
     if (reduceMotion) return;
-    var rect = canvas.getBoundingClientRect();
+    var rect = section.getBoundingClientRect();
     var cx = e.clientX - rect.left, cy = e.clientY - rect.top;
     ripples.push({ x: cx, y: cy, t: 0 });
 
