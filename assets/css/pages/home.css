@@ -313,7 +313,31 @@
 .formula-content {
   position: relative;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-10);
   text-align: left;
+}
+
+/* The second panel sits opposite the first, so the two read as a pair across
+   the band rather than a stack down one edge, and the artwork keeps the
+   diagonal between them. */
+.formula-copy-alt {
+  align-self: flex-end;
+}
+
+/* Its lead is longer than the first panel's and secondary to it, so it runs a
+   size down and is allowed to wrap - only the "Math" line is held to one. */
+.formula-copy-alt .formula-lead {
+  font-size: clamp(16px, 2.5vw, 29px);
+  white-space: normal;
+  max-width: 26ch;
+}
+
+.formula-copy-alt .formula-sub {
+  white-space: normal;
+  max-width: 34ch;
 }
 
 .formula-copy {
@@ -359,6 +383,15 @@
     align-items: flex-start;
     padding-top: var(--space-8);
   }
+
+  /* Side by side has no room here, so the pair stacks on one edge. */
+  .formula-content {
+    gap: var(--space-5);
+  }
+
+  .formula-copy-alt {
+    align-self: flex-start;
+  }
 }
 
 /* On a wide screen the panel sat on the site's content gutter, which left a
@@ -366,8 +399,18 @@
    offset below is section padding + the container's centring + container
    padding, and the panel takes back half of it. */
 @media (min-width: 1024px) {
-  .formula-copy {
+  .formula-copy-lead {
     margin-left: calc(
+      -0.5 * (
+        2 * var(--space-6)
+        + (100vw - 2 * var(--space-6)
+           - min(var(--container-max), 100vw - 2 * var(--space-6))) / 2
+      )
+    );
+  }
+
+  .formula-copy-alt {
+    margin-right: calc(
       -0.5 * (
         2 * var(--space-6)
         + (100vw - 2 * var(--space-6)
