@@ -250,6 +250,9 @@ single frame under `prefers-reduced-motion`. Two things are its own:
   informative text, not a title — on a `.formula-copy` panel in the hero's own ground
   colour (`--color-black` / `#050810`), and that panel carries the contrast instead, so
   the artwork runs behind it untouched.
+- The panel sits half a gutter outboard of the site's content column on screens from
+  1024px, and rides near the top of the band rather than its middle below 768px, where
+  the section is tall relative to the copy.
 - Each sentence is one line (`white-space: nowrap` on `.formula-lead` and
   `.formula-sub`); their `clamp()` sizes are tuned so neither wraps or overflows down to
   320px. Give the two lines their own classes rather than styling `.formula-copy > p` —

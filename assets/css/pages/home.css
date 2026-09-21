@@ -314,6 +314,31 @@
   }
 }
 
+/* On a phone the band is tall and the panel floated in the middle of it, so
+   the copy sat below the fold of the section. It rides near the top instead. */
+@media (max-width: 767px) {
+  .formula-network {
+    align-items: flex-start;
+    padding-top: var(--space-8);
+  }
+}
+
+/* On a wide screen the panel sat on the site's content gutter, which left a
+   lot of empty artwork to its left. It moves half that gutter outward: the
+   offset below is section padding + the container's centring + container
+   padding, and the panel takes back half of it. */
+@media (min-width: 1024px) {
+  .formula-copy {
+    margin-left: calc(
+      -0.5 * (
+        2 * var(--space-6)
+        + (100vw - 2 * var(--space-6)
+           - min(var(--container-max), 100vw - 2 * var(--space-6))) / 2
+      )
+    );
+  }
+}
+
 /* Call to Action Buttons */
 .cta-buttons {
   display: flex;
