@@ -394,12 +394,15 @@
 /* No room for opposite corners on a phone, so the pair stacks on one edge at
    the top of the band. */
 @media (max-width: 767px) {
+  /* The panels are different widths, so each is centred on its own rather
+     than sharing a left edge: equal space either side of both. */
   .formula-content {
+    align-items: center;
     gap: var(--space-5);
   }
 
   .formula-copy-alt {
-    align-self: flex-start;
+    align-self: center;
   }
 }
 
