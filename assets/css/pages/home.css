@@ -265,9 +265,9 @@
   isolation: isolate;
   overflow: hidden;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: var(--space-16) var(--space-4);
+  padding: var(--space-10) var(--space-4);
   min-height: 62vh;
   touch-action: manipulation;
   /* what shows if the canvas never paints - mirrors drawBackground() */
@@ -277,7 +277,16 @@
 @media (min-width: 768px) {
   .formula-network {
     min-height: 70vh;
-    padding: var(--space-16) var(--space-6);
+    padding: var(--space-10) var(--space-6);
+    /* the copy column fills the band, so its two panels can hold the
+       top-left and bottom-right corners */
+    align-items: stretch;
+  }
+
+  .formula-content {
+    height: 100%;
+    justify-content: space-between;
+    gap: var(--space-8);
   }
 }
 
@@ -327,17 +336,15 @@
   align-self: flex-end;
 }
 
-/* Its lead is longer than the first panel's and secondary to it, so it runs a
-   size down and is allowed to wrap - only the "Math" line is held to one. */
+/* Both of its sentences are held to one line like the first panel's. They are
+   longer, so they run a size down and their viewport term is tuned to the
+   longest of them (52 characters) rather than to the "Math" line. */
 .formula-copy-alt .formula-lead {
-  font-size: clamp(16px, 2.5vw, 29px);
-  white-space: normal;
-  max-width: 26ch;
+  font-size: clamp(11px, 2.5vw, 29px);
 }
 
 .formula-copy-alt .formula-sub {
-  white-space: normal;
-  max-width: 34ch;
+  font-size: clamp(11px, 1.5vw, 17px);
 }
 
 .formula-copy {
@@ -378,13 +385,20 @@
 
 /* On a phone the band is tall and the panel floated in the middle of it, so
    the copy sat below the fold of the section. It rides near the top instead. */
-@media (max-width: 767px) {
-  .formula-network {
-    align-items: flex-start;
-    padding-top: var(--space-8);
+/* Measured: the longer lead needs 23.3px of width per font-pixel, so at its
+   11px floor it wants 257px plus 40px of panel padding. Below about 360px of
+   viewport that no longer fits beside the section's own padding, and holding
+   one line would mean type under 10px - so there, and only there, it wraps. */
+@media (max-width: 359px) {
+  .formula-copy-alt .formula-lead,
+  .formula-copy-alt .formula-sub {
+    white-space: normal;
   }
+}
 
-  /* Side by side has no room here, so the pair stacks on one edge. */
+/* No room for opposite corners on a phone, so the pair stacks on one edge at
+   the top of the band. */
+@media (max-width: 767px) {
   .formula-content {
     gap: var(--space-5);
   }

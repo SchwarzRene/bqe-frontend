@@ -1200,34 +1200,15 @@ footer {
   padding: var(--space-16) 0 var(--space-8);
 }
 
+/* One column per section, all four on a single row. The columns are sized
+   from the content rather than fixed fractions, so a short list does not
+   claim the same width as the long Research one. */
 .footer-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: var(--space-16);
+  grid-template-columns: repeat(4, auto);
+  justify-content: space-between;
+  gap: var(--space-12);
   margin-bottom: var(--space-12);
-}
-
-.footer-brand {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  margin-bottom: var(--space-8);
-  padding-bottom: var(--space-8);
-  border-bottom: 1px solid var(--color-gray-500);
-  order: -1;
-}
-
-.footer-brand img {
-  height: 40px;
-  width: auto;
-  flex-shrink: 0;
-}
-
-.footer-brand p {
-  color: var(--color-gray-300);
-  font-size: var(--text-sm);
-  margin-bottom: 0;
 }
 
 .footer-heading {
@@ -1244,18 +1225,6 @@ footer nav {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-
-footer nav:nth-of-type(1) {
-  grid-column: 1;
-}
-
-footer nav:nth-of-type(2) {
-  grid-column: 2;
-}
-
-footer nav:nth-of-type(3) {
-  grid-column: 3;
 }
 
 footer nav h2 {
@@ -1336,35 +1305,27 @@ footer a:hover {
 /* Responsive Footer */
 @media (max-width: 1024px) {
   .footer-grid {
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: var(--space-12);
+    grid-template-columns: repeat(4, auto);
+    gap: var(--space-8);
   }
+}
 
-  .footer-brand {
-    grid-column: 1 / -1;
+/* Four columns stop fitting here, so they pair off two by two. */
+@media (max-width: 820px) {
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+    justify-content: stretch;
+    gap: var(--space-8);
   }
 }
 
 @media (max-width: 768px) {
   .footer-grid {
-    grid-template-columns: 1fr;
-    gap: var(--space-8);
     padding: 0 var(--space-4);
-  }
-
-  .footer-brand {
-    grid-column: 1;
-    margin-bottom: var(--space-4);
   }
 
   .footer-heading {
     font-size: var(--text-sm);
-  }
-
-  footer nav:nth-of-type(1),
-  footer nav:nth-of-type(2),
-  footer nav:nth-of-type(3) {
-    grid-column: 1;
   }
 }
 
@@ -1374,22 +1335,10 @@ footer a:hover {
   }
 
   .footer-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: var(--space-6);
     padding: 0 var(--space-4);
     margin-bottom: var(--space-8);
-  }
-
-  .footer-brand {
-    margin-bottom: var(--space-4);
-  }
-
-  .footer-brand img {
-    height: 32px;
-  }
-
-  .footer-brand p {
-    font-size: var(--text-xs);
   }
 
   .footer-heading {
