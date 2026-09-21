@@ -278,15 +278,17 @@
   .formula-network {
     min-height: 70vh;
     padding: var(--space-10) var(--space-6);
-    /* the copy column fills the band, so its two panels can hold the
-       top-left and bottom-right corners */
-    align-items: stretch;
+    /* The pair is centred as a group, so the midpoint between the two panels
+       is the band's own midpoint. Stretching the column and spreading it with
+       space-between does not do that: height:100% never resolves here, since
+       the section is sized by min-height rather than height, so the column
+       kept its content height and sat at the top of the band. */
+    align-items: center;
   }
 
   .formula-content {
-    height: 100%;
-    justify-content: space-between;
-    gap: var(--space-8);
+    justify-content: center;
+    gap: var(--space-16);
   }
 }
 
@@ -336,16 +338,9 @@
   align-self: flex-end;
 }
 
-/* Both of its sentences are held to one line like the first panel's. They are
-   longer, so they run a size down and their viewport term is tuned to the
-   longest of them (52 characters) rather than to the "Math" line. */
-.formula-copy-alt .formula-lead {
-  font-size: clamp(11px, 2.5vw, 29px);
-}
-
-.formula-copy-alt .formula-sub {
-  font-size: clamp(11px, 1.5vw, 17px);
-}
+/* Both panels share one lead size and one sub size. The sizes are set by the
+   longest line of the four - the second panel's lead, at 23.3px of width per
+   font-pixel - so matching them costs the "Math" line its old 42px ceiling. */
 
 .formula-copy {
   display: inline-block;
@@ -361,7 +356,7 @@
 
 .formula-lead {
   color: rgba(238, 242, 248, 0.62);
-  font-size: clamp(14px, 3.8vw, 42px);
+  font-size: clamp(11px, 2.6vw, 34px);
   line-height: 1.2;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -371,7 +366,7 @@
 
 .formula-sub {
   color: rgba(238, 242, 248, 0.45);
-  font-size: clamp(11px, 1.8vw, 19px);
+  font-size: clamp(13px, 1.7vw, 19px);
   line-height: 1.5;
   margin: 0;
   white-space: nowrap;
