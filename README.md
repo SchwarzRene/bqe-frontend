@@ -210,8 +210,11 @@ Three things to keep intact when touching it:
 - It only runs while the hero is on screen and the tab is visible (`IntersectionObserver`
   plus `visibilitychange`), and under `prefers-reduced-motion` it paints one static
   frame and never starts the loop.
-- The copy's resting style is fully visible and `hero-rise` carries its own from-state,
-  so the headline can never be left invisible by an animation that does not run.
+- `hero-rise` animates **transform only**. Opacity is deliberately absent from both the
+  elements and the keyframes: a base `opacity: 0`, or a from-state pinned by `fill-mode`
+  backwards, leaves the headline invisible whenever the animation does not advance —
+  which is exactly how the hero copy used to disappear. Do not reintroduce an opacity
+  fade here.
 - A click is a trade at that point: an expanding ring brightens the edges it sweeps
   over, and nearby vertices take a burst of ticks in one direction, a beat apart. The
   listener is on `.hero`, not the canvas, so clicks over the headline count too — and
@@ -243,9 +246,18 @@ single frame under `prefers-reduced-motion`. Two things are its own:
   `pointer-events: none`. Anything layered over it needs a positive `z-index`: the
   canvas sits at 0, `.formula-vignette` and `.formula-hint` at 1, `.formula-content`
   at 2.
-- Its keep-out zone is measured from the `.formula-copy` box (the tight copy block, not
-  the full-width container around it), like the hero's from `.hero-content`. The copy is
-  set left and in grey — informative text, not a title — so the zone sits left with it. Nodes bounce off it; formulas fade down as they cross it rather than
+- It has **no** keep-out zone, unlike the hero. Its copy is set left and in grey —
+  informative text, not a title — on a `.formula-copy` panel in the hero's own ground
+  colour (`--color-black` / `#050810`), and that panel carries the contrast instead, so
+  the artwork runs behind it untouched.
+- Each sentence is one line (`white-space: nowrap` on `.formula-lead` and
+  `.formula-sub`); their `clamp()` sizes are tuned so neither wraps or overflows down to
+  320px. Give the two lines their own classes rather than styling `.formula-copy > p` —
+  that selector outranks `.formula-sub` and silently flattens both to one size.
+- Its gradient starts on the hero's ground and climbs to the lighter blue, in both
+  `drawBackground()` and the `.formula-network` CSS fallback; the two must agree. A
+  `.band-divider` of pure black separates it from the hero, since both canvases meet
+  on `#050810` and would otherwise run together. Nodes bounce off it; formulas fade down as they cross it rather than
   sitting behind the words, and `FLOATER_PAD` widens it for them alone, since a formula
   is anchored at its left edge but runs a long way right of it. Change the copy freely —
   the zone follows.

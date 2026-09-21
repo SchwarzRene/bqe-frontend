@@ -10,7 +10,7 @@
     <title>Startseite - Black Quant Empire</title>
 
     <link rel="stylesheet" href="/assets/css/shared.css?v=2" />
-    <link rel="stylesheet" href="/assets/css/pages/home.css?v=7" />
+    <link rel="stylesheet" href="/assets/css/pages/home.css?v=9" />
     <link rel="icon" href="/assets/images/logo.png" type="image/png" />
   </head>
 
@@ -34,20 +34,23 @@
         <div class="container text-center hero-content">
           <p class="hero-eyebrow">QUANTITATIVE HEDGING</p>
           <h1>Black Quant Empire</h1>
-          <p class="hero-sub">Every tick new information — every tick a decision.</p>
+          <p class="hero-sub">Every tick is new information — every tick is a decision.</p>
         </div>
       </section>
+
+      <!-- A black seam between the two canvases, so they read as two
+           separate pieces rather than one continuous gradient. -->
+      <div class="band-divider" aria-hidden="true"></div>
 
       <!-- Formula Network -->
       <!-- Generated formulas drifting over the market mesh; click sends a
            ripple through it. See assets/js/formula-network.js -->
       <section class="formula-network">
         <canvas class="formula-canvas" aria-hidden="true"></canvas>
-        <div class="formula-vignette" aria-hidden="true"></div>
 
         <div class="container formula-content">
           <div class="formula-copy">
-            <p>Math — the foundation of everything.</p>
+            <p class="formula-lead">Math — the foundation of everything.</p>
             <p class="formula-sub">Every decision at BQE is backed by it.</p>
           </div>
         </div>
@@ -109,8 +112,8 @@
     <!-- Scripts -->
     <script src="/assets/js/components.js"></script>
     <script src="/assets/js/navigation.js"></script>
-    <script src="/assets/js/hero-network.js"></script>
-    <script src="/assets/js/formula-network.js"></script>
+    <script src="/assets/js/hero-network.js?v=2"></script>
+    <script src="/assets/js/formula-network.js?v=2"></script>
 
     <div id="cookie-banner" class="cookie-banner" style="display: none;">
       <div class="container">

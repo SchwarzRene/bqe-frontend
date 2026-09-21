@@ -117,16 +117,17 @@
   animation: hero-rise 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s both;
 }
 
-/* The from-state lives here, not on the elements: the copy's resting style is
-   fully visible, so it can never be left invisible by an animation that does
-   not run. */
+/* The entrance moves the copy, it does not reveal it. Opacity is deliberately
+   left out of both the elements and these keyframes: anything that animated it
+   from 0 - a base opacity:0, or a from-state pinned by fill-mode backwards -
+   leaves the headline invisible whenever the animation does not advance, which
+   is exactly how the hero copy used to disappear. Transform-only cannot fail
+   that way: at rest, mid-animation or with animations off, the text is opaque. */
 @keyframes hero-rise {
   from {
-    opacity: 0;
     transform: translateY(var(--rise, 10px));
   }
   to {
-    opacity: 1;
     transform: none;
   }
 }
@@ -231,8 +232,8 @@
   padding: var(--space-16) var(--space-4);
   min-height: 62vh;
   touch-action: manipulation;
-  /* what shows if the canvas never paints */
-  background: linear-gradient(180deg, #070b17 0%, #0a1226 55%, #0b1730 100%);
+  /* what shows if the canvas never paints - mirrors drawBackground() */
+  background: linear-gradient(180deg, #050810 0%, #0b1730 100%);
 }
 
 @media (min-width: 768px) {
@@ -253,27 +254,21 @@
   pointer-events: none;
 }
 
-.formula-vignette {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  pointer-events: none;
-  background: radial-gradient(
-    ellipse at 28% 50%,
-    rgba(6, 10, 22, 0.72) 0%,
-    rgba(6, 10, 22, 0.34) 45%,
-    rgba(6, 10, 22, 0) 72%
-  );
+/* A black seam between the hero and the maths band. Both canvases end and
+   begin on #050810, so the divider is pure black to stay visible against
+   them. */
+.band-divider {
+  height: 5vh;
+  min-height: 24px;
+  background: #000;
 }
 
 /* Informative copy over the artwork, not a headline: set left against the
-   site's content gutter and in the same grey as the line under it, so the
-   section reads as a statement rather than a title. The canvas keep-out zone
-   is measured from .formula-copy, so it tracks the text and not the
-   full-width container. */
+   site's content gutter, on a panel in the hero's own ground colour
+   (--color-black / #050810) so the band sits in the same world as the section
+   above it. The panel carries the copy's contrast, so the artwork runs behind
+   it untouched - no keep-out zone and no vignette. Each sentence is one line;
+   the sizes below are tuned so neither wraps or overflows down to 320px. */
 .formula-content {
   position: relative;
   z-index: 2;
@@ -281,25 +276,39 @@
 }
 
 .formula-copy {
-  max-width: 34ch;
+  display: inline-block;
+  max-width: 100%;
+  padding: var(--space-6) var(--space-8);
+  border-radius: var(--radius-lg);
+  background: rgba(var(--rgb-black), 0.82);
+  border: 1px solid rgba(var(--rgb-navy), 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
 }
 
-.formula-copy > p {
+.formula-lead {
   color: rgba(238, 242, 248, 0.62);
-  font-size: clamp(24px, 3.4vw, 44px);
+  font-size: clamp(14px, 3.8vw, 42px);
   line-height: 1.2;
   font-weight: 500;
   letter-spacing: -0.01em;
-  margin: 0 0 var(--space-4);
-  text-shadow: 0 2px 28px rgba(3, 5, 10, 0.65);
+  margin: 0 0 var(--space-3);
+  white-space: nowrap;
 }
 
 .formula-sub {
   color: rgba(238, 242, 248, 0.45);
-  font-size: clamp(15px, 1.7vw, 19px);
-  line-height: 1.55;
+  font-size: clamp(11px, 1.8vw, 19px);
+  line-height: 1.5;
   margin: 0;
-  text-shadow: 0 2px 18px rgba(3, 5, 10, 0.6);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .formula-copy {
+    padding: var(--space-4) var(--space-5);
+  }
 }
 
 .formula-hint {
@@ -373,8 +382,7 @@
   .hero-canvas,
   .hero-vignette,
   .hero-grain,
-  .formula-canvas,
-  .formula-vignette {
+  .formula-canvas {
     display: none;
   }
 
