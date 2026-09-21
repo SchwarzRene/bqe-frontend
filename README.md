@@ -34,7 +34,7 @@ Consequences worth remembering:
 ## Repository layout
 
 ```
-├── index.html              Start page (animated market-network hero)
+├── index.html              Start page (market-network hero, formula-network band)
 ├── about.html              Über uns — brand and trademark documentation
 ├── strategy.html           Trading strategy
 ├── careers.html            Open roles
@@ -58,10 +58,11 @@ Consequences worth remembering:
 │   │   ├── components.js   Injects header/footer, sets aria-current, fills the year
 │   │   ├── navigation.js   Burger menu + login modal
 │   │   ├── hero-network.js Start page hero animation (canvas)
+│   │   ├── formula-network.js Start page formula band animation (canvas)
 │   │   └── form.js         Contact form validation (WCAG error handling)
 │   ├── images/             Page imagery, each as .webp + .jpg/.png fallback
 │   ├── captions/de.vtt     Captions for assets/video.mp4
-│   └── video.mp4           "Was wir tun" clip
+│   └── video.mp4           Unused since the "Was wir tun" section was replaced
 │
 ├── research/               Research write-ups, one file or folder per project
 │   ├── index.html          Research index
@@ -209,10 +210,48 @@ Three things to keep intact when touching it:
 - It only runs while the hero is on screen and the tab is visible (`IntersectionObserver`
   plus `visibilitychange`), and under `prefers-reduced-motion` it paints one static
   frame and never starts the loop.
+- The copy's resting style is fully visible and `hero-rise` carries its own from-state,
+  so the headline can never be left invisible by an animation that does not run.
+- A click is a trade at that point: an expanding ring brightens the edges it sweeps
+  over, and nearby vertices take a burst of ticks in one direction, a beat apart. The
+  listener is on `.hero`, not the canvas, so clicks over the headline count too — and
+  because nodes are drawn under an ambient camera translate, the click is put back into
+  node space (`lastCam`) before it is matched against them. The formula band below
+  shares this behaviour.
 - Its colours are written literally in `hero-network.js` and mirrored by the `.hero`
   fallback gradient in `home.css`, deliberately: the canvas cannot read CSS tokens, and
   the two must agree. They are where the site's palette came from — change them and the
   tokens in `shared.css` together, or the page splits into two colour schemes.
+
+### The start page formula band
+
+Below the hero, `.formula-network` is a second canvas animation
+(`assets/js/formula-network.js`). It replaced the old "Was wir tun" section: the focus
+list it carried lives in full on `strategy.html`, and the risk warning it ended with is
+in the site-wide footer, so nothing moved out of reach.
+
+Formulas are generated from templates in `LINE_TEMPLATES`, not drawn from a fixed list —
+add a template and it joins the rotation. Behind them runs the same mesh as the hero,
+with a shared market regime (calm, bull, bear, crash) biasing every node's tick at once.
+
+It follows the same rules as the hero — sizes to its section rather than the viewport,
+re-fits through a `ResizeObserver`, runs only while on screen and visible, and paints a
+single frame under `prefers-reduced-motion`. Two things are its own:
+
+- A click here also shoves nearby formulas outward, on top of the ripple and tick burst
+  the hero does. As in the hero, the listener is on the section and the canvas is
+  `pointer-events: none`. Anything layered over it needs a positive `z-index`: the
+  canvas sits at 0, `.formula-vignette` and `.formula-hint` at 1, `.formula-content`
+  at 2.
+- Its keep-out zone is measured from the `.formula-copy` box (the tight copy block, not
+  the full-width container around it), like the hero's from `.hero-content`. The copy is
+  set left and in grey — informative text, not a title — so the zone sits left with it. Nodes bounce off it; formulas fade down as they cross it rather than
+  sitting behind the words, and `FLOATER_PAD` widens it for them alone, since a formula
+  is anchored at its left edge but runs a long way right of it. Change the copy freely —
+  the zone follows.
+- Floater count and type size follow the canvas area (`measureDensity`), so a phone gets
+  a legible scattering instead of a desktop's worth of formulas. A wide canvas lands back
+  on the reference numbers: 30 floaters, line sizes up to 26px.
 
 ### A research project
 

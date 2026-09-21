@@ -374,6 +374,107 @@
     }
   }
 
+  // ── click ripple ──────────────────────────────────────────────────────────
+  // A click is a trade at that point: an expanding ring brightens the mesh
+  // edges it passes over, and the vertices around it take a short burst of
+  // ticks, all in the same direction, landing a beat apart rather than as one
+  // lump sum. Shared with the formula band below (formula-network.js).
+  var ripples = [];
+  var clickBursts = [];
+  var CLICK_TICK_RADIUS = 220;
+  var CLICK_TICK_COUNT = 3;
+  var CLICK_TICK_INTERVAL = 0.42; // seconds between ticks in a burst
+
+  function applyClickTick(b) {
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.dying) continue;
+      var d = Math.hypot(n.x - b.x, n.y - b.y);
+      if (d >= CLICK_TICK_RADIUS) continue;
+
+      var closeness = 1 - d / CLICK_TICK_RADIUS;
+      // harder than a passive tick - a deliberate trade should land
+      var magnitude = (6 + n.value * 0.06) * closeness * (0.85 + Math.random() * 0.65);
+      var delta = b.dir * magnitude;
+      n.value = Math.max(0, n.value + delta);
+      n.changeTimer = nextChangeTimer(n.tier); // don't double-fire right after
+
+      if (magnitude > 0.15) {
+        floats.push({
+          x: n.x, y: n.y, z: n.z,
+          text: (delta >= 0 ? '+' : '\u2212') + Math.abs(delta).toFixed(2),
+          up: delta >= 0,
+          life: 0
+        });
+      }
+
+      if (n.value <= 0) {
+        n.dying = true;
+        n.deathT = 0;
+        fadeOutEdgesFor(n);
+      }
+    }
+  }
+
+  function updateClickBursts(dt) {
+    for (var i = clickBursts.length - 1; i >= 0; i--) {
+      var b = clickBursts[i];
+      b.timer -= dt;
+      if (b.timer > 0) continue;
+      applyClickTick(b);
+      b.remaining--;
+      b.timer = CLICK_TICK_INTERVAL;
+      if (b.remaining <= 0) clickBursts.splice(i, 1);
+    }
+  }
+
+  function updateRipples(dt) {
+    for (var i = ripples.length - 1; i >= 0; i--) {
+      ripples[i].t += dt;
+      if (ripples[i].t > 1.4) ripples.splice(i, 1);
+    }
+  }
+
+  function drawRippleHighlights() {
+    for (var r = 0; r < ripples.length; r++) {
+      var rp = ripples[r];
+      var radius = rp.t * 700;
+      var band = 90;
+      var a = Math.max(0, 1 - rp.t / 1.4);
+      for (var key in edgeMap) {
+        var e = edgeMap[key];
+        var mx = (e.a.x + e.b.x) / 2, my = (e.a.y + e.b.y) / 2;
+        var d = Math.hypot(mx - rp.x, my - rp.y);
+        if (Math.abs(d - radius) >= band) continue;
+        var edgeA = a * (1 - Math.abs(d - radius) / band) * 0.9 * e.alpha;
+        ctx.strokeStyle = 'rgba(180,232,255,' + edgeA.toFixed(3) + ')';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(e.a.x, e.a.y);
+        ctx.lineTo(e.b.x, e.b.y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Nodes are drawn under an ambient camera translate, so a click has to be
+  // put back into node space before it can be matched against them.
+  var lastCam = { x: 0, y: 0 };
+
+  hero.addEventListener('pointerdown', function (e) {
+    if (reduceMotion) return;
+    var hb = hero.getBoundingClientRect();
+    var cx = e.clientX - hb.left - lastCam.x;
+    var cy = e.clientY - hb.top - lastCam.y;
+    ripples.push({ x: cx, y: cy, t: 0 });
+    clickBursts.push({
+      x: cx, y: cy,
+      dir: Math.random() < 0.5 ? 1 : -1,
+      remaining: CLICK_TICK_COUNT,
+      timer: 0
+    });
+  });
+
   // ── background price line: Ornstein-Uhlenbeck (mean-reverting) ────────────
   // Bounds are this chart's own normalised value space: L/U = -1/1, mu = 0.
   // Faster theta and lower sigma than a quote feed, so it reads as its own
@@ -464,12 +565,16 @@
     drawPriceLine(dt);
 
     var cam = camOffset(t);
+    lastCam = cam;
     ctx.save();
     ctx.translate(cam.x, cam.y);
     updateNodes(dt);
+    updateRipples(dt);
+    updateClickBursts(dt);
     drawEdges();
     drawNodes(t);
     drawFloats();
+    drawRippleHighlights();
     ctx.restore();
   }
 
