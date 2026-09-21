@@ -10,7 +10,7 @@
     <title>Startseite - Black Quant Empire</title>
 
     <link rel="stylesheet" href="/assets/css/shared.css" />
-    <link rel="stylesheet" href="/assets/css/pages/home.css?v=2" />
+    <link rel="stylesheet" href="/assets/css/pages/home.css?v=3" />
     <link rel="icon" href="/assets/images/logo.png" type="image/png" />
   </head>
 
@@ -25,31 +25,16 @@
     <main id="main-content">
       <!-- Hero Section -->
       <section class="hero">
-        <!-- Background video (decorative, muted, looping, 0.7x cut) -->
-        <video
-          class="hero-video"
-          autoplay
-          muted
-          loop
-          playsinline
-          webkit-playsinline
-          disablepictureinpicture
-          preload="auto"
-          poster="/assets/images/hero-poster.jpg"
-          aria-hidden="true"
-          tabindex="-1"
-        >
-          <source src="/assets/hero.mp4?v=2" type="video/mp4" />
-        </video>
-        <div class="hero-scrim" aria-hidden="true"></div>
+        <!-- Market network (decorative): quotes that tick, connect and expire,
+             over an Ornstein-Uhlenbeck price line. See assets/js/hero-network.js -->
+        <canvas class="hero-canvas" aria-hidden="true"></canvas>
+        <div class="hero-vignette" aria-hidden="true"></div>
+        <div class="hero-grain" aria-hidden="true"></div>
 
         <div class="container text-center hero-content">
+          <p class="hero-eyebrow">QUANTITATIVE HEDGING</p>
           <h1>Black Quant Empire</h1>
-          <p class="lead">
-            Quantitativer Handel auf Basis von Mathematik. Swing- und Day-Trading-Strategien
-            für Gold- und NASDAQ-Futures.
-          </p>
-          <a href="/contact.html" class="btn btn-primary">Kontaktieren Sie uns</a>
+          <p class="hero-sub">Every tick new information — every tick a decision.</p>
         </div>
       </section>
 
@@ -154,51 +139,7 @@
     <!-- Scripts -->
     <script src="/assets/js/components.js"></script>
     <script src="/assets/js/navigation.js"></script>
-
-    <script>
-      // The hero film is decorative and has no controls, so it has to start
-      // itself. Phones are the fussy case: iOS only autoplays a muted inline
-      // video, and both iOS and Android stop playback when the tab goes to the
-      // background without always resuming it. Inline rather than in a file so
-      // a stale cached script can never leave the hero on a still frame.
-      (function () {
-        var video = document.querySelector('.hero-video');
-        if (!video) return;
-
-        // Safari honours the property, not only the attribute.
-        video.muted = true;
-        video.defaultMuted = true;
-
-        function start() {
-          var attempt = video.play();
-          if (attempt && attempt.catch) {
-            attempt.catch(function () {
-              /* Blocked (Low Power Mode, data saver): the listeners below retry. */
-            });
-          }
-        }
-
-        // A browser that drops the loop attribute still starts over.
-        video.addEventListener('ended', function () {
-          video.currentTime = 0;
-          start();
-        });
-
-        video.addEventListener('loadedmetadata', start);
-        video.addEventListener('canplay', start);
-
-        document.addEventListener('visibilitychange', function () {
-          if (!document.hidden) start();
-        });
-
-        // Last resort: start on the first touch or key anywhere on the page.
-        ['pointerdown', 'touchstart', 'keydown'].forEach(function (name) {
-          document.addEventListener(name, start, { once: true, passive: true });
-        });
-
-        start();
-      })();
-    </script>
+    <script src="/assets/js/hero-network.js"></script>
 
     <div id="cookie-banner" class="cookie-banner" style="display: none;">
       <div class="container">

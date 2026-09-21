@@ -34,7 +34,7 @@ Consequences worth remembering:
 ## Repository layout
 
 ```
-├── index.html              Start page (hero background film)
+├── index.html              Start page (animated market-network hero)
 ├── about.html              Über uns — brand and trademark documentation
 ├── strategy.html           Trading strategy
 ├── careers.html            Open roles
@@ -57,10 +57,10 @@ Consequences worth remembering:
 │   ├── js/
 │   │   ├── components.js   Injects header/footer, sets aria-current, fills the year
 │   │   ├── navigation.js   Burger menu + login modal
+│   │   ├── hero-network.js Start page hero animation (canvas)
 │   │   └── form.js         Contact form validation (WCAG error handling)
 │   ├── images/             Page imagery, each as .webp + .jpg/.png fallback
 │   ├── captions/de.vtt     Captions for assets/video.mp4
-│   ├── hero.mp4            Start page background film (720p, silent, 0.7× cut)
 │   └── video.mp4           "Was wir tun" clip
 │
 ├── research/               Research write-ups, one file or folder per project
@@ -173,24 +173,41 @@ alternating background.
 ### An image or a video
 
 - Images go in `assets/images/` as a `.webp` plus a `.jpg`/`.png` fallback.
-- Video is committed to the repository, so encode before adding. The start page film was
-  produced from a 1080p source with:
+- Video is committed to the repository, so encode before adding — a phone should not
+  download a 1080p master:
 
   ```bash
-  ffmpeg -i source.mp4 -an \
-    -vf "scale=1280:720:flags=lanczos,setpts=PTS/0.7,\
-         minterpolate=fps=30:mi_mode=mci:mc_mode=aobmc:vsbmc=1" \
-    -c:v libx264 -preset medium -crf 29 -pix_fmt yuv420p -movflags +faststart \
-    assets/hero.mp4
+  ffmpeg -i source.mp4 -an -vf "scale=1280:720:flags=lanczos" \
+    -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p -movflags +faststart \
+    assets/beispiel.mp4
   ```
 
-  `-an` drops the audio track (a background video must be silent anyway, and browsers
-  only autoplay muted video), `setpts` slows it, and `minterpolate` rebuilds a true
-  30 fps from the slowed frames so the motion stays smooth. Also export a poster frame
-  to `assets/images/` for the loading state and for `prefers-reduced-motion`.
+  `-an` drops the audio (a background video must be silent anyway — browsers only
+  autoplay muted video) and `+faststart` moves the index to the front so playback can
+  begin before the file finishes downloading. Keep the source frame rate: resampling
+  30 fps to 25 duplicates frames unevenly and judders. Also export a poster frame to
+  `assets/images/` for the loading state and for `prefers-reduced-motion`.
 - **When you replace a media file or a stylesheet in place, bump its version query**
-  (`hero.mp4?v=3`, `home.css?v=3`). Browsers and the Pages CDN cache these aggressively;
+  (`video.mp4?v=2`, `home.css?v=3`). Browsers and the Pages CDN cache these aggressively;
   without a new URL, phones keep serving the old file.
+
+### The start page hero
+
+The hero is a canvas animation (`assets/js/hero-network.js`), not a video: nodes are
+quotes that tick on their own schedule and expire when they reach zero, over a price
+line following an Ornstein-Uhlenbeck process.
+
+Three things to keep intact when touching it:
+
+- It sizes itself to the `.hero` element, not the viewport, and re-fits through a
+  `ResizeObserver`. Nothing in it may assume `window.innerWidth`.
+- Its keep-out ellipse is measured from the `.hero-content` box, so nodes bounce off
+  the headline instead of drifting behind it. Change the copy freely — the zone
+  follows. Add a layer of your own and give it a positive `z-index`; the canvas,
+  vignette and grain occupy 0 and 1.
+- It only runs while the hero is on screen and the tab is visible (`IntersectionObserver`
+  plus `visibilitychange`), and under `prefers-reduced-motion` it paints one static
+  frame and never starts the loop.
 
 ### A research project
 

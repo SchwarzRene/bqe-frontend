@@ -2,33 +2,46 @@
    Home Page Specific Styles - Improved Design
    =================================================================== */
 
-/* Hero Section */
+/* ───────────────────────────────────────────────────────────────────
+   HERO - the market network
+   A canvas fills the section, a vignette and a film grain sit over it,
+   and the copy sits on top. All three layers use positive z-indexes so
+   nothing can paint over the headline.
+   ─────────────────────────────────────────────────────────────────── */
+
 .hero {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  background: linear-gradient(135deg, var(--color-black) 0%, rgba(26, 43, 74, 0.4) 100%);
-  padding: var(--space-12) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 74vh;
+  padding: var(--space-16) var(--space-4);
   text-align: center;
+  /* what shows if the canvas never paints */
+  background: linear-gradient(180deg, #070b15 0%, #0a1220 55%, #050810 100%);
 }
 
-/* Background Video - fills the hero, behind everything in it.
-   The three hero layers stack on positive z-indexes: a negative one
-   would let a composited video layer paint over the headline. */
-.hero-video {
+@media (min-width: 768px) {
+  .hero {
+    min-height: 80vh;
+    padding: var(--space-16) var(--space-6);
+  }
+}
+
+.hero-canvas {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center;
   z-index: 0;
+  display: block;
   pointer-events: none;
 }
 
-/* Scrim - keeps the headline readable over the moving footage */
-.hero-scrim {
+.hero-vignette {
   position: absolute;
   top: 0;
   left: 0;
@@ -36,79 +49,85 @@
   height: 100%;
   z-index: 1;
   pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(10, 10, 10, 0.55) 0%, rgba(10, 10, 10, 0.75) 100%),
-    linear-gradient(135deg, rgba(10, 10, 10, 0.4) 0%, rgba(26, 43, 74, 0.35) 100%);
+  background: radial-gradient(
+    ellipse at 50% 38%,
+    rgba(5, 8, 16, 0) 0%,
+    rgba(5, 8, 16, 0.15) 55%,
+    rgba(3, 5, 10, 0.72) 100%
+  );
+}
+
+.hero-grain {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 .hero-content {
   position: relative;
   z-index: 2;
+  transform: translateY(-4vh);
 }
 
-@media (min-width: 768px) {
-  .hero {
-    padding: var(--space-16) var(--space-6);
-    min-height: 52vh;
-  }
-}
-
-@media (min-width: 1024px) {
-  .hero {
-    padding: var(--space-24) 0;
-    min-height: 60vh;
-  }
+.hero-eyebrow {
+  color: #59c0ff;
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: hero-rise 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s forwards;
 }
 
 .hero h1 {
-  font-size: var(--text-2xl);
-  color: var(--color-white);
-  margin-bottom: var(--space-2);
-  font-weight: 700;
-  letter-spacing: -1px;
+  color: #eef2f8;
+  font-size: clamp(34px, 6.4vw, 84px);
+  line-height: 1.04;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 18px auto 14px;
+  max-width: 16ch;
+  text-shadow: 0 2px 28px rgba(3, 5, 10, 0.55);
+  opacity: 0;
+  transform: translateY(14px);
+  animation: hero-rise 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.32s forwards;
 }
 
-@media (min-width: 768px) {
-  .hero h1 {
-    font-size: var(--text-4xl);
+.hero-sub {
+  color: rgba(238, 242, 248, 0.58);
+  font-size: clamp(15px, 1.7vw, 19px);
+  max-width: 46ch;
+  line-height: 1.55;
+  margin: 0 auto;
+  opacity: 0;
+  transform: translateY(10px);
+  animation: hero-rise 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
+}
+
+@keyframes hero-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@media (min-width: 1024px) {
-  .hero h1 {
-    font-size: var(--text-hero);
+/* The copy must never depend on the animation having run. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-eyebrow,
+  .hero h1,
+  .hero-sub {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
-}
-
-.hero .lead {
-  font-size: var(--text-base);
-  color: var(--color-gray-300);
-  margin-bottom: var(--space-8);
-  max-width: 700px;
-  margin-left: auto;
-  margin-right: auto;
-  font-weight: 300;
-  line-height: 1.6;
-  padding: 0 var(--space-4);
-}
-
-@media (min-width: 768px) {
-  .hero .lead {
-    font-size: var(--text-lg);
-    margin-bottom: var(--space-12);
-    padding: 0;
-  }
-}
-
-@media (min-width: 1024px) {
-  .hero .lead {
-    font-size: var(--text-xl);
-  }
-}
-
-.hero .btn-primary {
-  font-size: var(--text-base);
-  padding: var(--space-4) var(--space-8);
 }
 
 /* What We Do Section - Reduced Top Padding */
@@ -255,15 +274,7 @@ main > section:nth-of-type(2) {
 /* Responsive */
 @media (max-width: 768px) {
   .hero {
-    padding: var(--space-12) 0;
-  }
-
-  .hero h1 {
-    font-size: var(--text-4xl);
-  }
-
-  .hero .lead {
-    font-size: var(--text-lg);
+    padding: var(--space-12) var(--space-4);
   }
 
   .features-grid {
@@ -278,10 +289,6 @@ main > section:nth-of-type(2) {
 
   .cta-buttons .btn {
     width: 100%;
-  }
-
-  .hero {
-    min-height: 58vh;
   }
 
   /* What We Do - Stack on Mobile */
@@ -307,18 +314,7 @@ main > section:nth-of-type(2) {
 
 @media (max-width: 480px) {
   .hero {
-    padding: var(--space-8) 0;
-    min-height: 56vh;
-  }
-
-  .hero h1 {
-    font-size: var(--text-3xl);
-    margin-bottom: var(--space-4);
-  }
-
-  .hero .lead {
-    font-size: var(--text-base);
-    margin-bottom: var(--space-6);
+    padding: var(--space-12) var(--space-4);
   }
 
   .features-grid {
@@ -342,25 +338,11 @@ main > section:nth-of-type(2) {
   }
 }
 
-/* Reduced Motion - freeze the hero on its poster frame */
-@media (prefers-reduced-motion: reduce) {
-  .hero {
-    background-image:
-      linear-gradient(135deg, var(--color-black) 0%, rgba(26, 43, 74, 0.4) 100%),
-      url("/assets/images/hero-poster.jpg");
-    background-size: cover;
-    background-position: center;
-  }
-
-  .hero-video {
-    display: none;
-  }
-}
-
-/* Forced Colours - drop the footage, keep the plain background */
+/* Forced Colours - drop the artwork, keep a plain readable header */
 @media (forced-colors: active) {
-  .hero-video,
-  .hero-scrim {
+  .hero-canvas,
+  .hero-vignette,
+  .hero-grain {
     display: none;
   }
 }
