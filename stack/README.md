@@ -17,6 +17,12 @@ Until the first fetch runs, the page falls back to its built-in simulated
 series and the header badge says "Simulated prices". After the first run the
 badge turns green and shows the refresh date.
 
+Once a dataset exists, a card scrolling into view waits for its own file
+instead of drawing simulated bars for a few hundred milliseconds: the panes
+stay empty until the real ones land (usually one frame on a warm cache). If a
+ticker's file cannot be read at all, that card falls back to the simulation so
+it is never permanently blank.
+
 ## Files
 
 ```

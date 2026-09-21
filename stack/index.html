@@ -117,7 +117,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 /* ---------- marked charts, one swipe to the left of the feed ---------- */
 #saved{
   position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;flex-direction:column;
-  transform:translateX(-100%);transition:transform .26s ease;
+  transform:translateX(-100%);transition:transform .26s ease;will-change:transform;
   touch-action:pan-y;overscroll-behavior:contain;
 }
 #saved.open{transform:none}
@@ -204,7 +204,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .panes{flex:1 1 auto;min-height:0;display:grid;grid-template-rows:repeat(4,1fr);gap:6px}
 .pane{
   position:relative;background:var(--pane);border:1px solid var(--rule);border-radius:9px;
-  overflow:hidden;cursor:zoom-in;touch-action:pan-y;
+  overflow:hidden;cursor:zoom-in;touch-action:pan-y;contain:layout paint;
 }
 .pane canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .paxis{
@@ -902,10 +902,16 @@ function fromColumns(col){
   for (let i=0;i<n;i++) out[i] = { t: col.t[i]*tu, o: col.o[i], h: col.h[i], l: col.l[i], c: col.c[i] };
   return out;
 }
+/* Bars for a symbol, or null while the real ones are still in flight.
+   Building the simulated fallback costs tens of milliseconds per symbol —
+   paid on mount, mid-scroll, for bars that are replaced a moment later and
+   that show a made-up price in the meantime. With a dataset present the
+   card waits instead; loadReal falls back to the simulation if the fetch
+   comes back empty. */
 function series(sym){
   const r = realCache.get(sym);
   if (r) return r;
-  if (dataset) loadReal(sym);
+  if (dataset){ loadReal(sym); return null; }
   return simSeries(sym);
 }
 async function loadReal(sym){
@@ -930,8 +936,12 @@ async function loadReal(sym){
         refreshSymbol(sym);
       }
     }
-  } catch(e){ /* offline or no dataset — keep the simulated series */ }
+  } catch(e){ /* handled below */ }
   finally { pendingLoad.delete(sym); }
+  if (!realCache.has(sym)){            // nothing usable came back — simulate it
+    realCache.set(sym, simSeries(sym));
+    refreshSymbol(sym);
+  }
 }
 async function fetchSnapshot(file){
   const res = await fetch(DATA_BASE + encodeURIComponent(file) + ".json");
@@ -1232,18 +1242,33 @@ function paint(cv, bars, view, drawings, opt){
     }
   }
 
-  // candles — solid body both ways, green up, red down
-  const bw = Math.max(1, Math.min(16, cw*0.62));
+  /* Candles.
+     Everything is snapped to whole device pixels: a body drawn on a
+     fractional boundary is spread across two columns by the rasteriser, which
+     at small pane sizes turns a row of candles into a grey smear of varying
+     widths. Bodies and wicks go into one path per direction, so a pane costs
+     two fills instead of four state changes per bar.
+     Below ~1.6px per bar there is no room for a body at all — those draw as
+     high-low bars, which is what the pixels can actually carry. */
+  const px = 1/dpr;
+  const snap = v => Math.round(v*dpr)/dpr;
+  const dense = cw < 1.6;
+  const bodyW = Math.max(px, Math.min(16, Math.round(cw*0.62*dpr)/dpr));
+  const wickW = cw >= 5 ? Math.max(px, Math.round(bodyW*0.2*dpr)/dpr) : px;
+  const upPath = new Path2D(), downPath = new Path2D();
   for (let k=0;k<count;k++){
-    const b = vis[k], x = xOf(k), up = b.c >= b.o;
-    const col = up ? theme.up : theme.down;
-    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
-    const xr = Math.round(x)+.5;
-    ctx.beginPath(); ctx.moveTo(xr, yOf(b.h)); ctx.lineTo(xr, yOf(b.l)); ctx.stroke();
-    const yo = yOf(b.o), yc = yOf(b.c);
-    const top = Math.min(yo,yc), hgt = Math.max(1, Math.abs(yc-yo));
-    ctx.fillRect(x-bw/2, top, bw, hgt);
+    const b = vis[k], up = b.c >= b.o;
+    const path = up ? upPath : downPath;
+    const x = snap(xOf(k));
+    const yh = snap(yOf(b.h)), yl = snap(yOf(b.l));
+    path.rect(snap(x-wickW/2), yh, wickW, Math.max(px, yl-yh));
+    if (dense) continue;
+    const top = snap(Math.min(yOf(b.o), yOf(b.c)));
+    const bot = snap(Math.max(yOf(b.o), yOf(b.c)));
+    path.rect(snap(x-bodyW/2), top, bodyW, Math.max(px, bot-top));
   }
+  ctx.fillStyle = theme.up;   ctx.fill(upPath);
+  ctx.fillStyle = theme.down; ctx.fill(downPath);
 
   if (bands.length){
     ctx.font = (big?"10.5px":"9px") + " Archivo, Arial, sans-serif";
@@ -1337,7 +1362,9 @@ function rangesFor(sym, tf, views){
   if (!state.locator) return null;
   const depth = SPEED.indexOf(tf);
   if (depth <= 0) return null;
-  const s = series(sym), out = [];
+  const s = series(sym);
+  if (!s) return null;
+  const out = [];
   for (let i = 0; i < depth; i++){
     const id = SPEED[i];
     const sp = visibleSpan(s[id], views[id]);
@@ -1444,9 +1471,9 @@ function renderSaved(){
   svList.innerHTML = "";
   for (const sym of syms){
     const it = UNIVERSE.find(u => u.sym === sym) || { sym, name:"", sector:"" };
-    const bars = series(sym).D;
-    const last = bars[bars.length-1];
-    const pct = chg(bars);
+    const bars = (series(sym) || {}).D || null;
+    const last = bars ? bars[bars.length-1] : null;
+    const pct = bars ? chg(bars) : 0;
     const lines = (state.draw[sym] || []).length;
     const row = document.createElement("button");
     row.className = "sv-row";
@@ -1459,9 +1486,9 @@ function renderSaved(){
       </span>
       <canvas class="sv-spark" aria-hidden="true"></canvas>
       <span class="sv-q">
-        <span class="sv-px">${fmt(last.c)}</span><br>
+        <span class="sv-px">${last ? fmt(last.c) : "—"}</span><br>
         <span class="sv-chg" style="color:var(${pct>=0?"--up":"--down"})">
-          ${pct>=0?"+":""}${pct.toFixed(2)}%
+          ${bars ? (pct>=0?"+":"") + pct.toFixed(2) + "%" : ""}
         </span>
       </span>
       <span class="sv-drop" role="button" tabindex="0" aria-label="Unmark ${sym}">×</span>`;
@@ -1473,7 +1500,7 @@ function renderSaved(){
     th.innerHTML = theoryHTML(sym);
     item.appendChild(th);
     svList.appendChild(item);
-    sparkline(row.querySelector("canvas"), bars);
+    if (bars) sparkline(row.querySelector("canvas"), bars);
     if (editingNote === sym){
       const ta = th.querySelector("textarea");
       if (ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
@@ -1647,10 +1674,29 @@ function mount(card){
     }
   });
   updateQuote(card);
-  drawCard(card);
+  /* Scrolling mounts a card mid-flick, inside the observer callback. Sizing a
+     canvas there reads clientWidth, which forces a synchronous layout of the
+     whole feed — ~40ms, a dropped frame, before a single bar is drawn. Paint
+     on the following frames instead, daily first because that is where the
+     eye lands, then the other three one frame at a time. */
+  const order = ["D", ...TF.map(t => t.id).filter(id => id !== "D")];
+  const step = () => {
+    if (!mounted.has(card)) return;
+    const id = order.shift();
+    if (!id) return;
+    drawPane(card, id);
+    if (order.length) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 function updateQuote(card){
   const s = series(card.dataset.sym);
+  if (!s){
+    card.querySelector(".px").textContent = "—";
+    const q = card.querySelector(".chg");
+    q.textContent = ""; q.className = "chg";
+    return;
+  }
   const d = s.D[s.D.length-1], c = chg(s.D);
   card.querySelector(".px").textContent = fmt(d.c);
   const ce = card.querySelector(".chg");
@@ -1662,27 +1708,56 @@ function unmount(card){
   mounted.delete(card);
   card.querySelectorAll("canvas").forEach(c => c.remove());
 }
-function drawCard(card){
+function drawPane(card, tfId){
+  const p = card.querySelector('.pane[data-tf="'+tfId+'"]');
+  const cv = p && p.querySelector("canvas");
+  if (!cv) return;
   const sym = card.dataset.sym;
   const s = series(sym);
+  if (!s){ clearPane(cv); return; }                 // bars still loading
   const dl = state.draw[sym] || [];
   if (!card._views) card._views = defaultViews();
-  card.querySelectorAll(".pane").forEach(p => {
-    const cv = p.querySelector("canvas");
-    if (!cv) return;
-    const tf = TF.find(t => t.id === p.dataset.tf);
-    paint(cv, s[tf.id], card._views[tf.id], dl,
-          { tf: tf.id, ranges: rangesFor(sym, tf.id, card._views) });
-    let m = p.querySelector(".marked");
-    if (dl.length && !m){
-      m = document.createElement("span");
-      m.className = "marked";
-      m.textContent = dl.length + (dl.length>1 ? " lines" : " line");
-      p.appendChild(m);
-    } else if (m){
-      if (!dl.length) m.remove(); else m.textContent = dl.length + (dl.length>1?" lines":" line");
-    }
-  });
+  paint(cv, s[tfId], card._views[tfId], dl,
+        { tf: tfId, ranges: rangesFor(sym, tfId, card._views) });
+  let m = p.querySelector(".marked");
+  if (dl.length && !m){
+    m = document.createElement("span");
+    m.className = "marked";
+    m.textContent = dl.length + (dl.length>1 ? " lines" : " line");
+    p.appendChild(m);
+  } else if (m){
+    if (!dl.length) m.remove(); else m.textContent = dl.length + (dl.length>1?" lines":" line");
+  }
+}
+function clearPane(cv){
+  if (!sizeCanvas(cv)) return;
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+}
+function drawCard(card){
+  if (!card._views) card._views = defaultViews();
+  for (const t of TF) drawPane(card, t.id);
+}
+/* Pointer events outrun the display: a pan can fire several moves per frame,
+   and each one used to repaint four canvases. Collapse them into one repaint
+   on the next frame instead. */
+const drawQueue = new Set();
+let drawRaf = 0, fsQueued = false;
+function flushDraws(){
+  drawRaf = 0;
+  const cards = [...drawQueue];
+  drawQueue.clear();
+  for (const c of cards) drawCard(c);
+  if (fsQueued){ fsQueued = false; drawFs(); }
+}
+function queueDraw(card){
+  drawQueue.add(card);
+  if (!drawRaf) drawRaf = requestAnimationFrame(flushDraws);
+}
+function queueFs(){
+  fsQueued = true;
+  if (!drawRaf) drawRaf = requestAnimationFrame(flushDraws);
 }
 function redrawAll(){ mounted.forEach(drawCard); if (!fsEl.hidden) drawFs(); }
 function syncStars(sym){
@@ -1712,10 +1787,12 @@ function paneView(pane){
 }
 function setCount(pane, n){
   const { card, view } = paneView(pane);
-  const total = series(card.dataset.sym)[pane.dataset.tf].length;
+  const s = series(card.dataset.sym);
+  if (!s) return;
+  const total = s[pane.dataset.tf].length;
   view.count = Math.max(15, Math.min(total, Math.round(n)));
   view.offset = Math.max(0, Math.min(total - view.count, view.offset));
-  drawCard(card);
+  queueDraw(card);
 }
 function fSpread(){
   const v = [...fpts.values()];
@@ -1752,7 +1829,7 @@ feed.addEventListener("pointermove", e => {
     const { card, view } = paneView(fAxis.pane);
     view.pscale = clampScale(fAxis.pscale * Math.exp(dy/220));
     gestureEnd = Date.now();
-    drawCard(card);
+    queueDraw(card);
     return;
   }
   if (!fpts.has(e.pointerId)) return;
@@ -1774,10 +1851,12 @@ feed.addEventListener("pointermove", e => {
   const g = cv && cv._geom;
   if (!g) return;
   const { card, view } = paneView(fPan.pane);
-  const total = series(card.dataset.sym)[fPan.pane.dataset.tf].length;
+  const sr = series(card.dataset.sym);
+  if (!sr) return;
+  const total = sr[fPan.pane.dataset.tf].length;
   view.offset = Math.max(0, Math.min(total - view.count, fPan.off + Math.round(dx/g.cw)));
   gestureEnd = Date.now();
-  drawCard(card);
+  queueDraw(card);
 });
 function feedPointerEnd(e){
   if (fAxis){
@@ -1797,7 +1876,7 @@ feed.addEventListener("dblclick", e => {              // axis double-click reset
   const { card, view } = paneView(pane);
   view.pscale = 1;
   gestureEnd = Date.now();
-  drawCard(card);
+  queueDraw(card);
 });
 feed.addEventListener("wheel", e => {                 // trackpad pinch / ctrl+wheel
   if (!e.ctrlKey) return;
@@ -1858,6 +1937,7 @@ function drawFs(){
   const s = series(fsSymCur);
   fsTabs.querySelectorAll("button").forEach(b =>
     b.setAttribute("aria-pressed", b.dataset.tf === fsTf ? "true" : "false"));
+  if (!s){ clearPane(fsCv); return; }               // bars still loading
   paint(fsCv, s[fsTf], views[fsTf], state.draw[fsSymCur] || [],
         { big:true, tf:fsTf, preview, ranges: rangesFor(fsSymCur, fsTf, views) });
   document.getElementById("fsLoc").setAttribute("aria-pressed", state.locator ? "true" : "false");
@@ -1908,7 +1988,7 @@ function zoomTo(n){
   const g = fsCv._geom, v = views[fsTf];
   v.count = Math.max(20, Math.min(g.total, Math.round(n)));
   v.offset = Math.max(0, Math.min(g.total - v.count, v.offset));
-  drawFs();
+  queueFs();
 }
 fsCv.addEventListener("pointerdown", e => {
   const g = fsCv._geom; if (!g) return;
@@ -1953,19 +2033,19 @@ fsCv.addEventListener("pointermove", e => {
   if (pts.has(e.pointerId)) pts.set(e.pointerId, {x,y});
   if (pinch && pts.size >= 2){ zoomTo(pinch.count * pinch.d / spread()); return; }
   if (drag && drag.mode === "level"){
-    drag.d.price = g.pOf(y); drawFs();
+    drag.d.price = g.pOf(y); queueFs();
   } else if (pending){
     preview = { t1:pending.t, p1:pending.p, t2:g.timeOfX(x), p2:g.pOf(y) };
-    drawFs();
+    queueFs();
   } else if (drag && drag.mode === "pscale"){
     views[fsTf].pscale = Math.min(PSCALE_MAX, Math.max(PSCALE_MIN,
       drag.pscale * Math.exp((y-drag.y)/220)));
-    drawFs();
+    queueFs();
   } else if (drag && drag.mode === "pan"){
     const shift = Math.round((x-drag.x)/g.cw);
     const max = g.total - views[fsTf].count;
     views[fsTf].offset = Math.max(0, Math.min(max, drag.startOff + shift));
-    drawFs();
+    queueFs();
   }
 });
 function endDrag(e){
@@ -2021,7 +2101,9 @@ document.getElementById("fsPng").addEventListener("click", async () => {
   out.width = w*dpr; out.height = h*dpr;
   out._dpr = dpr; out._fixed = true;
   const tfLabel = (TF.find(t => t.id === fsTf) || {}).label || fsTf;
-  paint(out, series(fsSymCur)[fsTf], views[fsTf], state.draw[fsSymCur] || [],
+  const sFs = series(fsSymCur);
+  if (!sFs) return;
+  paint(out, sFs[fsTf], views[fsTf], state.draw[fsSymCur] || [],
         { big:true, tf:fsTf, bg:theme.pane, title:`${fsSymCur} · ${tfLabel}` });
   out.toBlob(async b => {
     try {
