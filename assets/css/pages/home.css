@@ -73,7 +73,15 @@
 .hero-content {
   position: relative;
   z-index: 2;
-  transform: translateY(-4vh);
+  /* sits above centre, so the price line has the lower third to itself.
+     The canvas keep-out zone is measured from this box, so it follows. */
+  transform: translateY(-5vh);
+}
+
+@media (min-width: 768px) {
+  .hero-content {
+    transform: translateY(-8vh);
+  }
 }
 
 .hero-eyebrow {
