@@ -1,5 +1,43 @@
 /* About Page - Brand Identity Documentation */
 
+/* ── Page header ───────────────────────────────────────────────────── */
+.about-hero {
+  background: linear-gradient(135deg, var(--color-black) 0%, rgba(26, 43, 74, 0.4) 100%);
+  padding: var(--space-16) var(--space-6);
+  text-align: center;
+}
+
+.about-hero h1 {
+  color: var(--color-white);
+  font-size: var(--text-4xl);
+  font-weight: 700;
+  letter-spacing: -1px;
+  margin-bottom: var(--space-4);
+}
+
+.about-hero .lead {
+  color: var(--color-gray-300);
+  font-size: var(--text-lg);
+  font-weight: 300;
+  line-height: 1.6;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .about-hero {
+    padding: var(--space-12) var(--space-4);
+  }
+
+  .about-hero h1 {
+    font-size: var(--text-3xl);
+  }
+
+  .about-hero .lead {
+    font-size: var(--text-base);
+  }
+}
+
 /* ── Desktop: Two-column sticky layout ─────────────────────────────── */
 .about-layout {
   display: flex;
@@ -48,6 +86,43 @@
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* shared.css makes `article section` full-bleed (100vw with a negative
+   margin), which is right for a page-wide article. This article sits in the
+   50vw column, so those sections have to stay inside it instead of spanning
+   the viewport and sliding under the brand image. */
+.about-text-side section,
+.about-text-side section:nth-child(even) {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.about-text-side section > * {
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* Nizza class lists (was an inline <style> block in about.html) */
+.about-text-side ul {
+  list-style: none;
+  padding-left: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.about-text-side li {
+  color: var(--color-gray-300);
+  line-height: var(--leading-loose);
+  margin-bottom: var(--space-2);
+  font-weight: inherit;
+}
+
+.about-text-side li::before {
+  content: "– ";
+  color: var(--color-gold);
 }
 
 /* ── Article sections ──────────────────────────────────────────────── */

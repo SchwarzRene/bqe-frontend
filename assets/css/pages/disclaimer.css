@@ -117,7 +117,12 @@ footer.mt-12 {
     padding: var(--space-6) var(--space-4);
   }
 
-  /* Hide decorative images on mobile - they were positioned at -400px making them invisible */
+}
+
+/* The decorative side images sit 400px outside a 720px article, so they need
+   about 1520px of viewport to fit beside it. On anything narrower they used to
+   hang past the right edge and give the page a horizontal scrollbar. */
+@media (max-width: 1519px) {
   .image-left,
   .image-right {
     display: none;
