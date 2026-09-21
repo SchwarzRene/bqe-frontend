@@ -26,7 +26,8 @@
 
   var section = document.querySelector('.formula-network');
   var canvas = section && section.querySelector('.formula-canvas');
-  var content = section && section.querySelector('.formula-content');
+  // the tight copy block, not the full-width container around it
+  var content = section && section.querySelector('.formula-copy');
   if (!section || !canvas || !canvas.getContext) return;
 
   var ctx = canvas.getContext('2d');
@@ -38,10 +39,10 @@
   var NET_MAX_NEIGHBORS = 3;
 
   // ── keep-out zone ─────────────────────────────────────────────────────────
-  // Measured from the headline block itself rather than a hardcoded ellipse,
+  // Measured from the copy block itself rather than a hardcoded ellipse,
   // so it keeps matching the copy at every breakpoint. Nodes bounce off it,
   // and formulas drifting across it fade down instead of sitting behind the
-  // words. FLOATER_PAD widens it for the formulas only: a line is anchored at
+  // words. The copy is set left, so the zone sits left with it. FLOATER_PAD widens it for the formulas only: a line is anchored at
   // its left edge but runs a couple of hundred pixels to the right of it.
   var textCX = 0, textCY = 0, textRX = 0, textRY = 0;
   var FLOATER_PAD = 110;

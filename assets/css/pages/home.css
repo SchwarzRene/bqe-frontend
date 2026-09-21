@@ -90,9 +90,8 @@
   letter-spacing: 0.14em;
   font-variant-numeric: tabular-nums;
   margin: 0;
-  opacity: 0;
-  transform: translateY(8px);
-  animation: hero-rise 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s forwards;
+  --rise: 8px;
+  animation: hero-rise 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
 }
 
 .hero h1 {
@@ -104,9 +103,8 @@
   margin: 18px auto 14px;
   max-width: 16ch;
   text-shadow: 0 2px 28px rgba(3, 5, 10, 0.55);
-  opacity: 0;
-  transform: translateY(14px);
-  animation: hero-rise 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.32s forwards;
+  --rise: 14px;
+  animation: hero-rise 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.32s both;
 }
 
 .hero-sub {
@@ -115,15 +113,21 @@
   max-width: 46ch;
   line-height: 1.55;
   margin: 0 auto;
-  opacity: 0;
-  transform: translateY(10px);
-  animation: hero-rise 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s forwards;
+  --rise: 10px;
+  animation: hero-rise 1.15s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s both;
 }
 
+/* The from-state lives here, not on the elements: the copy's resting style is
+   fully visible, so it can never be left invisible by an animation that does
+   not run. */
 @keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise, 10px));
+  }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -258,36 +262,43 @@
   z-index: 1;
   pointer-events: none;
   background: radial-gradient(
-    ellipse at 50% 50%,
+    ellipse at 28% 50%,
     rgba(6, 10, 22, 0.72) 0%,
-    rgba(6, 10, 22, 0.34) 42%,
-    rgba(6, 10, 22, 0) 70%
+    rgba(6, 10, 22, 0.34) 45%,
+    rgba(6, 10, 22, 0) 72%
   );
 }
 
-/* The headline sits over the artwork, same treatment as the hero's. */
+/* Informative copy over the artwork, not a headline: set left against the
+   site's content gutter and in the same grey as the line under it, so the
+   section reads as a statement rather than a title. The canvas keep-out zone
+   is measured from .formula-copy, so it tracks the text and not the
+   full-width container. */
 .formula-content {
   position: relative;
   z-index: 2;
+  text-align: left;
 }
 
-.formula-content h2 {
-  color: #eef2f8;
-  font-size: clamp(26px, 4.2vw, 52px);
-  line-height: 1.1;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0 auto 14px;
-  max-width: 20ch;
+.formula-copy {
+  max-width: 34ch;
+}
+
+.formula-copy > p {
+  color: rgba(238, 242, 248, 0.62);
+  font-size: clamp(24px, 3.4vw, 44px);
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-4);
   text-shadow: 0 2px 28px rgba(3, 5, 10, 0.65);
 }
 
 .formula-sub {
-  color: rgba(238, 242, 248, 0.62);
+  color: rgba(238, 242, 248, 0.45);
   font-size: clamp(15px, 1.7vw, 19px);
-  max-width: 46ch;
   line-height: 1.55;
-  margin: 0 auto;
+  margin: 0;
   text-shadow: 0 2px 18px rgba(3, 5, 10, 0.6);
 }
 

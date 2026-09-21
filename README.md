@@ -210,6 +210,8 @@ Three things to keep intact when touching it:
 - It only runs while the hero is on screen and the tab is visible (`IntersectionObserver`
   plus `visibilitychange`), and under `prefers-reduced-motion` it paints one static
   frame and never starts the loop.
+- The copy's resting style is fully visible and `hero-rise` carries its own from-state,
+  so the headline can never be left invisible by an animation that does not run.
 - A click is a trade at that point: an expanding ring brightens the edges it sweeps
   over, and nearby vertices take a burst of ticks in one direction, a beat apart. The
   listener is on `.hero`, not the canvas, so clicks over the headline count too — and
@@ -241,8 +243,9 @@ single frame under `prefers-reduced-motion`. Two things are its own:
   `pointer-events: none`. Anything layered over it needs a positive `z-index`: the
   canvas sits at 0, `.formula-vignette` and `.formula-hint` at 1, `.formula-content`
   at 2.
-- Its keep-out zone is measured from the `.formula-content` box, like the hero's from
-  `.hero-content`. Nodes bounce off it; formulas fade down as they cross it rather than
+- Its keep-out zone is measured from the `.formula-copy` box (the tight copy block, not
+  the full-width container around it), like the hero's from `.hero-content`. The copy is
+  set left and in grey — informative text, not a title — so the zone sits left with it. Nodes bounce off it; formulas fade down as they cross it rather than
   sitting behind the words, and `FLOATER_PAD` widens it for them alone, since a formula
   is anchored at its left edge but runs a long way right of it. Change the copy freely —
   the zone follows.
