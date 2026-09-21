@@ -114,6 +114,45 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .filters input{flex:1 1 auto}
 .filters select{flex:0 1 44%}
 
+/* ---------- marked charts, one swipe to the left of the feed ---------- */
+#saved{
+  position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;flex-direction:column;
+  transform:translateX(-100%);transition:transform .26s ease;
+  touch-action:pan-y;overscroll-behavior:contain;
+}
+#saved.open{transform:none}
+@media (prefers-reduced-motion:reduce){#saved{transition:none}}
+.sv-head{
+  flex:0 0 auto;display:flex;align-items:center;gap:10px;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 12px;
+  border-bottom:1px solid var(--rule);background:var(--chrome);
+}
+.sv-head h2{margin:0;font-size:17px;font-weight:800;font-stretch:112%;letter-spacing:-.01em}
+.sv-n{font-size:12px;color:var(--muted)}
+.sv-head .iconbtn{margin-inline-start:auto}
+.sv-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px 10px 24px}
+.sv-row{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  background:var(--pane);border:1px solid var(--rule);border-radius:10px;
+  padding:10px 12px;margin-bottom:8px;color:var(--fg);font:inherit;cursor:pointer;
+}
+.sv-row:hover{border-color:var(--focus)}
+.sv-id{min-width:0;flex:1 1 auto}
+.sv-sym{font-size:17px;font-weight:800;font-stretch:112%;line-height:1.1}
+.sv-nm{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-lines{font-size:10.5px;color:var(--mark)}
+.sv-spark{flex:0 0 auto;width:96px;height:34px;display:block}
+.sv-q{flex:0 0 auto;text-align:right;line-height:1.2}
+.sv-px{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.sv-chg{font-size:12px;font-variant-numeric:tabular-nums}
+.sv-drop{
+  flex:0 0 auto;background:none;border:0;color:var(--muted);cursor:pointer;
+  font:inherit;font-size:18px;line-height:1;padding:4px 2px;
+}
+.sv-drop:hover{color:var(--down)}
+.sv-empty{padding:40px 22px;text-align:center;color:var(--muted);font-size:14px;line-height:1.6}
+.sv-hint{padding:4px 4px 14px;text-align:center;color:var(--muted);font-size:11.5px}
+
 /* ---------- feed ---------- */
 #feed{
   flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
@@ -230,6 +269,9 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   <button class="iconbtn" id="locBtn" aria-pressed="false" aria-label="Show where the faster charts sit">
     <svg viewBox="0 0 24 24"><path d="M9 4v16M15 4v16"/><path d="M4 4h16v16H4z" opacity=".45"/></svg>
   </button>
+  <button class="iconbtn" id="markedBtn" aria-label="Marked charts">
+    <svg viewBox="0 0 24 24"><path d="M7 3h10a1 1 0 0 1 1 1v17l-6-4-6 4V4a1 1 0 0 1 1-1z"/></svg>
+  </button>
   <button class="iconbtn" id="filterBtn" aria-pressed="false" aria-label="Filter the feed">
     <svg viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4"/></svg>
   </button>
@@ -247,6 +289,17 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 </div>
 
 <main id="feed"></main>
+
+<aside id="saved" aria-hidden="true" aria-label="Marked charts">
+  <div class="sv-head">
+    <h2>Marked charts</h2>
+    <span class="sv-n" id="svN"></span>
+    <button class="iconbtn" id="svBack" aria-label="Back to the feed">
+      <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+  </div>
+  <div class="sv-list" id="svList"></div>
+</aside>
 
 <div id="fs" hidden>
   <div class="fs-top">
@@ -922,6 +975,7 @@ function markSource(){
   el.classList.add("live");
 }
 function refreshSymbol(sym){
+  if (savedOpen && isSaved(sym)) renderSaved();
   const card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
   if (card && mounted.has(card)){
     card._views = defaultViews();
@@ -1278,6 +1332,145 @@ function chg(bars){
   if (!a) return 0;
   return (b.c-a.c)/a.c*100;
 }
+
+/* ============================================================
+   4b. Marked charts — the page one swipe to the left of the feed
+   ============================================================ */
+const svEl = document.getElementById("saved");
+const svList = document.getElementById("svList");
+let savedOpen = false;
+
+function sparkline(cv, bars){
+  const dpr = Math.min(window.devicePixelRatio||1, 2.5);
+  const w = 96, h = 34;
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const vis = bars.slice(-60);
+  if (vis.length < 2) return;
+  let min = Infinity, max = -Infinity;
+  for (const b of vis){ if (b.c<min) min=b.c; if (b.c>max) max=b.c; }
+  const rng = (max-min) || max*0.02 || 1;
+  const up = vis[vis.length-1].c >= vis[0].c;
+  ctx.strokeStyle = up ? theme.up : theme.down;
+  ctx.lineWidth = 1.5; ctx.lineJoin = "round";
+  ctx.beginPath();
+  vis.forEach((b,i) => {
+    const x = 1 + i/(vis.length-1)*(w-2);
+    const y = 2 + (max-b.c)/rng*(h-4);
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+}
+
+function renderSaved(){
+  const syms = state.saved.slice();
+  document.getElementById("svN").textContent =
+    syms.length ? syms.length + (syms.length>1 ? " charts" : " chart") : "";
+  if (!syms.length){
+    svList.innerHTML = `<p class="sv-empty">No charts marked yet.<br>` +
+      `Tap the bookmark on a chart to keep it here.</p>`;
+    return;
+  }
+  svList.innerHTML = "";
+  for (const sym of syms){
+    const it = UNIVERSE.find(u => u.sym === sym) || { sym, name:"", sector:"" };
+    const bars = series(sym).D;
+    const last = bars[bars.length-1];
+    const pct = chg(bars);
+    const lines = (state.draw[sym] || []).length;
+    const row = document.createElement("button");
+    row.className = "sv-row";
+    row.dataset.sym = sym;
+    row.innerHTML = `
+      <span class="sv-id">
+        <span class="sv-sym">${sym}</span>
+        <span class="sv-nm">${it.name || ""}${it.sector ? " · " + it.sector : ""}</span>
+        ${lines ? `<span class="sv-lines">${lines} drawn ${lines>1?"lines":"line"}</span>` : ""}
+      </span>
+      <canvas class="sv-spark" aria-hidden="true"></canvas>
+      <span class="sv-q">
+        <span class="sv-px">${fmt(last.c)}</span><br>
+        <span class="sv-chg" style="color:var(${pct>=0?"--up":"--down"})">
+          ${pct>=0?"+":""}${pct.toFixed(2)}%
+        </span>
+      </span>
+      <span class="sv-drop" role="button" tabindex="0" aria-label="Unmark ${sym}">×</span>`;
+    svList.appendChild(row);
+    sparkline(row.querySelector("canvas"), bars);
+  }
+  const hint = document.createElement("p");
+  hint.className = "sv-hint";
+  hint.textContent = "Swipe left, or press Escape, to go back to the feed.";
+  svList.appendChild(hint);
+}
+
+function openSaved(){
+  if (savedOpen) return;
+  savedOpen = true;
+  renderSaved();
+  svEl.classList.add("open");
+  svEl.setAttribute("aria-hidden", "false");
+}
+function closeSaved(){
+  if (!savedOpen) return;
+  savedOpen = false;
+  svEl.classList.remove("open");
+  svEl.setAttribute("aria-hidden", "true");
+}
+
+/** Show a symbol in the feed, lifting any filter that would hide it. */
+function jumpTo(sym){
+  closeSaved();
+  let card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
+  if (!card){
+    onlySaved = false;
+    document.getElementById("savedBtn").setAttribute("aria-pressed","false");
+    document.getElementById("q").value = "";
+    secSel.value = "";
+    rebuild();
+    card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
+  }
+  if (card) card.scrollIntoView({ block:"start", behavior:"auto" });
+}
+
+svList.addEventListener("click", e => {
+  const drop = e.target.closest(".sv-drop");
+  if (drop){
+    e.stopPropagation();
+    toggleSaved(drop.closest(".sv-row").dataset.sym);
+    renderSaved();
+    return;
+  }
+  const row = e.target.closest(".sv-row");
+  if (row) jumpTo(row.dataset.sym);
+});
+document.getElementById("svBack").addEventListener("click", closeSaved);
+
+/* swipe right anywhere off a chart (or from the left edge, even over one)
+   opens the marked charts; swipe left there goes back. */
+let swipe = null;
+const SWIPE_MIN = 60;
+document.addEventListener("pointerdown", e => {
+  swipe = null;
+  if (!fsEl.hidden) return;                       // the full-screen chart owns its gestures
+  if (savedOpen){
+    swipe = { x:e.clientX, y:e.clientY, mode:"close" };
+    return;
+  }
+  const onChart = !!e.target.closest(".pane");
+  if (onChart && e.clientX > 28) return;           // that drag pans the chart
+  swipe = { x:e.clientX, y:e.clientY, mode:"open" };
+}, { passive:true });
+document.addEventListener("pointerup", e => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  const swiped = Math.abs(dx) > SWIPE_MIN && Math.abs(dx) > Math.abs(dy)*1.6;
+  if (swiped && swipe.mode === "open" && dx > 0) openSaved();
+  else if (swiped && swipe.mode === "close" && dx < 0) closeSaved();
+  swipe = null;
+}, { passive:true });
+document.addEventListener("pointercancel", () => { swipe = null; }, { passive:true });
 
 /* ============================================================
    5. The feed
@@ -1772,6 +1965,7 @@ document.getElementById("savedBtn").addEventListener("click", e => {
   e.currentTarget.setAttribute("aria-pressed", onlySaved ? "true":"false");
   rebuild();
 });
+document.getElementById("markedBtn").addEventListener("click", () => openSaved());
 let qTick = 0;
 document.getElementById("q").addEventListener("input", () => {
   clearTimeout(qTick); qTick = setTimeout(rebuild, 160);
@@ -1796,7 +1990,8 @@ window.addEventListener("resize", () => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Escape" && !fsEl.hidden){ closeFs(); return; }
-  if (!fsEl.hidden) return;
+  if (e.key === "Escape" && savedOpen){ closeSaved(); return; }
+  if (!fsEl.hidden || savedOpen) return;
   if (e.key === "ArrowDown" || e.key === "ArrowUp"){
     e.preventDefault();
     feed.scrollBy({ top: (e.key==="ArrowDown"?1:-1)*feed.clientHeight, behavior:"smooth" });

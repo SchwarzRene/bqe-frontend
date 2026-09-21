@@ -55,6 +55,15 @@ Jekyll, `stack/` is copied through untouched.
 | **Drag up/down on the price axis** | **zoom the price range** — down flattens, up stretches |
 | **Double-tap the price axis** | back to the fitted range |
 | Tap a chart | open it full screen |
+| **Swipe right** (off a chart, or from the left edge) | **open the marked-charts page** |
+| **Swipe left** on that page | back to the feed |
+
+The bookmark button in the top bar opens the same page, and Escape closes it.
+It lists every chart you have marked with the bookmark on its card: last price,
+the day's move, a 60-day sparkline and how many lines you have drawn on it.
+Tapping a row drops you back on that stock in the feed, lifting any search or
+sector filter that would have hidden it. The bookmark in the filter row still
+does what it did before — narrow the feed to marked charts.
 
 The price axis is the 46-pixel strip on the right of each pane. The newest
 candle sits a few slots left of it, so it is never jammed against the axis and
