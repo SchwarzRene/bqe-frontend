@@ -23,7 +23,7 @@
   --grid:#e2e8f0;
   --fg:#101a27;
   --muted:#5d6f88;
-  --up:#0c7f5f;
+  --up:#17a34a;
   --down:#c23b4b;
   --mark:#b06a00;
   --markSoft:rgba(176,106,0,.14);
@@ -40,7 +40,7 @@
     --grid:#182435;
     --fg:#dfe8f4;
     --muted:#7d90a9;
-    --up:#4ed2a3;
+    --up:#3fbf62;
     --down:#f0616f;
     --mark:#f5b53f;
     --markSoft:rgba(245,181,63,.16);
@@ -57,7 +57,7 @@
   --grid:#182435;
   --fg:#dfe8f4;
   --muted:#7d90a9;
-  --up:#4ed2a3;
+  --up:#3fbf62;
   --down:#f0616f;
   --mark:#f5b53f;
   --markSoft:rgba(245,181,63,.16);
@@ -147,6 +147,10 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   overflow:hidden;cursor:zoom-in;touch-action:pan-y;
 }
 .pane canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.paxis{
+  position:absolute;top:0;right:0;width:46px;height:100%;z-index:2;
+  touch-action:none;cursor:ns-resize;background:transparent;
+}
 .tfl{
   position:absolute;top:5px;left:8px;font-size:10px;font-weight:700;letter-spacing:.06em;
   color:var(--muted);pointer-events:none;
@@ -1029,7 +1033,10 @@ function sizeCanvas(cv){
   return true;
 }
 
-// view: {count, offset}  offset = bars hidden at the right edge
+const RIGHT_PAD = 0.06;        // blank slots after the last bar, as a share of the window
+const PSCALE_MIN = 0.25, PSCALE_MAX = 6;
+
+// view: {count, offset, pscale}  offset = bars hidden at the right edge
 function paint(cv, bars, view, drawings, opt){
   if (!sizeCanvas(cv)) return;
   const ctx = cv.getContext("2d");
@@ -1064,11 +1071,20 @@ function paint(cv, bars, view, drawings, opt){
   }
   const pad = (max-min)*0.07 || max*0.02 || 1;
   min -= pad; max += pad;
+  // price-axis zoom: >1 shows a wider range (candles flatten), <1 a tighter one
+  const ps = Math.min(PSCALE_MAX, Math.max(PSCALE_MIN, view.pscale || 1));
+  if (ps !== 1){
+    const mid = (min+max)/2, half = (max-min)/2*ps;
+    min = mid-half; max = mid+half;
+  }
   const rng = max-min;
 
   const yOf = p => y0 + (max-p)/rng*(y1-y0);
   const pOf = y => max - (y-y0)/(y1-y0)*rng;
-  const cw = (x1-x0)/count;
+  // A few empty slots after the last bar, so the newest candle is never
+  // jammed against the price axis and there is room to draw ahead of it.
+  const padBars = Math.max(1, Math.round(count*RIGHT_PAD));
+  const cw = (x1-x0)/(count+padBars);
   const xOf = k => x0 + cw*(k+0.5);                 // k = index within view
   const xOfIdx = i => xOf(i - i0);
 
@@ -1138,9 +1154,8 @@ function paint(cv, bars, view, drawings, opt){
     }
   }
 
-  // candles — hollow on up bars, filled on down bars
+  // candles — solid body both ways, green up, red down
   const bw = Math.max(1, Math.min(16, cw*0.62));
-  const hollow = cw > 3.2;
   for (let k=0;k<count;k++){
     const b = vis[k], x = xOf(k), up = b.c >= b.o;
     const col = up ? theme.up : theme.down;
@@ -1149,13 +1164,7 @@ function paint(cv, bars, view, drawings, opt){
     ctx.beginPath(); ctx.moveTo(xr, yOf(b.h)); ctx.lineTo(xr, yOf(b.l)); ctx.stroke();
     const yo = yOf(b.o), yc = yOf(b.c);
     const top = Math.min(yo,yc), hgt = Math.max(1, Math.abs(yc-yo));
-    if (up && hollow){
-      ctx.fillStyle = theme.pane;
-      ctx.fillRect(x-bw/2, top, bw, hgt);
-      ctx.strokeRect(Math.round(x-bw/2)+.5, Math.round(top)+.5, Math.round(bw), Math.round(hgt));
-    } else {
-      ctx.fillRect(x-bw/2, top, bw, hgt);
-    }
+    ctx.fillRect(x-bw/2, top, bw, hgt);
   }
 
   if (bands.length){
@@ -1231,7 +1240,7 @@ function paint(cv, bars, view, drawings, opt){
     ctx.fillText(opt.title, x0+8, y0+4);
   }
 
-  cv._geom = { x0,x1,y0,y1,min,max,i0,i1,count,cw,yOf,pOf,xOfTime,timeOfX,total };
+  cv._geom = { x0,x1,y0,y1,min,max,i0,i1,count,cw,padR,yOf,pOf,xOfTime,timeOfX,total };
 }
 
 /* which slice of time a view is showing, and how that maps onto slower charts */
@@ -1260,7 +1269,7 @@ function rangesFor(sym, tf, views){
 }
 function defaultViews(){
   const v = {};
-  TF.forEach(t => { v[t.id] = { count: t.bars, offset: 0 }; });
+  TF.forEach(t => { v[t.id] = { count: t.bars, offset: 0, pscale: 1 }; });
   return v;
 }
 
@@ -1287,7 +1296,7 @@ const io = new IntersectionObserver(entries => {
 
 function cardHTML(it){
   const panes = TF.map(t =>
-    `<div class="pane" data-tf="${t.id}"><span class="tfl">${t.label}</span></div>`
+    `<div class="pane" data-tf="${t.id}"><span class="tfl">${t.label}</span><span class="paxis" aria-hidden="true"></span></div>`
   ).join("");
   return `<section class="card" data-sym="${it.sym}">
     <div class="slide">
@@ -1387,12 +1396,15 @@ feed.addEventListener("click", e => {
   if (star){ toggleSaved(star.dataset.sym); return; }
   if (Date.now() - gestureEnd < 320) return;        // that tap was a zoom or a pan
   const pane = e.target.closest(".pane");
-  if (pane) openFs(pane.closest(".card").dataset.sym, pane.dataset.tf);
+  if (pane && !e.target.classList.contains("paxis")){
+    openFs(pane.closest(".card").dataset.sym, pane.dataset.tf);
+  }
 });
 
 /* two fingers zoom a pane, one finger sideways pans it */
 const fpts = new Map();
-let fPinch = null, fPan = null, gestureEnd = 0;
+let fPinch = null, fPan = null, fAxis = null, gestureEnd = 0;
+const clampScale = v => Math.min(PSCALE_MAX, Math.max(PSCALE_MIN, v));
 function paneView(pane){
   const card = pane.closest(".card");
   if (!card._views) card._views = defaultViews();
@@ -1412,6 +1424,12 @@ function fSpread(){
 feed.addEventListener("pointerdown", e => {
   const pane = e.target.closest(".pane");
   if (!pane) return;
+  if (e.target.classList.contains("paxis")){        // price axis: drag = zoom price
+    const { view } = paneView(pane);
+    fAxis = { pane, y:e.clientY, pscale: view.pscale || 1, live:false };
+    e.target.setPointerCapture(e.pointerId);
+    return;
+  }
   fpts.set(e.pointerId, { x:e.clientX, y:e.clientY, pane });
   if (fpts.size === 2){
     const v = [...fpts.values()];
@@ -1424,6 +1442,19 @@ feed.addEventListener("pointerdown", e => {
   }
 });
 feed.addEventListener("pointermove", e => {
+  if (fAxis){
+    const dy = e.clientY - fAxis.y;
+    if (!fAxis.live){
+      if (Math.abs(dy) < 4) return;
+      fAxis.live = true;
+    }
+    // down = more range (candles flatten), up = tighter range
+    const { card, view } = paneView(fAxis.pane);
+    view.pscale = clampScale(fAxis.pscale * Math.exp(dy/220));
+    gestureEnd = Date.now();
+    drawCard(card);
+    return;
+  }
   if (!fpts.has(e.pointerId)) return;
   const rec = fpts.get(e.pointerId);
   rec.x = e.clientX; rec.y = e.clientY;
@@ -1449,6 +1480,10 @@ feed.addEventListener("pointermove", e => {
   drawCard(card);
 });
 function feedPointerEnd(e){
+  if (fAxis){
+    if (fAxis.live) gestureEnd = Date.now();
+    fAxis = null;
+  }
   fpts.delete(e.pointerId);
   if (fpts.size < 2) fPinch = null;
   if (fPan && fPan.live) gestureEnd = Date.now();
@@ -1456,6 +1491,14 @@ function feedPointerEnd(e){
 }
 feed.addEventListener("pointerup", feedPointerEnd);
 feed.addEventListener("pointercancel", feedPointerEnd);
+feed.addEventListener("dblclick", e => {              // axis double-click resets the range
+  if (!e.target.classList.contains("paxis")) return;
+  const pane = e.target.closest(".pane");
+  const { card, view } = paneView(pane);
+  view.pscale = 1;
+  gestureEnd = Date.now();
+  drawCard(card);
+});
 feed.addEventListener("wheel", e => {                 // trackpad pinch / ctrl+wheel
   if (!e.ctrlKey) return;
   const pane = e.target.closest(".pane");
@@ -1491,7 +1534,8 @@ function openFs(sym, tf){
   document.getElementById("fsStar").textContent = isSaved(sym) ? "Saved" : "Save chart";
   const card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
   const src = (card && card._views) || defaultViews();
-  TF.forEach(t => { views[t.id] = { count: src[t.id].count, offset: src[t.id].offset }; });
+  TF.forEach(t => { views[t.id] = { count: src[t.id].count, offset: src[t.id].offset,
+                                    pscale: src[t.id].pscale || 1 }; });
   setTool(null);
   fsEl.hidden = false;
   requestAnimationFrame(drawFs);
@@ -1503,7 +1547,8 @@ function closeFs(){
     const card = feed.querySelector('.card[data-sym="'+CSS.escape(fsSymCur)+'"]');
     if (card){
       card._views = {};
-      TF.forEach(t => { card._views[t.id] = { count: views[t.id].count, offset: views[t.id].offset }; });
+      TF.forEach(t => { card._views[t.id] = { count: views[t.id].count, offset: views[t.id].offset,
+                                              pscale: views[t.id].pscale || 1 }; });
       if (mounted.has(card)) drawCard(card);
     }
   }
@@ -1595,6 +1640,8 @@ fsCv.addEventListener("pointerdown", e => {
     drawFs();
   } else if (tool === "erase"){
     eraseAt(x,y);
+  } else if (x > g.x1){                              // price axis: drag = zoom price
+    drag = { mode:"pscale", y, pscale: views[fsTf].pscale || 1 };
   } else {
     drag = { mode:"pan", x, startOff: views[fsTf].offset };
   }
@@ -1609,6 +1656,10 @@ fsCv.addEventListener("pointermove", e => {
     drag.d.price = g.pOf(y); drawFs();
   } else if (pending){
     preview = { t1:pending.t, p1:pending.p, t2:g.timeOfX(x), p2:g.pOf(y) };
+    drawFs();
+  } else if (drag && drag.mode === "pscale"){
+    views[fsTf].pscale = Math.min(PSCALE_MAX, Math.max(PSCALE_MIN,
+      drag.pscale * Math.exp((y-drag.y)/220)));
     drawFs();
   } else if (drag && drag.mode === "pan"){
     const shift = Math.round((x-drag.x)/g.cw);
@@ -1625,6 +1676,13 @@ function endDrag(e){
 }
 fsCv.addEventListener("pointerup", endDrag);
 fsCv.addEventListener("pointercancel", endDrag);
+fsCv.addEventListener("dblclick", e => {             // axis double-click resets the range
+  const g = fsCv._geom; if (!g) return;
+  const r = fsCv.getBoundingClientRect();
+  if (e.clientX - r.left <= g.x1) return;
+  views[fsTf].pscale = 1;
+  drawFs();
+});
 fsCv.addEventListener("wheel", e => {
   e.preventDefault();
   if (!fsCv._geom) return;

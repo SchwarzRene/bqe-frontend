@@ -46,6 +46,20 @@ rate-limited. Without that file nothing changes. Yahoo quotes are delayed about
 Everything is additive — no existing file of yours is touched. If your site is
 Jekyll, `stack/` is copied through untouched.
 
+## Chart gestures
+
+| Gesture | Effect |
+| --- | --- |
+| Drag left/right on a chart | pan through time |
+| Two fingers / ctrl+wheel | zoom the time axis |
+| **Drag up/down on the price axis** | **zoom the price range** — down flattens, up stretches |
+| **Double-tap the price axis** | back to the fitted range |
+| Tap a chart | open it full screen |
+
+The price axis is the 46-pixel strip on the right of each pane. The newest
+candle sits a few slots left of it, so it is never jammed against the axis and
+there is room to draw ahead of price.
+
 ## Setup
 
 1. The four paths above are already in the repository (these setup notes live
