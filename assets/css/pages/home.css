@@ -12,24 +12,30 @@
   text-align: center;
 }
 
-/* Background Video - sits behind the headline */
+/* Background Video - fills the hero, behind everything in it.
+   The three hero layers stack on positive z-indexes: a negative one
+   would let a composited video layer paint over the headline. */
 .hero-video {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  z-index: -2;
+  object-position: center;
+  z-index: 0;
   pointer-events: none;
 }
 
 /* Scrim - keeps the headline readable over the moving footage */
 .hero-scrim {
   position: absolute;
-  inset: 0;
-  z-index: -1;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
   background:
     linear-gradient(180deg, rgba(10, 10, 10, 0.55) 0%, rgba(10, 10, 10, 0.75) 100%),
     linear-gradient(135deg, rgba(10, 10, 10, 0.4) 0%, rgba(26, 43, 74, 0.35) 100%);
@@ -37,7 +43,7 @@
 
 .hero-content {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 @media (min-width: 768px) {
@@ -274,6 +280,10 @@ main > section:nth-of-type(2) {
     width: 100%;
   }
 
+  .hero {
+    min-height: 58vh;
+  }
+
   /* What We Do - Stack on Mobile */
   .what-we-do-grid {
     grid-template-columns: 1fr;
@@ -298,6 +308,7 @@ main > section:nth-of-type(2) {
 @media (max-width: 480px) {
   .hero {
     padding: var(--space-8) 0;
+    min-height: 56vh;
   }
 
   .hero h1 {
