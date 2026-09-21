@@ -1,0 +1,4 @@
+{
+  "_comment": "Copy this to live.json with your deployed Worker URL to fetch live bars on page load. See worker/README.md.",
+  "proxy": "https://stack-live-quotes.example.workers.dev"
+}

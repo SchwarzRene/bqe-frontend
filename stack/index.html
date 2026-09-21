@@ -810,6 +810,12 @@ const TF = [
    ------------------------------------------------------------ */
 const DATA_BASE = "data/";
 let dataset = null;                                  // {updated, files}
+/* Optional live source. Drop a live.json next to this page holding
+   {"proxy":"https://your-worker.workers.dev"} and every card asks it for
+   fresh bars first, falling back to the committed snapshot when it is
+   missing, slow or rate-limited. See worker/README.md. */
+let live = null;                                     // {proxy}
+let liveSeen = false;                                // has the proxy answered?
 const realCache = new Map();
 const pendingLoad = new Set();
 
@@ -830,9 +836,9 @@ async function loadReal(sym){
   if (!file) return;
   pendingLoad.add(sym);
   try {
-    const res = await fetch(DATA_BASE + encodeURIComponent(file) + ".json");
-    if (res.ok){
-      const j = await res.json();
+    const j = (live && live.proxy ? await fetchLive(file) : null)
+           || await fetchSnapshot(file);
+    {
       const D = j && j.d ? fromColumns(j.d) : [];
       if (D.length > 40){
         const s = {
@@ -849,8 +855,35 @@ async function loadReal(sym){
   } catch(e){ /* offline or no dataset — keep the simulated series */ }
   finally { pendingLoad.delete(sym); }
 }
+async function fetchSnapshot(file){
+  const res = await fetch(DATA_BASE + encodeURIComponent(file) + ".json");
+  return res.ok ? res.json() : null;
+}
+/* One request to the proxy, with a short deadline: a slow or unreachable
+   worker must never hold a card hostage — the snapshot is right there. */
+async function fetchLive(file){
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), 4000);
+  try {
+    const res = await fetch(live.proxy.replace(/\/$/, "") + "/" + encodeURIComponent(file),
+                            { signal: stop.signal });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (!j || !j.d || !Array.isArray(j.d.t) || j.d.t.length < 40) return null;
+    if (!liveSeen){ liveSeen = true; markSource(); }
+    return j;
+  } catch(e){ return null; }
+  finally { clearTimeout(timer); }
+}
 async function initData(){
   let j;
+  try {
+    const res = await fetch("live.json", { cache:"no-cache" });
+    if (res.ok){
+      const cfg = await res.json();
+      if (cfg && typeof cfg.proxy === "string" && /^https?:\/\//.test(cfg.proxy)) live = cfg;
+    }
+  } catch(e){ /* no live source configured — the snapshot is the source */ }
   try {
     const res = await fetch(DATA_BASE + "index.json", { cache:"no-cache" });
     if (!res.ok) return;
@@ -872,6 +905,12 @@ function markSource(){
   const el = document.getElementById("src");
   if (!dataset){ el.textContent = "Simulated prices"; el.title = "No data/ folder found next to this page"; return; }
   const d = dataset.updated ? new Date(dataset.updated) : null;
+  if (liveSeen){
+    el.textContent = "Live · Yahoo";
+    el.title = "Fetched from the live proxy on load (Yahoo quotes are delayed ~15 min)";
+    el.classList.add("live");
+    return;
+  }
   el.textContent = d && !isNaN(d)
     ? "Yahoo data · " + d.toLocaleDateString(undefined,{month:"short",day:"numeric"})
     : "Yahoo data";

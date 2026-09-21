@@ -22,10 +22,26 @@ badge turns green and shows the refresh date.
 ```
 stack/index.html                      the page
 stack/data/                           generated — one JSON per ticker + index.json
+stack/live.example.json               template for the optional live proxy
 scripts/fetch_market_data.py          yfinance -> JSON
 requirements.txt                      yfinance, pandas, lxml
 .github/workflows/market-data.yml     weekdays 22:20 UTC + manual run
+worker/                               optional Cloudflare Worker for live bars
 ```
+
+## Optional: live bars on page load
+
+The snapshot above is refreshed once a weekday evening, so the page always
+opens on the previous close. To fetch current bars as you scroll instead,
+deploy the Worker in `worker/` and point `stack/live.json` at it — see
+`worker/README.md`. It exists because Yahoo sends no CORS headers, so the
+browser needs something that will answer it; the Worker relays the same JSON
+shape with the header attached.
+
+With `stack/live.json` present each card asks the Worker first and falls back
+to the committed snapshot whenever it is missing, slow (4-second deadline) or
+rate-limited. Without that file nothing changes. Yahoo quotes are delayed about
+15 minutes, so this is today's bars, not a tick feed.
 
 Everything is additive — no existing file of yours is touched. If your site is
 Jekyll, `stack/` is copied through untouched.
