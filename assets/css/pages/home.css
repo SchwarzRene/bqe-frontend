@@ -261,9 +261,6 @@
     padding: var(--space-10) var(--space-6);
   }
 
-  .formula-content {
-    row-gap: var(--space-16);
-  }
 }
 
 .formula-canvas {
@@ -300,6 +297,9 @@
   z-index: 2;
   display: grid;
   grid-template-rows: 1fr 1fr;
+  /* One gap at every width. A 768px override used to sit above this rule at
+     the same specificity, so it never applied and desktop has always rendered
+     this value; phones asked for 16px until it read as a single block. */
   row-gap: var(--space-10);
   justify-items: start;
   text-align: left;
@@ -363,7 +363,6 @@
    so their edges line up. */
 @media (max-width: 767px) {
   .formula-content {
-    row-gap: var(--space-4);
     justify-items: stretch;
   }
 
