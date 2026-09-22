@@ -252,6 +252,11 @@ section.research-explorer {
 .search-input {
   display: block;
   width: 100%;
+  /* shared.css gives every input a margin-bottom, for stacked form fields.
+     Here it would make .search-field - the box the magnifier is centred
+     against - 8px taller than the pill itself, leaving the icon sitting
+     above the text it belongs to. */
+  margin: 0;
   padding: 10px 14px 10px 36px;
   border: 1px solid var(--color-navy);
   border-radius: 999px;
