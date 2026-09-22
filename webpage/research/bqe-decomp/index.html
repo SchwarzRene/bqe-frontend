@@ -7,19 +7,19 @@
 <style>
   /* ── BQE Design Tokens (aligned with blackquantempire.at) ─────────── */
   :root {
-    --fg:           #B8B8B8;
-    --fg-strong:    #FFFFFF;
-    --muted:        #6B7280;
-    --accent:       #C4A86B;
-    --accent-light: #D4B87B;
-    --accent-dark:  #9E8A55;
-    --bg:           #0A0A0A;
-    --bg-soft:      #131313;
-    --bg-muted:     #1F1F1F;
-    --card:         #131313;
-    --code-bg:      #1a1a1a;
-    --border:       rgba(196,168,107,0.18);
-    --navy:         rgba(26,43,74,0.5);
+    --fg:           #A8B6C9;
+    --fg-strong:    #EEF2F8;
+    --muted:        #7C8DA6;
+    --accent:       #F0B429;
+    --accent-light: #FFD166;
+    --accent-dark:  #C88F14;
+    --bg:           #050810;
+    --bg-soft:      #070B15;
+    --bg-muted:     #0F1A2C;
+    --card:         #070B15;
+    --code-bg:      #0F1A2C;
+    --border:       rgba(240,180,41,0.18);
+    --navy:         rgba(19,35,61,0.5);
   }
 
   * { box-sizing: border-box; }
@@ -46,7 +46,7 @@
   header::before {
     content: '';
     position: absolute; top:0; left:0; right:0; bottom:0;
-    background: linear-gradient(135deg,rgba(196,168,107,.05) 0%,transparent 50%,rgba(196,168,107,.05) 100%);
+    background: linear-gradient(135deg,rgba(240,180,41,.05) 0%,transparent 50%,rgba(240,180,41,.05) 100%);
     pointer-events: none;
   }
   header h1 {
@@ -61,8 +61,8 @@
   /* ── Badges ──────────────────────────────────────────────────────── */
   .badges { margin-top:22px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; position:relative; }
   .badge {
-    background: rgba(196,168,107,.08);
-    border: 1px solid rgba(196,168,107,.35);
+    background: rgba(240,180,41,.08);
+    border: 1px solid rgba(240,180,41,.35);
     border-radius: 999px;
     padding: 6px 16px;
     font-size: .92rem;
@@ -98,8 +98,8 @@
   code, pre { font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
   code { background:var(--bg-muted); color:var(--accent-light); padding:2px 6px; border-radius:5px; font-size:.9em; }
   pre {
-    background: #0f172a;
-    color: #e2e8f0;
+    background: #0F1A2C;
+    color: #EEF2F8;
     padding: 18px 20px;
     border-radius: 10px;
     overflow: auto;
@@ -107,7 +107,7 @@
     line-height: 1.5;
     border: 1px solid var(--border);
   }
-  pre .k { color:#7dd3fc; } pre .s { color:#86efac; } pre .c { color:#94a3b8; font-style:italic; }
+  pre .k { color:#59C0FF; } pre .s { color:#6EE796; } pre .c { color:#7C8DA6; font-style:italic; }
 
   /* ── Card ────────────────────────────────────────────────────────── */
   .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:22px 26px; margin:18px 0; }
@@ -133,7 +133,7 @@
   /* ── Key insight box ─────────────────────────────────────────────── */
   .key {
     border-left: 4px solid var(--accent);
-    background: rgba(196,168,107,.06);
+    background: rgba(240,180,41,.06);
     padding: 12px 18px;
     border-radius: 0 8px 8px 0;
     margin: 16px 0;
@@ -159,33 +159,33 @@
 
   /* ── File layout diagram ─────────────────────────────────────────── */
   .file-diagram { border:1px solid var(--border); border-radius:10px; overflow:hidden; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; margin:20px 0; }
-  .fd-header { background:rgba(196,168,107,.12); color:var(--accent); padding:10px 16px; border-bottom:2px solid rgba(196,168,107,.3); text-align:center; font-weight:700; }
+  .fd-header { background:rgba(240,180,41,.12); color:var(--accent); padding:10px 16px; border-bottom:2px solid rgba(240,180,41,.3); text-align:center; font-weight:700; }
   .fd-header-sub { font-size:.72rem; color:var(--muted); margin-top:3px; font-weight:400; }
-  .fd-band { border-bottom:2px dashed rgba(196,168,107,.25); }
+  .fd-band { border-bottom:2px dashed rgba(240,180,41,.25); }
   .fd-band:last-child { border-bottom:none; }
   .fd-cols { display:flex; border-bottom:1px solid var(--border); }
   .fd-col { flex:1; padding:8px 4px; text-align:center; border-right:1px solid var(--border); color:var(--fg); }
   .fd-col:last-child { border-right:none; }
-  .fd-col-mode  { flex:.65; background:rgba(196,168,107,.04); color:var(--muted); }
-  .fd-col-ts    { flex:1.3;  background:rgba(26,43,74,.3); color:var(--fg-strong); }
-  .fd-col-price { flex:1;    background:rgba(26,43,74,.15); }
-  .fd-col-vol   { flex:1.3;  background:rgba(196,168,107,.07); }
-  .fd-band-label { display:flex; justify-content:space-between; align-items:center; padding:5px 12px; background:rgba(26,43,74,.2); color:var(--muted); font-size:.72rem; }
+  .fd-col-mode  { flex:.65; background:rgba(240,180,41,.04); color:var(--muted); }
+  .fd-col-ts    { flex:1.3;  background:rgba(19,35,61,.3); color:var(--fg-strong); }
+  .fd-col-price { flex:1;    background:rgba(19,35,61,.15); }
+  .fd-col-vol   { flex:1.3;  background:rgba(240,180,41,.07); }
+  .fd-band-label { display:flex; justify-content:space-between; align-items:center; padding:5px 12px; background:rgba(19,35,61,.2); color:var(--muted); font-size:.72rem; }
   .fd-band-label span { color:var(--accent); font-weight:600; }
   .fd-ellipsis { text-align:center; padding:10px; color:var(--muted); font-size:1.3rem; letter-spacing:6px; background:var(--bg-soft); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
 
   /* ── Volume byte-plane diagram ───────────────────────────────────── */
   .vol-diagram { margin:20px 0; }
   .vd-section { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-  .vd-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .vd-title { background:rgba(240,180,41,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(240,180,41,.3); }
   .vd-table { width:100%; border-collapse:collapse; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; }
   .vd-table th, .vd-table td { border:1px solid var(--border); padding:6px 10px; text-align:center; }
   .vd-table th { background:var(--navy); color:var(--accent); font-weight:600; }
   .vd-table td:first-child { text-align:left; font-weight:600; white-space:nowrap; }
-  .vd-b0 { background:rgba(196,168,107,.18); color:#D4B87B; }
-  .vd-b1 { background:rgba(196,168,107,.08); color:#A89050; }
-  .vd-b2 { background:rgba(26,43,74,.3); color:var(--muted); }
-  .vd-b3 { background:rgba(26,43,74,.14); color:#3a3a4a; }
+  .vd-b0 { background:rgba(240,180,41,.18); color:#FFD166; }
+  .vd-b1 { background:rgba(240,180,41,.08); color:#C88F14; }
+  .vd-b2 { background:rgba(19,35,61,.3); color:var(--muted); }
+  .vd-b3 { background:rgba(19,35,61,.14); color:#13233D; }
   .vd-table .zero { opacity:.4; }
   .vd-table td:last-child { text-align:left; color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:.75rem; }
   .vd-dropped td { opacity:.35; }
@@ -197,17 +197,17 @@
   /* ── Timestamp encoding diagram ─────────────────────────────────── */
   .ts-diagram { margin:20px 0; }
   .tsd-section { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-  .tsd-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .tsd-title { background:rgba(240,180,41,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(240,180,41,.3); }
   .tsd-table { width:100%; border-collapse:collapse; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; }
   .tsd-table th, .tsd-table td { border:1px solid var(--border); padding:6px 10px; text-align:center; }
   .tsd-table th { background:var(--navy); color:var(--accent); font-weight:600; }
   .tsd-table td:first-child { text-align:left; font-weight:600; white-space:nowrap; }
   .tsd-table td:last-child { text-align:left; color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:.75rem; }
-  .tsd-m0 { background:rgba(74,196,120,.1); color:#5dc87a; }
-  .tsd-m1 { background:rgba(196,168,107,.15); color:#D4B87B; }
-  .tsd-m2 { background:rgba(196,168,107,.07); color:#A89050; }
-  .tsd-m3 { background:rgba(180,100,100,.1); color:#c87a7a; }
-  .tsd-free { color:#5dc87a; font-weight:700; }
+  .tsd-m0 { background:rgba(110,231,150,.1); color:#6EE796; }
+  .tsd-m1 { background:rgba(240,180,41,.15); color:#FFD166; }
+  .tsd-m2 { background:rgba(240,180,41,.07); color:#C88F14; }
+  .tsd-m3 { background:rgba(248,113,113,.1); color:#F87171; }
+  .tsd-free { color:#6EE796; font-weight:700; }
   .tsd-gap { color:var(--accent); font-weight:700; }
   .tsd-note { padding:8px 16px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); }
   .tsd-arrow { text-align:center; padding:14px 8px; color:var(--accent); font-size:.88rem; font-family:"SF Mono",monospace; font-weight:600; letter-spacing:.03em; }
@@ -216,36 +216,36 @@
   /* ── Price delta & variable-width diagram ───────────────────────── */
   .pd-diagram { margin:20px 0; }
   .pd-section { border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:0; }
-  .pd-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .pd-title { background:rgba(240,180,41,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(240,180,41,.3); }
   .pd-table { width:100%; border-collapse:collapse; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.78rem; }
   .pd-table th, .pd-table td { border:1px solid var(--border); padding:6px 10px; text-align:center; }
   .pd-table th { background:var(--navy); color:var(--accent); font-weight:600; }
   .pd-table td:first-child { text-align:left; font-weight:600; white-space:nowrap; }
   .pd-table td:last-child { text-align:left; color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:.75rem; }
-  .pd-abs { background:rgba(196,168,107,.18); color:#D4B87B; }
-  .pd-i8  { background:rgba(74,196,120,.1);  color:#5dc87a; }
-  .pd-i16 { background:rgba(196,168,107,.08); color:#A89050; }
-  .pd-i32 { background:rgba(180,100,100,.1); color:#c87a7a; }
-  .pd-byte-good { color:#5dc87a; font-weight:700; }
+  .pd-abs { background:rgba(240,180,41,.18); color:#FFD166; }
+  .pd-i8  { background:rgba(110,231,150,.1);  color:#6EE796; }
+  .pd-i16 { background:rgba(240,180,41,.08); color:#C88F14; }
+  .pd-i32 { background:rgba(248,113,113,.1); color:#F87171; }
+  .pd-byte-good { color:#6EE796; font-weight:700; }
   .pd-byte-mid  { color:var(--accent); font-weight:700; }
-  .pd-byte-bad  { color:#c87a7a; font-weight:700; }
+  .pd-byte-bad  { color:#F87171; font-weight:700; }
   .pd-note { padding:8px 16px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); }
   .pd-arrow { text-align:center; padding:14px 8px; color:var(--accent); font-size:.88rem; font-family:"SF Mono",monospace; font-weight:600; letter-spacing:.03em; }
   .pd-ellipsis td { text-align:center; color:var(--muted); background:var(--bg-soft); font-weight:400; }
 
   /* ── Bar charts (replace numeric comparison tables) ──────────────── */
   .chart { margin:22px 0; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-  .chart-title { background:rgba(196,168,107,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(196,168,107,.3); }
+  .chart-title { background:rgba(240,180,41,.12); color:var(--accent); padding:8px 16px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:.8rem; font-weight:700; border-bottom:2px solid rgba(240,180,41,.3); }
   .chart-body { padding:16px 18px 14px; }
   .chart-sub { font-size:.74rem; color:var(--muted); margin:0 0 10px; font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; }
   .chart-sub.spaced { margin-top:18px; }
   .bar-row { display:flex; align-items:center; margin:6px 0; font-size:.82rem; }
   .bar-label { flex:0 0 200px; color:var(--fg); text-align:right; padding-right:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bar-track { flex:1; background:var(--bg-muted); border-radius:5px; height:24px; }
-  .bar-fill { height:100%; border-radius:5px; display:flex; align-items:center; justify-content:flex-end; padding-right:9px; font-size:.76rem; font-weight:700; color:#0A0A0A; white-space:nowrap; box-sizing:border-box; }
+  .bar-fill { height:100%; border-radius:5px; display:flex; align-items:center; justify-content:flex-end; padding-right:9px; font-size:.76rem; font-weight:700; color:#050810; white-space:nowrap; box-sizing:border-box; }
   .bar-win  { background:linear-gradient(90deg,var(--accent-dark),var(--accent-light)); }
-  .bar-good { background:linear-gradient(90deg,#3e8e5a,#5dc87a); color:#08130c; }
-  .bar-dim  { background:rgba(26,43,74,.75); color:var(--fg-strong); }
+  .bar-good { background:linear-gradient(90deg,#3e8e5a,#6EE796); color:#08130c; }
+  .bar-dim  { background:rgba(19,35,61,.75); color:var(--fg-strong); }
   .chart-note { padding:8px 16px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); }
   .chart-note strong { color:var(--accent); }
   @media(max-width:560px){ .bar-label{ flex-basis:120px; font-size:.74rem; } }
@@ -264,21 +264,55 @@
   .bm-row.bm-header .bm-cell { color:var(--fg-strong); font-weight:600; font-family:"SF Mono",monospace; font-size:.78rem; padding:10px 4px; }
   .bm-ms { font-family:"SF Mono",monospace; font-weight:700; font-size:.8rem; }
   .bm-sp { font-size:.68rem; opacity:.7; }
-  .bm-baseline { background:rgba(26,43,74,.55); } .bm-baseline .bm-ms { color:var(--muted); }
-  .bm-noise    { background:rgba(26,43,74,.2);  } .bm-noise .bm-ms    { color:var(--muted); }
-  .bm-mild     { background:rgba(196,168,107,.1);} .bm-mild .bm-ms    { color:var(--accent); }
-  .bm-good     { background:rgba(196,168,107,.22);} .bm-good .bm-ms   { color:var(--accent-light); }
-  .bm-great    { background:rgba(74,196,120,.12);} .bm-great .bm-ms   { color:#5dc87a; }
-  .bm-best     { background:rgba(74,196,120,.28);} .bm-best .bm-ms    { color:#3db867; font-size:.85rem; }
-  .bm-opt { outline:2px solid rgba(74,196,120,.6); outline-offset:-2px; border-radius:2px; }
+  .bm-baseline { background:rgba(19,35,61,.55); } .bm-baseline .bm-ms { color:var(--muted); }
+  .bm-noise    { background:rgba(19,35,61,.2);  } .bm-noise .bm-ms    { color:var(--muted); }
+  .bm-mild     { background:rgba(240,180,41,.1);} .bm-mild .bm-ms    { color:var(--accent); }
+  .bm-good     { background:rgba(240,180,41,.22);} .bm-good .bm-ms   { color:var(--accent-light); }
+  .bm-great    { background:rgba(110,231,150,.12);} .bm-great .bm-ms   { color:#6EE796; }
+  .bm-best     { background:rgba(110,231,150,.28);} .bm-best .bm-ms    { color:#3ECF7A; font-size:.85rem; }
+  .bm-opt { outline:2px solid rgba(110,231,150,.6); outline-offset:-2px; border-radius:2px; }
   .bm-note { padding:10px 14px; font-size:.75rem; color:var(--muted); background:var(--bg-soft); border-top:1px solid var(--border); line-height:1.55; }
   @media(max-width:640px){ .bm-label{flex-basis:110px;} .bm-cell{padding:6px 2px;} .bm-ms{font-size:.72rem;} }
 
   /* ── Responsive ──────────────────────────────────────────────────── */
   @media(max-width:640px) { header h1 { font-size:2rem; } }
+
+  /* ── Static background network (frozen echo of the homepage hero) ──── */
+  .bg-network {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg, #070b15 0%, #0a1220 55%, #050810 100%);
+    overflow: hidden;
+  }
+  .bg-network-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .bg-network::after {
+    /* soft vignette so the network fades at the edges instead of stopping hard */
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 38%, rgba(5,8,16,0) 0%, rgba(5,8,16,0.35) 60%, rgba(3,5,10,0.82) 100%);
+  }
+  body { background: transparent; }
+  .wrap {
+    position: relative;
+    z-index: 1;
+    background: var(--bg);
+    box-shadow: 0 0 0 1px var(--border), 0 40px 120px rgba(0,0,0,0.55);
+  }
+  header { position: relative; z-index: 1; }
 </style>
 </head>
 <body>
+<div class="bg-network"><svg class="bg-network-svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><defs><radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(240,180,60,0.30)"/><stop offset="100%" stop-color="rgba(240,180,60,0)"/></radialGradient></defs><g stroke="rgba(214,228,248,0.10)" stroke-width="1"><line x1="125.0" y1="653.2" x2="240.7" y2="704.1"/><line x1="688.7" y1="22.4" x2="887.2" y2="129.6"/><line x1="76.0" y1="804.4" x2="81.7" y2="902.4"/><line x1="440.8" y1="415.1" x2="418.8" y2="577.9"/><line x1="659.7" y1="679.7" x2="877.8" y2="759.4"/><line x1="887.2" y1="129.6" x2="930.7" y2="239.7"/><line x1="688.7" y1="22.4" x2="523.6" y2="231.9"/><line x1="930.7" y1="239.7" x2="1114.5" y2="243.4"/><line x1="1053.0" y1="101.4" x2="1114.5" y2="243.4"/><line x1="1527.9" y1="354.4" x2="1561.9" y2="551.9"/><line x1="1357.8" y1="479.7" x2="1163.1" y2="523.9"/><line x1="81.7" y1="902.4" x2="322.8" y2="854.7"/><line x1="70.1" y1="33.9" x2="39.5" y2="195.9"/><line x1="235.1" y1="405.1" x2="440.8" y2="415.1"/><line x1="424.9" y1="84.4" x2="625.7" y2="187.6"/><line x1="227.3" y1="88.4" x2="353.7" y2="204.8"/><line x1="523.6" y1="231.9" x2="440.8" y2="415.1"/><line x1="263.4" y1="567.2" x2="418.8" y2="577.9"/><line x1="634.9" y1="520.9" x2="837.0" y2="547.6"/><line x1="728.6" y1="454.1" x2="634.9" y2="520.9"/><line x1="837.0" y1="547.6" x2="877.8" y2="759.4"/><line x1="1313.1" y1="68.7" x2="1350.0" y2="278.2"/><line x1="1512.7" y1="253.6" x2="1527.9" y2="354.4"/><line x1="1308.4" y1="637.6" x2="1547.6" y2="803.1"/><line x1="887.2" y1="129.6" x2="1053.0" y2="101.4"/><line x1="125.0" y1="653.2" x2="76.0" y2="804.4"/><line x1="240.7" y1="704.1" x2="322.8" y2="854.7"/><line x1="963.8" y1="390.3" x2="837.0" y2="547.6"/><line x1="1163.1" y1="523.9" x2="1132.4" y2="752.2"/><line x1="1350.0" y1="278.2" x2="1512.7" y2="253.6"/><line x1="1053.0" y1="101.4" x2="930.7" y2="239.7"/><line x1="70.1" y1="33.9" x2="227.3" y2="88.4"/><line x1="353.7" y1="204.8" x2="523.6" y2="231.9"/><line x1="1357.8" y1="479.7" x2="1561.9" y2="551.9"/><line x1="227.3" y1="88.4" x2="424.9" y2="84.4"/><line x1="523.6" y1="231.9" x2="625.7" y2="187.6"/><line x1="424.9" y1="84.4" x2="523.6" y2="231.9"/><line x1="837.0" y1="547.6" x2="659.7" y2="679.7"/><line x1="1132.4" y1="752.2" x2="1330.0" y2="686.8"/><line x1="728.6" y1="454.1" x2="659.7" y2="679.7"/><line x1="1313.1" y1="68.7" x2="1422.9" y2="134.1"/><line x1="125.0" y1="653.2" x2="263.4" y2="567.2"/><line x1="1308.4" y1="637.6" x2="1330.0" y2="686.8"/><line x1="1422.9" y1="134.1" x2="1512.7" y2="253.6"/><line x1="263.4" y1="567.2" x2="240.7" y2="704.1"/><line x1="688.7" y1="22.4" x2="625.7" y2="187.6"/><line x1="963.8" y1="390.3" x2="1116.0" y2="428.0"/><line x1="1163.1" y1="523.9" x2="1308.4" y2="637.6"/><line x1="418.8" y1="577.9" x2="454.7" y2="747.9"/><line x1="1308.4" y1="637.6" x2="1132.4" y2="752.2"/><line x1="930.7" y1="239.7" x2="963.8" y2="390.3"/><line x1="1116.0" y1="428.0" x2="1163.1" y2="523.9"/><line x1="1350.0" y1="278.2" x2="1527.9" y2="354.4"/><line x1="1357.8" y1="479.7" x2="1308.4" y2="637.6"/><line x1="1561.9" y1="551.9" x2="1547.6" y2="803.1"/><line x1="1330.0" y1="686.8" x2="1547.6" y2="803.1"/><line x1="39.5" y1="195.9" x2="139.0" y2="386.6"/><line x1="454.7" y1="747.9" x2="659.7" y2="679.7"/><line x1="424.9" y1="84.4" x2="353.7" y2="204.8"/><line x1="235.1" y1="405.1" x2="263.4" y2="567.2"/><line x1="454.7" y1="747.9" x2="322.8" y2="854.7"/><line x1="728.6" y1="454.1" x2="837.0" y2="547.6"/><line x1="634.9" y1="520.9" x2="659.7" y2="679.7"/><line x1="1114.5" y1="243.4" x2="1116.0" y2="428.0"/><line x1="139.0" y1="386.6" x2="235.1" y2="405.1"/><line x1="1422.9" y1="134.1" x2="1350.0" y2="278.2"/></g><g><circle cx="70.1" cy="33.9" r="21.7" fill="url(#nodeGlow)" opacity="0.77"/><circle cx="70.1" cy="33.9" r="3.61" fill="rgba(255,243,214,0.81)"/><circle cx="227.3" cy="88.4" r="18.8" fill="url(#nodeGlow)" opacity="0.59"/><circle cx="227.3" cy="88.4" r="3.13" fill="rgba(255,243,214,0.65)"/><circle cx="424.9" cy="84.4" r="15.4" fill="url(#nodeGlow)" opacity="0.37"/><circle cx="424.9" cy="84.4" r="2.57" fill="rgba(255,243,214,0.47)"/><circle cx="688.7" cy="22.4" r="16.0" fill="url(#nodeGlow)" opacity="0.41"/><circle cx="688.7" cy="22.4" r="2.66" fill="rgba(255,243,214,0.50)"/><circle cx="887.2" cy="129.6" r="16.3" fill="url(#nodeGlow)" opacity="0.43"/><circle cx="887.2" cy="129.6" r="2.72" fill="rgba(255,243,214,0.52)"/><circle cx="1053.0" cy="101.4" r="24.7" fill="url(#nodeGlow)" opacity="0.97"/><circle cx="1053.0" cy="101.4" r="4.11" fill="rgba(255,243,214,0.97)"/><circle cx="1313.1" cy="68.7" r="25.0" fill="url(#nodeGlow)" opacity="0.98"/><circle cx="1313.1" cy="68.7" r="4.16" fill="rgba(255,243,214,0.99)"/><circle cx="1422.9" cy="134.1" r="18.0" fill="url(#nodeGlow)" opacity="0.54"/><circle cx="1422.9" cy="134.1" r="3.00" fill="rgba(255,243,214,0.61)"/><circle cx="39.5" cy="195.9" r="18.2" fill="url(#nodeGlow)" opacity="0.55"/><circle cx="39.5" cy="195.9" r="3.03" fill="rgba(255,243,214,0.62)"/><circle cx="353.7" cy="204.8" r="21.0" fill="url(#nodeGlow)" opacity="0.73"/><circle cx="353.7" cy="204.8" r="3.49" fill="rgba(255,243,214,0.77)"/><circle cx="523.6" cy="231.9" r="20.6" fill="url(#nodeGlow)" opacity="0.71"/><circle cx="523.6" cy="231.9" r="3.44" fill="rgba(255,243,214,0.75)"/><circle cx="625.7" cy="187.6" r="17.1" fill="url(#nodeGlow)" opacity="0.48"/><circle cx="625.7" cy="187.6" r="2.86" fill="rgba(255,243,214,0.56)"/><circle cx="930.7" cy="239.7" r="18.2" fill="url(#nodeGlow)" opacity="0.55"/><circle cx="930.7" cy="239.7" r="3.04" fill="rgba(255,243,214,0.62)"/><circle cx="1114.5" cy="243.4" r="18.1" fill="url(#nodeGlow)" opacity="0.54"/><circle cx="1114.5" cy="243.4" r="3.02" fill="rgba(255,243,214,0.61)"/><circle cx="1350.0" cy="278.2" r="17.5" fill="url(#nodeGlow)" opacity="0.51"/><circle cx="1350.0" cy="278.2" r="2.92" fill="rgba(255,243,214,0.58)"/><circle cx="1512.7" cy="253.6" r="23.9" fill="url(#nodeGlow)" opacity="0.92"/><circle cx="1512.7" cy="253.6" r="3.99" fill="rgba(255,243,214,0.93)"/><circle cx="139.0" cy="386.6" r="25.0" fill="url(#nodeGlow)" opacity="0.99"/><circle cx="139.0" cy="386.6" r="4.17" fill="rgba(255,243,214,0.99)"/><circle cx="235.1" cy="405.1" r="22.7" fill="url(#nodeGlow)" opacity="0.84"/><circle cx="235.1" cy="405.1" r="3.79" fill="rgba(255,243,214,0.87)"/><circle cx="440.8" cy="415.1" r="15.5" fill="url(#nodeGlow)" opacity="0.38"/><circle cx="440.8" cy="415.1" r="2.58" fill="rgba(255,243,214,0.47)"/><circle cx="728.6" cy="454.1" r="20.9" fill="url(#nodeGlow)" opacity="0.72"/><circle cx="728.6" cy="454.1" r="3.48" fill="rgba(255,243,214,0.76)"/><circle cx="963.8" cy="390.3" r="22.1" fill="url(#nodeGlow)" opacity="0.80"/><circle cx="963.8" cy="390.3" r="3.69" fill="rgba(255,243,214,0.83)"/><circle cx="1116.0" cy="428.0" r="19.7" fill="url(#nodeGlow)" opacity="0.65"/><circle cx="1116.0" cy="428.0" r="3.28" fill="rgba(255,243,214,0.70)"/><circle cx="1357.8" cy="479.7" r="19.9" fill="url(#nodeGlow)" opacity="0.66"/><circle cx="1357.8" cy="479.7" r="3.31" fill="rgba(255,243,214,0.71)"/><circle cx="1527.9" cy="354.4" r="22.2" fill="url(#nodeGlow)" opacity="0.81"/><circle cx="1527.9" cy="354.4" r="3.70" fill="rgba(255,243,214,0.84)"/><circle cx="125.0" cy="653.2" r="23.4" fill="url(#nodeGlow)" opacity="0.88"/><circle cx="125.0" cy="653.2" r="3.90" fill="rgba(255,243,214,0.90)"/><circle cx="263.4" cy="567.2" r="21.8" fill="url(#nodeGlow)" opacity="0.78"/><circle cx="263.4" cy="567.2" r="3.64" fill="rgba(255,243,214,0.82)"/><circle cx="418.8" cy="577.9" r="16.8" fill="url(#nodeGlow)" opacity="0.46"/><circle cx="418.8" cy="577.9" r="2.79" fill="rgba(255,243,214,0.54)"/><circle cx="634.9" cy="520.9" r="22.8" fill="url(#nodeGlow)" opacity="0.85"/><circle cx="634.9" cy="520.9" r="3.81" fill="rgba(255,243,214,0.87)"/><circle cx="837.0" cy="547.6" r="19.0" fill="url(#nodeGlow)" opacity="0.60"/><circle cx="837.0" cy="547.6" r="3.17" fill="rgba(255,243,214,0.66)"/><circle cx="1163.1" cy="523.9" r="19.6" fill="url(#nodeGlow)" opacity="0.64"/><circle cx="1163.1" cy="523.9" r="3.27" fill="rgba(255,243,214,0.70)"/><circle cx="1308.4" cy="637.6" r="23.4" fill="url(#nodeGlow)" opacity="0.88"/><circle cx="1308.4" cy="637.6" r="3.89" fill="rgba(255,243,214,0.90)"/><circle cx="1561.9" cy="551.9" r="19.3" fill="url(#nodeGlow)" opacity="0.62"/><circle cx="1561.9" cy="551.9" r="3.21" fill="rgba(255,243,214,0.68)"/><circle cx="76.0" cy="804.4" r="24.8" fill="url(#nodeGlow)" opacity="0.97"/><circle cx="76.0" cy="804.4" r="4.13" fill="rgba(255,243,214,0.98)"/><circle cx="240.7" cy="704.1" r="17.4" fill="url(#nodeGlow)" opacity="0.50"/><circle cx="240.7" cy="704.1" r="2.90" fill="rgba(255,243,214,0.58)"/><circle cx="454.7" cy="747.9" r="21.0" fill="url(#nodeGlow)" opacity="0.73"/><circle cx="454.7" cy="747.9" r="3.51" fill="rgba(255,243,214,0.77)"/><circle cx="659.7" cy="679.7" r="19.3" fill="url(#nodeGlow)" opacity="0.62"/><circle cx="659.7" cy="679.7" r="3.22" fill="rgba(255,243,214,0.68)"/><circle cx="877.8" cy="759.4" r="24.7" fill="url(#nodeGlow)" opacity="0.97"/><circle cx="877.8" cy="759.4" r="4.12" fill="rgba(255,243,214,0.97)"/><circle cx="1132.4" cy="752.2" r="21.3" fill="url(#nodeGlow)" opacity="0.75"/><circle cx="1132.4" cy="752.2" r="3.55" fill="rgba(255,243,214,0.79)"/><circle cx="1330.0" cy="686.8" r="24.2" fill="url(#nodeGlow)" opacity="0.93"/><circle cx="1330.0" cy="686.8" r="4.03" fill="rgba(255,243,214,0.94)"/><circle cx="1547.6" cy="803.1" r="23.2" fill="url(#nodeGlow)" opacity="0.87"/><circle cx="1547.6" cy="803.1" r="3.86" fill="rgba(255,243,214,0.89)"/><circle cx="81.7" cy="902.4" r="16.1" fill="url(#nodeGlow)" opacity="0.42"/><circle cx="81.7" cy="902.4" r="2.68" fill="rgba(255,243,214,0.50)"/><circle cx="322.8" cy="854.7" r="15.7" fill="url(#nodeGlow)" opacity="0.39"/><circle cx="322.8" cy="854.7" r="2.62" fill="rgba(255,243,214,0.48)"/></g></svg></div>
+
 <header>
   <h1>BQE-DeComp</h1>
   <p>A domain-specific binary codec for 1-minute OHLCV equity data.<br>Decodes directly into NumPy arrays — no text parsing, all CPU cores in parallel.</p>
@@ -619,7 +653,7 @@
     <div class="bm-cell bm-great">   <div class="bm-ms">9.6 ms</div><div class="bm-sp">4.7×</div></div>
   </div>
   <div class="bm-note">
-    Highlighted cell (outlined) = fastest for that file. Colour: <span style="color:var(--muted)">■ 1.0×</span> &nbsp;·&nbsp; <span style="color:var(--accent)">■ ~2×</span> &nbsp;·&nbsp; <span style="color:var(--accent-light)">■ ~4×</span> &nbsp;·&nbsp; <span style="color:#5dc87a">■ ~5–7×</span> &nbsp;·&nbsp; <span style="color:#3db867">■ &gt;7×</span>
+    Highlighted cell (outlined) = fastest for that file. Colour: <span style="color:var(--muted)">■ 1.0×</span> &nbsp;·&nbsp; <span style="color:var(--accent)">■ ~2×</span> &nbsp;·&nbsp; <span style="color:var(--accent-light)">■ ~4×</span> &nbsp;·&nbsp; <span style="color:#6EE796">■ ~5–7×</span> &nbsp;·&nbsp; <span style="color:#3ECF7A">■ &gt;7×</span>
     &nbsp;·&nbsp; Measured with <code>BAND_ROWS = 4 096</code> (v10 default).<br>
     With 39–998 bands per file, <strong>every file size now scales strongly across thread counts</strong>. Small files (AFIB, ASO) reach 7–10× at 16 threads — impossible when the old 131 072 default produced only 2–5 bands. The only exception is AAPL (35 MB): memory bandwidth saturates at 8 threads regardless of band count; adding more threads causes regression. Online calibration detects this machine-specific ceiling automatically.
   </div>
@@ -916,7 +950,7 @@
 <div class="chart">
   <div class="chart-title">zstd vs lz4 — the speed / size tradeoff (AAPL, 4.08 M rows, warm cache)</div>
   <div class="chart-body">
-    <div class="chart-sub">Decode time · lower = faster &nbsp;→&nbsp; <span style="color:#5dc87a">lz4 wins</span></div>
+    <div class="chart-sub">Decode time · lower = faster &nbsp;→&nbsp; <span style="color:#6EE796">lz4 wins</span></div>
     <div class="bar-row"><div class="bar-label">lz4 (hot / ML data)</div><div class="bar-track"><div class="bar-fill bar-good" style="width:31%">~9 ms</div></div></div>
     <div class="bar-row"><div class="bar-label">zstd (archival)</div><div class="bar-track"><div class="bar-fill bar-dim" style="width:100%">~29 ms</div></div></div>
     <div class="chart-sub spaced">File size · lower = smaller &nbsp;→&nbsp; <span style="color:var(--accent)">zstd wins</span></div>
@@ -1107,7 +1141,7 @@ ts, ohlcv = bqe.read_range(<span class="s">"stocks_weekly/AAPL"</span>, <span cl
 
 <table>
 <tr><th>Access pattern</th><th>Files read</th><th>Rows loaded</th><th>Read time</th><th>Notes</th></tr>
-<tr style="background:rgba(196,168,107,0.08)"><td><strong>Yearly split — 2026 only</strong></td><td><strong>1</strong></td><td><strong>74 k</strong></td><td><strong>1.8 ms</strong></td><td><strong>10× faster than single file</strong></td></tr>
+<tr style="background:rgba(240,180,41,0.08)"><td><strong>Yearly split — 2026 only</strong></td><td><strong>1</strong></td><td><strong>74 k</strong></td><td><strong>1.8 ms</strong></td><td><strong>10× faster than single file</strong></td></tr>
 <tr><td>Single .bqe — full history</td><td>1</td><td>4.09 M</td><td>19 ms</td><td>baseline — one mmap, 998 bands</td></tr>
 <tr><td>Yearly split — all 27 years</td><td>27</td><td>4.09 M</td><td>87 ms</td><td>27 separate mmaps — use single file for full-history training</td></tr>
 </table>
