@@ -1,0 +1,29 @@
+# Cloudflare Pages reads this file at the site root.
+# https://developers.cloudflare.com/pages/configuration/headers/
+
+/*
+  # This site loads no third-party frames and should never be framed itself.
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  # No page here needs a camera, a microphone or a location.
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Fingerprinted these are not, so a long cache would strand visitors on an
+# old build. An hour at the edge with revalidation is the safe middle.
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Images, video and fonts change only when their name changes in the markup.
+/assets/images/*
+  Cache-Control: public, max-age=604800
+/assets/video.mp4
+  Cache-Control: public, max-age=604800
+
+# The price snapshots are rewritten by the scheduled jobs on weekday
+# evenings, so a day at the edge is as long as they can safely be held.
+/research/stack/data/*
+  Cache-Control: public, max-age=3600
+/research/markettape/data/*
+  Cache-Control: public, max-age=1800

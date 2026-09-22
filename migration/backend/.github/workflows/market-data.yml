@@ -1,0 +1,79 @@
+name: Market data
+
+# 22:20 UTC on weekdays — about 90 minutes after the US close, so the daily
+# bar is settled. Also runnable by hand from the Actions tab.
+#
+# The scripts live here; the data they produce belongs to the site, so it is
+# committed into bqe-frontend. Pushing there wakes that repo's Cloudflare
+# deploy, which is what puts the refreshed JSON in front of visitors.
+on:
+  schedule:
+    - cron: "20 22 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Only fetch the first N tickers (0 = all)"
+        required: false
+        default: "0"
+
+permissions:
+  contents: read      # the write happens in bqe-frontend, with its own token
+
+concurrency:
+  group: market-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out the scripts
+        uses: actions/checkout@v4
+
+      - name: Check out the site
+        uses: actions/checkout@v4
+        with:
+          repository: SchwarzRene/bqe-frontend
+          path: frontend
+          # A fine-grained PAT scoped to bqe-frontend with Contents: write.
+          # GITHUB_TOKEN cannot be used here: it is scoped to this repo only.
+          token: ${{ secrets.FRONTEND_REPO_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-automation.txt
+
+      - run: pip install -r requirements-automation.txt
+
+      - name: Fetch prices
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://github.com/SchwarzRene/bqe-backend' }}
+        run: |
+          python automation/scripts/fetch_market_data.py \
+            --out frontend/research/stack/data \
+            --limit "${{ github.event.inputs.limit || 0 }}"
+
+      - name: Commit to bqe-frontend
+        working-directory: frontend
+        run: |
+          git config user.name  "bqe-bot"
+          git config user.email "123473580+SchwarzRene@users.noreply.github.com"
+          git add research/stack/data
+          if git diff --quiet --cached; then
+            echo "nothing changed"
+            exit 0
+          fi
+          git commit -m "Market data $(date -u +'%Y-%m-%d')"
+          # Someone may have pushed while the fetch ran; rebase onto them and retry.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push rejected, rebasing onto the remote (attempt $attempt)"
+            git pull --rebase --autostash origin main || exit 1
+            sleep 5
+          done
+          exit 1

@@ -1,0 +1,6 @@
+# Runtime dependencies for the API service (what ships in the container).
+# The market-data jobs have their own, heavier set in requirements-automation.txt
+# so the image does not carry pandas and yfinance it never imports.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+httpx>=0.27,<1.0

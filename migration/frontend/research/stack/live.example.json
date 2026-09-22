@@ -1,0 +1,4 @@
+{
+  "_comment": "Copy this to live.json, with the deployed bqe-backend URL, to fetch live bars on page load. The path must end in /api/quotes — the page appends /SYMBOL to it. See https://github.com/SchwarzRene/bqe-backend",
+  "proxy": "https://bqe-backend.<region>.azurecontainerapps.io/api/quotes"
+}
