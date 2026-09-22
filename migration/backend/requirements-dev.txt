@@ -1,6 +1,0 @@
-# Local development and CI checks.
--r requirements.txt
-pytest>=8.3
-pytest-asyncio>=0.24
-respx>=0.21          # records httpx traffic so tests never call Yahoo
-ruff>=0.7

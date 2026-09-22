@@ -1,1 +1,17 @@
+# Secrets — never commit these. See docs/DEPLOYMENT.md.
+.env
+.env.*
+!.env.example
+
+# The publish directory the deploy workflow assembles
+_site/
+
+# Local preview and tooling
+.wrangler/
+node_modules/
 __pycache__/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

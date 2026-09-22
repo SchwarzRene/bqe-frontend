@@ -1,52 +1,89 @@
-name: Deploy site
+name: Deploy to Cloudflare
 
-# Pages' "deploy from a branch" source can only publish the repository root
-# or a folder called docs/ - no other name is selectable. The site lives in
-# webpage/, so it is published from here instead, which can serve any folder.
+# Push to main -> the site is live, usually inside a minute.
 #
-# This needs Settings -> Pages -> Build and deployment -> Source set to
-# "GitHub Actions". Without it, nothing this workflow uploads is ever served.
+# Pull requests get their own preview URL instead, so a change can be looked
+# at in a real browser on a real CDN before it reaches the production domain.
 on:
   push:
     branches: [main]
-    paths:
-      - "webpage/**"
-      - ".github/workflows/deploy.yml"
-  # A push made with the repository's own GITHUB_TOKEN - which is how the two
-  # data jobs commit - deliberately does not trigger another workflow, so the
-  # refreshed JSON would otherwise sit in the branch without being published.
-  # Publishing when those runs finish is what keeps the live data current.
-  workflow_run:
-    workflows: ["Market data", "Market tape"]
-    types: [completed]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
+  deployments: write
+  pull-requests: write      # to leave the preview URL on the PR
 
-# Never cancel a deployment that is already going out; queue behind it.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: cloudflare-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_NAME: bqe-frontend
 
 jobs:
   deploy:
-    # Nothing new to publish when the data run itself failed.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
         with:
-          path: webpage
+          # The market-data jobs commit here from bqe-backend, so the tree can
+          # move under us; a shallow checkout of the pushed commit is all the
+          # deploy needs.
+          fetch-depth: 1
 
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Assemble the publish directory
+        run: |
+          set -euo pipefail
+          # Everything the browser should get, and nothing else. Repository
+          # furniture (workflows, docs, the readme) has no business on a CDN.
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'docs' \
+            --exclude 'README.md' \
+            --exclude 'CNAME' \
+            ./ _site/
+          echo "publishing $(find _site -type f | wc -l) files, $(du -sh _site | cut -f1)"
+
+      - name: Check the entry point survived
+        run: test -f _site/index.html || { echo "::error::_site/index.html is missing"; exit 1; }
+
+      - name: Publish
+        id: publish
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # --branch tells Pages whether this is the production deployment or
+          # a preview. Anything that is not the project's production branch
+          # gets its own URL and leaves the live site untouched.
+          command: >-
+            pages deploy _site
+            --project-name=${{ env.PROJECT_NAME }}
+            --branch=${{ github.head_ref || github.ref_name }}
+
+      - name: Leave the preview URL on the pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.publish.outputs.deployment-url }}
+        with:
+          script: |
+            const url = process.env.PREVIEW_URL;
+            if (!url) return;
+            const marker = '<!-- cloudflare-preview -->';
+            const body = `${marker}\n**Preview:** ${url}\n\nDeployed from ${context.sha.slice(0, 7)}.`;
+
+            // Update the existing comment rather than adding one per push.
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo, issue_number: context.issue.number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body?.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            }

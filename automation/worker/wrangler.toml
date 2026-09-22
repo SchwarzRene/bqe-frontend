@@ -1,6 +1,0 @@
-name = "stack-live-quotes"
-main = "live-quotes.js"
-compatibility_date = "2026-09-01"
-
-# No bindings, no secrets, no state — the Worker only relays Yahoo's chart
-# endpoint and adds the CORS header the browser needs.
