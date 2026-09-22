@@ -17,13 +17,13 @@ function initMobileNav() {
   function openMenu() {
     nav.classList.add('is-open');
     toggle.setAttribute('aria-expanded', 'true');
-    toggle.setAttribute('aria-label', 'Navigationsmenü schließen');
+    toggle.setAttribute('aria-label', 'Close navigation menu');
   }
 
   function closeMenu() {
     nav.classList.remove('is-open');
     toggle.setAttribute('aria-expanded', 'false');
-    toggle.setAttribute('aria-label', 'Navigationsmenü öffnen');
+    toggle.setAttribute('aria-label', 'Open navigation menu');
   }
 
   toggle.addEventListener('click', (e) => {
@@ -177,7 +177,7 @@ function initLoginModal() {
   if (loginForm) {
     loginForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      alert('Demo-Modus: Dieses Formular funktioniert nicht.');
+      alert('Demo mode: this form does not work.');
     });
   }
 }

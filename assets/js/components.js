@@ -62,9 +62,9 @@ function setActiveNavLink() {
   });
 }
 
-// --- Cookie Logik ---
+// --- Cookie logic ---
 
-// Funktion zum Setzen eines Cookies
+// Function for setting a cookie
 function setCookie(name, value, days) {
   let expires = "";
   if (days) {
@@ -75,7 +75,7 @@ function setCookie(name, value, days) {
   document.cookie = name + "=" + (value || "") + expires + "; path=/";
 }
 
-// Funktion zum Auslesen eines Cookies
+// Function for reading a cookie
 function getCookie(name) {
   let nameEQ = name + "=";
   let ca = document.cookie.split(';');
@@ -87,26 +87,26 @@ function getCookie(name) {
   return null;
 }
 
-// Initialisierung des Banners
+// Initialisation of the banner
 document.addEventListener('DOMContentLoaded', () => {
   const cookieBanner = document.getElementById('cookie-banner');
   const acceptButton = document.getElementById('accept-cookies');
 
   if (cookieBanner && acceptButton) {
-    // Wenn das Cookie "bqe_cookie_consent" nicht existiert, zeige den Banner
+    // If the "bqe_cookie_consent" cookie does not exist, show the banner
     if (!getCookie('bqe_cookie_consent')) {
       cookieBanner.style.display = 'block';
     }
 
-    // Wenn auf Akzeptieren geklickt wird
+    // When Accept is clicked
     acceptButton.addEventListener('click', () => {
-      // Setze das Cookie für 365 Tage
+      // Set the cookie for 365 days
       setCookie('bqe_cookie_consent', 'accepted', 365);
-      // Verstecke den Banner
+      // Hide the banner
       cookieBanner.style.display = 'none';
       
-      // Hier könntest du dann deine Tracking-Skripte starten (z.B. Google Analytics)
-      console.log("Cookies wurden akzeptiert!");
+      // Here you could then start your tracking scripts (e.g. Google Analytics)
+      console.log("Cookies have been accepted!");
     });
   }
 });
