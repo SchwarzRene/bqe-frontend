@@ -1,0 +1,52 @@
+name: Deploy site
+
+# Pages' "deploy from a branch" source can only publish the repository root
+# or a folder called docs/ - no other name is selectable. The site lives in
+# webpage/, so it is published from here instead, which can serve any folder.
+#
+# This needs Settings -> Pages -> Build and deployment -> Source set to
+# "GitHub Actions". Without it, nothing this workflow uploads is ever served.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "webpage/**"
+      - ".github/workflows/deploy.yml"
+  # A push made with the repository's own GITHUB_TOKEN - which is how the two
+  # data jobs commit - deliberately does not trigger another workflow, so the
+  # refreshed JSON would otherwise sit in the branch without being published.
+  # Publishing when those runs finish is what keeps the live data current.
+  workflow_run:
+    workflows: ["Market data", "Market tape"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deployment that is already going out; queue behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Nothing new to publish when the data run itself failed.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: webpage
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

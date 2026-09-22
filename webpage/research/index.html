@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="Black Quant Empire Research — open technical work on data infrastructure, machine learning and interactive tools for quantitative trading."
+    />
+    <title>Research - Black Quant Empire</title>
+
+    <link rel="stylesheet" href="/assets/css/shared.css?v=4" />
+    <link rel="stylesheet" href="/assets/css/pages/research.css?v=2" />
+    <link rel="icon" href="/assets/images/logo.png" type="image/png" />
+
+    <!-- Without script there is no graph to search or lay out, so the
+         controls and the canvas step aside for the plain list below them. -->
+    <noscript>
+      <style>
+        .search-wrap,
+        .graph-wrap {
+          display: none;
+        }
+      </style>
+    </noscript>
+  </head>
+
+  <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Header Placeholder (loaded by components.js) -->
+    <div id="header-placeholder"></div>
+
+    <main id="main-content">
+      <!-- Intro band: the start page's market network, scoped to a short
+           banner behind the heading. See assets/js/research-hero.js -->
+      <section class="intro" id="introHero">
+        <canvas class="intro-canvas" id="introCanvas" aria-hidden="true"></canvas>
+        <div class="intro-vignette" aria-hidden="true"></div>
+        <div class="intro-grain" aria-hidden="true"></div>
+        <div class="intro-content" id="introContent">
+          <h1>Research</h1>
+          <p class="intro-sub">Open technical work from Black Quant Empire.</p>
+        </div>
+      </section>
+
+      <!-- The project explorer: a cluster graph that re-flows into a
+           reading list. See assets/js/research-graph.js -->
+      <section class="research-explorer" aria-labelledby="projects-heading">
+        <h2 id="projects-heading" class="sr-only">Projects</h2>
+
+        <div class="explorer-inner">
+          <div class="search-wrap">
+            <div class="search-row">
+              <div class="search-field" id="searchField">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <label class="sr-only" for="searchInput">Search research projects</label>
+                <input
+                  class="search-input"
+                  type="search"
+                  id="searchInput"
+                  placeholder="Search"
+                  autocomplete="off"
+                />
+              </div>
+
+              <button type="button" class="view-toggle" id="viewToggle" aria-pressed="false">
+                <svg class="view-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <line x1="8" y1="6" x2="21" y2="6"></line>
+                  <line x1="8" y1="12" x2="21" y2="12"></line>
+                  <line x1="8" y1="18" x2="21" y2="18"></line>
+                  <circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"></circle>
+                  <circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"></circle>
+                  <circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"></circle>
+                </svg>
+                <span id="viewToggleLabel">List</span>
+              </button>
+            </div>
+            <span class="search-count" id="searchCount" aria-live="polite"></span>
+          </div>
+
+          <div class="graph-wrap" id="graphWrap">
+            <canvas class="graph-canvas" id="graphCanvas" aria-hidden="true"></canvas>
+            <p class="graph-hint">Select a project to open its write-up</p>
+            <div class="graph-legend">
+              <span><i class="legend-dot" style="background: var(--color-gold)"></i>Infrastructure</span>
+              <span><i class="legend-dot" style="background: var(--color-navy-light)"></i>Machine Learning</span>
+              <span><i class="legend-dot" style="background: var(--color-success)"></i>Interactive</span>
+            </div>
+
+            <!-- The project nodes are built here by assets/js/research-graph.js,
+                 from the PAPERS array it carries. -->
+          </div>
+
+          <!-- Same projects, same order, for anyone without script. -->
+          <noscript>
+            <ul class="research-fallback" role="list">
+              <li>
+                <a href="/research/bqe-decomp/">
+                  <span class="fallback-tag">Infrastructure</span>
+                  <span class="fallback-title">BQE-DeComp</span>
+                  <span class="fallback-desc">
+                    A binary codec for 1-minute OHLCV data that loads 4 million
+                    rows into NumPy arrays in ~9 ms. Rust · PyO3 · lz4
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/research/marketjepa/">
+                  <span class="fallback-tag">Machine Learning</span>
+                  <span class="fallback-title">MarketJEPA</span>
+                  <span class="fallback-desc">
+                    A self-supervised world model for the stock market, trained
+                    with SIGReg on the full BQE equity universe.
+                    PyTorch · JEPA · SIGReg
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/research/historymap/">
+                  <span class="fallback-tag">Interactive</span>
+                  <span class="fallback-title">HistoryMap</span>
+                  <span class="fallback-desc">
+                    An interactive atlas of world borders from 9500 BC to 2010,
+                    with era reports and clickable empires. Leaflet · GeoJSON
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/research/markettape/">
+                  <span class="fallback-tag">Interactive</span>
+                  <span class="fallback-title">Market Tape</span>
+                  <span class="fallback-desc">
+                    A broadcast-style rundown for Fed events and earnings calls,
+                    with live countdowns. React · Claude API
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/research/stack/">
+                  <span class="fallback-tag">Interactive</span>
+                  <span class="fallback-title">Stack</span>
+                  <span class="fallback-desc">
+                    A scrollable multi-timeframe chart feed for the S&amp;P 500.
+                    Canvas · yfinance
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </noscript>
+
+          <p class="research-note">
+            Each project links to its own write-up or to the tool itself.
+            Questions about any of this work are welcome —
+            <a href="/pages/contact.html">get in touch</a>.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer Placeholder (loaded by components.js) -->
+    <div id="footer-placeholder"></div>
+
+    <!-- Scripts -->
+    <script src="/assets/js/components.js"></script>
+    <script src="/assets/js/navigation.js"></script>
+    <script src="/assets/js/research-hero.js?v=1"></script>
+    <script src="/assets/js/research-graph.js?v=1"></script>
+  </body>
+</html>

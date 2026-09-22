@@ -33,21 +33,21 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - run: pip install -r requirements.txt
+      - run: pip install -r automation/requirements.txt
 
       - name: Build the rundown
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          python scripts/fetch_market_tape.py \
-            --out research/markettape/data \
+          python automation/scripts/fetch_market_tape.py \
+            --out webpage/research/markettape/data \
             --tickers ${{ github.event.inputs.tickers || 'NVDA AAPL MSFT AMZN GOOGL' }}
 
       - name: Commit
         run: |
           git config user.name  "SchwarzRene"
           git config user.email "123473580+SchwarzRene@users.noreply.github.com"
-          git add research/markettape/data
+          git add webpage/research/markettape/data
           if git diff --quiet --cached; then
             echo "nothing changed"
             exit 0
