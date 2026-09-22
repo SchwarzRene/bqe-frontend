@@ -1,82 +1,87 @@
 # Deployment
 
-The site is served by **Cloudflare Pages**. Push to `main` and it is live,
-usually inside a minute. Pull requests get their own preview URL.
+The site is served by **Cloudflare Pages**, connected directly to this
+repository. Push to `main` and it is live, usually inside a minute.
 
 ```
-push to main ──▶ GitHub Actions ──▶ assemble _site/ ──▶ wrangler pages deploy ──▶ live
-pull request ──▶ GitHub Actions ──▶ assemble _site/ ──▶ preview URL on the PR
+push to main ──▶ Cloudflare pulls ──▶ ./build.sh ──▶ _site/ ──▶ live
+open a PR    ──▶ Cloudflare pulls ──▶ ./build.sh ──▶ _site/ ──▶ preview URL
 ```
+
+There is **no API token and no GitHub secret** in this setup. Cloudflare
+watches the repository through its GitHub App, so nothing here holds a
+credential and nothing expires.
 
 ## One-time setup
 
-### 1. Create the Pages project
+All of it is in the Cloudflare dashboard; it takes about two minutes.
 
-The project has to exist before a workflow can deploy into it.
+1. **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
+2. Authorise Cloudflare's GitHub App, and give it access to
+   **`SchwarzRene/bqe-frontend`**. Read-only access to this one repository is
+   enough.
+3. Select the repository, then set:
 
-In the Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
-**Create using direct upload**, name it exactly **`bqe-frontend`**, and create
-it. Upload nothing; the first workflow run fills it.
+   | Field | Value |
+   |---|---|
+   | Production branch | `main` |
+   | Framework preset | **None** |
+   | Build command | `./build.sh` |
+   | Build output directory | `_site` |
+   | Root directory | *(leave empty)* |
 
-> Use **direct upload**, not "Connect to Git". Connecting the repository would
-> give you a second deploy path that runs alongside this one, and the two would
-> race on every push. One or the other, and the workflow is the one with the
-> preview comments and the publish-directory filtering.
+4. **Save and Deploy.**
 
-If you prefer a name other than `bqe-frontend`, change `PROJECT_NAME` at the top
-of `.github/workflows/deploy.yml` to match.
+The first build runs immediately. When it finishes the site is at
+`https://bqe-frontend.pages.dev`.
 
-### 2. Create the API token
+That is the whole setup. Every later push deploys by itself.
 
-Cloudflare dashboard → **My Profile** → **API Tokens** → **Create Token** →
-**Custom token**:
+### Why there is a build step for a site with no build
 
-| Field | Value |
-|---|---|
-| Permissions | Account → **Cloudflare Pages** → **Edit** |
-| Account Resources | Include → your account |
-| TTL | leave as is, or set an expiry and diary a rotation |
+`build.sh` copies the repository into `_site/`, leaving out the things that
+are repository furniture rather than site content: `.github/`, `docs/`,
+`README.md` and the script itself. Publishing the root directly would work,
+but it would also serve the workflow files and the documentation, which
+nobody visiting the site wants and which quietly advertises how the
+repository is laid out.
 
-That single permission is all the deploy needs. Do not use a Global API Key —
-it can do everything to everything you own, and cannot be scoped or revoked
-individually.
-
-Copy the token now; Cloudflare shows it once.
-
-### 3. Find the account ID
-
-Cloudflare dashboard → **Workers & Pages** → the right-hand sidebar shows
-**Account ID**. Or from the URL: `dash.cloudflare.com/<account-id>/...`.
-
-### 4. Put both in GitHub
-
-**bqe-frontend → Settings → Secrets and variables → Actions → New repository
-secret**:
-
-| Name | Value |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | the token from step 2 |
-| `CLOUDFLARE_ACCOUNT_ID` | the ID from step 3 |
-
-Both are secrets. Neither belongs in a file in this repository — see
-[bqe-backend/docs/SECRETS.md](https://github.com/SchwarzRene/bqe-backend/blob/main/docs/SECRETS.md)
-for why, and for how the rest of the keys are handled.
-
-### 5. Push
+It is plain `sh` and `cp` — no rsync, no bash-isms — so it behaves identically
+in Cloudflare's build container and on your machine:
 
 ```bash
-git push origin main
+./build.sh && cd _site && python3 -m http.server 8000
 ```
 
-Watch it in the **Actions** tab. When it finishes the site is at
-`https://bqe-frontend.pages.dev`.
+## Pull request previews
+
+Cloudflare builds every branch and every pull request, each to its own URL,
+and posts that URL as a check on the pull request. Nothing needs configuring
+— it comes with the Git connection.
+
+Preview builds do not touch the production domain.
+
+## What CI does, and what it does not
+
+`.github/workflows/ci.yml` runs on every push and pull request and checks that
+every internal link and asset reference resolves, that `index.html` exists,
+and that nothing resembling a credential has been committed.
+
+**It does not gate the deploy.** Cloudflare pulls from GitHub independently, so
+a red CI run will not stop a deploy. That is the trade for not having an API
+token: the deploy path does not pass through GitHub Actions, so GitHub Actions
+cannot veto it.
+
+In practice the check is fast and the failure is visible on the commit. If you
+ever want a hard gate instead, the deploy has to move back into a workflow,
+which means an API token again.
 
 ## Custom domain
 
 Cloudflare dashboard → your Pages project → **Custom domains** → **Set up a
 domain**.
 
-If the domain's DNS is already on Cloudflare, this is two clicks and the
+If the domain's DNS is already on Cloudflare this is two clicks and the
 certificate is issued automatically. If it is elsewhere, Cloudflare tells you
 the CNAME to add at your registrar.
 
@@ -90,8 +95,8 @@ After the domain is live, two things should be updated:
      --set-env-vars "ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com"
    ```
 
-2. **The `Live:` line in `README.md`**, so the repository does not advertise the
-   old address.
+2. **The `Live:` line in `README.md`**, so the repository does not advertise
+   the old address.
 
 ## Connecting the site to the backend
 
@@ -118,36 +123,38 @@ deadline.
 
 ## What gets published
 
-The workflow assembles `_site/` with `rsync`, excluding `.git`, `.github`,
-`docs/`, `README.md` and `CNAME`. Everything else in the repository is served,
-including the ~46 MB of price snapshots under `research/stack/data/`.
+Everything except `.git`, `.github/`, `.gitignore`, `docs/`, `build.sh`,
+`README.md` and `CNAME` — currently about 660 files and 117 MB, most of it the
+price snapshots under `research/stack/data/`.
 
 Cloudflare Pages limits worth knowing: **20,000 files** and **25 MB per file**
-per deployment. The site is currently around 660 files with nothing near 5 MB,
-so there is a lot of headroom — but the stack data is 500 of those files, so
-keep it in mind if you add another per-ticker dataset.
+per deployment. Nothing here is near 5 MB, so there is plenty of headroom —
+but the stack data is 500 of those files, so keep it in mind if you add
+another per-ticker dataset.
 
 ## Rolling back
 
 Cloudflare dashboard → the Pages project → **Deployments** → find the last good
-one → **Rollback**. It is immediate and needs no git operation.
+one → **Rollback**. Immediate, and no git operation needed.
 
 Then fix the problem properly on `main`, because the next push deploys again.
 
 ## Troubleshooting
 
-**The workflow fails with `project not found`.** The Pages project does not
-exist yet, or its name does not match `PROJECT_NAME` in the workflow. Step 1.
+**A push did not deploy.** Check the Cloudflare project's **Deployments** tab
+first — if no build was even queued, the GitHub App has lost access to the
+repository. Re-authorise it under GitHub → Settings → Applications.
 
-**The workflow fails with `Authentication error`.** The token is missing, wrong,
-expired, or lacks *Cloudflare Pages: Edit*. Re-create it and update the secret.
+**The build fails with `build.sh: not found` or a permission error.** The
+script's executable bit did not survive. `git update-index --chmod=+x build.sh`
+and push.
 
-**The site deploys but pages are unstyled.** Something broke the absolute paths.
-Every page references `/assets/...` from the site root; check that the file is
-actually at that path in `_site/` and not nested a level deeper.
+**The site deploys but pages are unstyled.** Something broke the absolute
+paths. Every page references `/assets/...` from the site root; check the file
+is really at that path inside `_site/` after running `./build.sh` locally.
 
-**Live quotes stopped working.** Check in this order: is `research/stack/live.json`
-present and pointing at the right URL; does `curl <backend>/healthz` answer;
-does the browser console show a CORS error (then `ALLOWED_ORIGINS` on the
-backend does not include this origin). A silent fall-back to snapshot data is
-the designed behaviour, not a failure.
+**Live quotes stopped working.** Check in this order: is
+`research/stack/live.json` present and pointing at the right URL; does
+`curl <backend>/healthz` answer; does the browser console show a CORS error
+(then `ALLOWED_ORIGINS` on the backend does not include this origin). A silent
+fall-back to snapshot data is the designed behaviour, not a failure.

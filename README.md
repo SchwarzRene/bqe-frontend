@@ -18,14 +18,17 @@ site (`index.html`, `pages/about.html`, `pages/strategy.html`).
 
 ## How it is served
 
-Cloudflare Pages publishes the repository root. There is no build step — what is
-committed is what is served. Push to `main` and `.github/workflows/deploy.yml`
-assembles a publish directory, hands it to Cloudflare, and the site is live,
+Cloudflare Pages is connected directly to this repository. Push to `main` and
+Cloudflare pulls, runs `./build.sh`, and publishes `_site/` — the site is live,
 usually inside a minute.
 
-Pull requests are deployed too, to a preview URL of their own, and the workflow
-comments that URL on the pull request. A change can therefore be looked at on a
-real CDN before it reaches the production domain.
+There is no API token and no GitHub secret anywhere in this setup. Cloudflare
+watches the repository through its GitHub App, so there is no credential to
+store, leak or renew.
+
+Pull requests and branches are built too, each to a preview URL of its own,
+which Cloudflare posts as a check on the pull request. A change can therefore
+be looked at on a real CDN before it reaches the production domain.
 
 Consequences worth remembering:
 
@@ -33,28 +36,29 @@ Consequences worth remembering:
   against it — `/assets/css/shared.css` is `assets/css/shared.css` on disk — so a
   local preview must be served from the root (see [Local preview](#local-preview)),
   and opening a page as a `file://` URL shows it unstyled.
-- Repository furniture never reaches the CDN. The deploy workflow excludes
-  `.git`, `.github`, `docs/` and `README.md` when it assembles the publish
-  directory, so adding documentation here cannot bloat the site.
+- Repository furniture never reaches the CDN. `build.sh` leaves out `.git`,
+  `.github/`, `.gitignore`, `docs/`, `README.md` and itself, so adding
+  documentation here cannot bloat the site.
 - There is no server-side code in this repository. Anything needing a backend
   either runs ahead of time and is committed as JSON (see
   [Data and automation](#data-and-automation)), or lives in
   [`bqe-backend`](https://github.com/SchwarzRene/bqe-backend).
 - `_headers` at the root sets the security and caching headers Cloudflare
-  applies. Edit it there, not in the workflow.
+  applies. Edit it there, not in the build script.
 
 ## Repository layout
 
 The repository root **is** the site root: everything here is served, except the
-four things the deploy workflow excludes (`.git`, `.github`, `docs/`, `README.md`).
+handful of things `build.sh` leaves out.
 
 ```
 ├── README.md               This file (not published)
 ├── _headers                Security and caching headers Cloudflare applies
 ├── docs/
 │   └── DEPLOYMENT.md       Cloudflare setup, secrets, custom domain
+├── build.sh                Assembles _site/ — what Cloudflare publishes
 ├── .github/workflows/
-│   └── deploy.yml          Push to main → Cloudflare; pull request → preview URL
+│   └── ci.yml              Link check on every push and pull request
 │
 ├── index.html              Start page (market-network hero, formula-network band)
 │
@@ -416,7 +420,8 @@ The Python fetchers are not in this repository any more; see
 
 ## Deploying
 
-Push to `main`. There is nothing to build and nothing to release.
+Push to `main`. Cloudflare does the rest; there is nothing to release and no
+secret to keep alive.
 
 Full setup — the Cloudflare project, the two API secrets, the custom domain —
 is in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
