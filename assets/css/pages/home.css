@@ -216,26 +216,7 @@
 }
 
 @media (min-width: 768px) {
-  /* Card artwork. The sources are square and their subjects are centred, so the
-   image keeps a 1:1 box rather than being cropped to a letterbox. width/height
-   are on the <img> too, so the grid reserves the space before the file lands
-   and the cards do not jump as they load. */
-.feature-media {
-  display: block;
-  margin-bottom: var(--space-5);
-}
-
-.feature-media img {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
-  border-radius: var(--radius-md);
-  background-color: var(--color-black);
-}
-
-.feature h3 {
+  .feature h3 {
     font-size: var(--text-lg);
   }
 }
@@ -265,7 +246,7 @@
   isolation: isolate;
   overflow: hidden;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: var(--space-10) var(--space-4);
   min-height: 62vh;
@@ -278,17 +259,10 @@
   .formula-network {
     min-height: 70vh;
     padding: var(--space-10) var(--space-6);
-    /* The pair is centred as a group, so the midpoint between the two panels
-       is the band's own midpoint. Stretching the column and spreading it with
-       space-between does not do that: height:100% never resolves here, since
-       the section is sized by min-height rather than height, so the column
-       kept its content height and sat at the top of the band. */
-    align-items: center;
   }
 
   .formula-content {
-    justify-content: center;
-    gap: var(--space-16);
+    row-gap: var(--space-16);
   }
 }
 
@@ -324,18 +298,25 @@
 .formula-content {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-10);
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  row-gap: var(--space-10);
+  justify-items: start;
   text-align: left;
 }
 
-/* The second panel sits opposite the first, so the two read as a pair across
-   the band rather than a stack down one edge, and the artwork keeps the
-   diagonal between them. */
+/* Two equal rows, so the gap between them straddles the column's middle, and
+   the column is centred in the band: the midpoint between the panels is the
+   band's midpoint whatever the panels' own heights. Centring a flex column
+   instead only centres its outer bounds, which drifts off the middle as soon
+   as one panel wraps to more lines than the other. */
+.formula-copy-lead {
+  align-self: end;
+}
+
 .formula-copy-alt {
-  align-self: flex-end;
+  align-self: start;
+  justify-self: end;
 }
 
 /* Both panels share one lead size and one sub size. The sizes are set by the
@@ -372,44 +353,43 @@
   white-space: nowrap;
 }
 
-@media (max-width: 480px) {
-  .formula-copy {
-    padding: var(--space-4) var(--space-5);
-  }
-}
-
 /* On a phone the band is tall and the panel floated in the middle of it, so
    the copy sat below the fold of the section. It rides near the top instead. */
-/* Measured: the longer lead needs 23.3px of width per font-pixel, so at its
-   11px floor it wants 257px plus 40px of panel padding. Below about 360px of
-   viewport that no longer fits beside the section's own padding, and holding
-   one line would mean type under 10px - so there, and only there, it wraps. */
-@media (max-width: 359px) {
-  .formula-copy-alt .formula-lead,
-  .formula-copy-alt .formula-sub {
-    white-space: normal;
-  }
-}
-
-/* No room for opposite corners on a phone, so the pair stacks on one edge at
-   the top of the band. */
+/* Phones get their own treatment rather than a squeezed desktop one. Holding
+   one line per sentence here pins the lead to its 11-13px floor - the same
+   size as its own sub-line, so the pair reads as four identical lines of small
+   print. The lines wrap instead, the type returns to a readable scale with
+   hierarchy between lead and sub, and both panels take the container's width
+   so their edges line up. */
 @media (max-width: 767px) {
-  /* The panels are different widths, so each is centred on its own rather
-     than sharing a left edge: equal space either side of both. */
   .formula-content {
-    align-items: center;
-    gap: var(--space-5);
+    row-gap: var(--space-4);
+    justify-items: stretch;
+  }
+
+  .formula-copy {
+    padding: var(--space-5);
   }
 
   .formula-copy-alt {
-    align-self: center;
+    justify-self: stretch;
+  }
+
+  .formula-lead,
+  .formula-sub {
+    white-space: normal;
+  }
+
+  .formula-lead {
+    font-size: clamp(19px, 5vw, 26px);
+    margin-bottom: var(--space-2);
+  }
+
+  .formula-sub {
+    font-size: clamp(14px, 3.4vw, 16px);
   }
 }
 
-/* On a wide screen the panel sat on the site's content gutter, which left a
-   lot of empty artwork to its left. It moves half that gutter outward: the
-   offset below is section padding + the container's centring + container
-   padding, and the panel takes back half of it. */
 @media (min-width: 1024px) {
   .formula-copy-lead {
     margin-left: calc(
