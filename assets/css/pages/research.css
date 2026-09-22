@@ -119,6 +119,9 @@ section.research-explorer {
 .intro-sub {
   margin: 8px auto 0;
   max-width: 62ch;
+  /* Two even lines where it has to wrap, rather than one full line and a
+     single word under it. Ignored by browsers that do not support it. */
+  text-wrap: balance;
   font-size: 0.92rem;
   line-height: 1.55;
   color: var(--color-gray-300);
@@ -252,6 +255,13 @@ section.research-explorer {
 .search-input {
   display: block;
   width: 100%;
+  /* Desktop WebKit styles a search field natively: it keeps its own inner
+     box, so the padding that makes room for our magnifier is only partly
+     honoured and the text lands beside the icon rather than after it.
+     Turning the native appearance off makes it an ordinary box on every
+     browser - which is what the rest of this rule assumes. */
+  -webkit-appearance: none;
+  appearance: none;
   /* shared.css gives every input a margin-bottom, for stacked form fields.
      Here it would make .search-field - the box the magnifier is centred
      against - 8px taller than the pill itself, leaving the icon sitting
@@ -272,6 +282,16 @@ section.research-explorer {
   cursor: text;
 }
 .search-input::placeholder { color: var(--color-gray-400); }
+
+/* The decorations desktop WebKit adds inside a search field: a magnifier of
+   its own on the left, and the results/cancel buttons. Ours is the only
+   magnifier the field should have. */
+.search-input::-webkit-search-decoration,
+.search-input::-webkit-search-results-button,
+.search-input::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  display: none;
+}
 .search-input:focus {
   outline: none;
   border-color: var(--color-gold);
