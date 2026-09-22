@@ -18,9 +18,10 @@ site (`index.html`, `pages/about.html`, `pages/strategy.html`).
 
 ## How it is served
 
-Cloudflare Pages is connected directly to this repository. Push to `main` and
-Cloudflare pulls, runs `./build.sh`, and publishes `_site/` — the site is live,
-usually inside a minute.
+The site is a Cloudflare Worker serving static assets, connected directly to
+this repository. Push to `main` and Cloudflare pulls, runs `./build.sh`, and
+deploys `_site/` — live usually inside a minute. No code runs: the Worker is a
+CDN in front of those files.
 
 There is no API token and no GitHub secret anywhere in this setup. Cloudflare
 watches the repository through its GitHub App, so there is no credential to
@@ -37,8 +38,10 @@ Consequences worth remembering:
   local preview must be served from the root (see [Local preview](#local-preview)),
   and opening a page as a `file://` URL shows it unstyled.
 - Repository furniture never reaches the CDN. `build.sh` leaves out `.git`,
-  `.github/`, `.gitignore`, `docs/`, `README.md` and itself, so adding
-  documentation here cannot bloat the site.
+  `.github/`, `.gitignore`, `docs/`, `README.md`, `wrangler.toml` and itself,
+  so adding documentation here cannot bloat the site. This matters more than
+  it looks: publishing the root would push `.git` at Cloudflare, and a pack
+  file over 25 MiB fails the deploy outright.
 - There is no server-side code in this repository. Anything needing a backend
   either runs ahead of time and is committed as JSON (see
   [Data and automation](#data-and-automation)), or lives in
@@ -56,6 +59,7 @@ handful of things `build.sh` leaves out.
 ├── _headers                Security and caching headers Cloudflare applies
 ├── docs/
 │   └── DEPLOYMENT.md       Cloudflare setup, secrets, custom domain
+├── wrangler.toml           Tells Cloudflare to publish _site/, not the root
 ├── build.sh                Assembles _site/ — what Cloudflare publishes
 ├── .github/workflows/
 │   └── ci.yml              Link check on every push and pull request
@@ -355,8 +359,8 @@ and a swatch in the page's legend.
 
 ### A page that needs live data
 
-Cloudflare Pages serves files; it runs no code. So there are two routes, and
-which one you want depends on how fresh the data has to be.
+The site's Worker only serves files; no code of ours runs there. So there are
+two routes, and which one you want depends on how fresh the data has to be.
 
 **Refreshed daily, committed as JSON** — the pattern `research/stack/` uses:
 

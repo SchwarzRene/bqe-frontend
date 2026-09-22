@@ -1,0 +1,24 @@
+# Cloudflare Workers configuration.
+#
+# Without this file wrangler improvises: it treats the whole repository as the
+# assets directory, which sweeps in .git and fails because a pack file is
+# larger than the 25 MiB per-asset limit. This points it at the directory
+# build.sh produces instead.
+#
+# This is a static-assets Worker — there is no `main`, so no code runs. It is
+# a CDN in front of _site/, and _headers next to the pages still applies.
+
+name = "bqe-frontend"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./_site"
+
+# "auto-trailing-slash" is the default and the one this site needs: it maps
+# /research/stack/ to research/stack/index.html and /pages/about to
+# pages/about.html, which is how every link in the site is written.
+html_handling = "auto-trailing-slash"
+
+# The site has no 404 page of its own, so a miss gets Cloudflare's plain 404
+# rather than a redirect to somewhere misleading.
+not_found_handling = "none"

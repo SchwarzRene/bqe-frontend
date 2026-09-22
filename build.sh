@@ -26,6 +26,7 @@ for entry in * .[!.]*; do
 
   case "$entry" in
     "$OUT"|.git|.github|.gitignore|docs|build.sh|README.md|CNAME) continue ;;
+    wrangler.toml|wrangler.jsonc|.wrangler|node_modules) continue ;;
   esac
 
   cp -R "$entry" "$OUT"/
