@@ -56,16 +56,18 @@ Consequences worth remembering:
 │   │   └── pages/*.css     One stylesheet per page, loaded after shared.css
 │   ├── js/
 │   │   ├── components.js   Injects header/footer, sets aria-current, fills the year
-│   │   ├── navigation.js   Burger menu + login modal
+│   │   ├── navigation.js   Burger menu + its nav wave + login modal
 │   │   ├── hero-network.js Start page hero animation (canvas)
 │   │   ├── formula-network.js Start page formula band animation (canvas)
+│   │   ├── research-hero.js  Research intro band animation (canvas)
+│   │   ├── research-graph.js Research project graph, list view and search
 │   │   └── form.js         Contact form validation (WCAG error handling)
 │   ├── images/             Page imagery, each as .webp + .jpg/.png fallback
 │   ├── captions/de.vtt     Captions for assets/video.mp4
 │   └── video.mp4           Unused since the "Was wir tun" section was replaced
 │
 ├── research/               Research write-ups, one file or folder per project
-│   ├── index.html          Research index
+│   ├── index.html          Research index (project graph / list)
 │   ├── bqe_decomp.html     Binary encoding for 1-minute OHLCV data
 │   ├── marketjepa.html     Self-supervised world model
 │   ├── markettape.html     Write-up for the Market Tape app
@@ -91,6 +93,14 @@ Consequences worth remembering:
 Every top-level page follows the same skeleton. The header and footer are **not** in the
 HTML — `components.js` fetches them and replaces the placeholder divs, so a navigation
 change is made once in `components/header.html` and applies everywhere.
+
+The header carries three links — Startseite, Research, Kontakt. Über uns, Karriere and
+Handelsstrategie are all reachable from the footer, which is where the pages a visitor
+looks up rather than navigates to belong. Below 768px those three links become the
+burger menu, and `initNavWave()` in `navigation.js` threads a slim signal trace down
+its left gutter: the path is built from the links' **measured** positions, never from
+guessed coordinates, so it keeps fitting whatever the menu holds, and the node on the
+current page is gold rather than blue.
 
 ```html
 <!DOCTYPE html>
@@ -226,6 +236,31 @@ Three things to keep intact when touching it:
   the two must agree. They are where the site's palette came from — change them and the
   tokens in `shared.css` together, or the page splits into two colour schemes.
 
+### The research index
+
+`research/index.html` is two canvases and a set of links. The band behind the heading
+runs the start page's own market network (`assets/js/research-hero.js`); below it,
+`assets/js/research-graph.js` draws one soft cloud per category and lays the projects
+over it as real `<a>` elements — focusable, linkable, readable by a screen reader.
+Only the clouds and the category names are painted; nothing you can click is canvas.
+
+- **`PAPERS` in `research-graph.js` is the index.** Adding an entry there adds the
+  project to the graph, the list and the search at once. The no-script list in
+  `research/index.html` carries the same five projects, and the footer its own copy —
+  all three are updated together.
+- **Graph and list are one set of nodes in two layouts.** Each node is a small physics
+  body: a spring pull toward whatever its current mode wants, damped so it settles,
+  bouncing off its neighbours on the way. The toggle changes the target, not the
+  markup.
+- Each rock is generated from its project's `id`, so a project keeps the same
+  silhouette across reloads; the same seed drives its spin direction and period.
+- Under `prefers-reduced-motion` nothing orbits: nodes land on their target
+  immediately and the animation loop never starts.
+- The intro canvas needs an explicit `width`/`height` in CSS. `inset: 0` alone anchors
+  a replaced element at its intrinsic size — the backing store, which is
+  `devicePixelRatio` times larger — and the whole mesh then draws at double scale on a
+  phone.
+
 ### The start page formula band
 
 Below the hero, `.formula-network` is a second canvas animation
@@ -274,7 +309,11 @@ single frame under `prefers-reduced-motion`. Two things are its own:
 
 Self-contained work goes in its own folder under `research/` with an `index.html` and a
 short `README.md` (see `research/historymap/`). A single write-up can be one HTML file at
-`research/`. Either way, link it from `research/index.html` and from the footer.
+`research/`. Either way, list it in three places, which are meant to agree: the `PAPERS`
+array in `assets/js/research-graph.js` (the graph, the list and the search all read it),
+the `<noscript>` list in `research/index.html`, and the Research column of the footer.
+A new category also needs a cluster centre in `CLUSTER_CENTERS`, an entry in `COLORS`
+and a swatch in the page's legend.
 
 ### A page that needs live data
 

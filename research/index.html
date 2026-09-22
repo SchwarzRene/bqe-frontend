@@ -2,233 +2,175 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta
       name="description"
-      content="Black Quant Empire Research — open technical work on high-performance data infrastructure for quantitative trading."
+      content="Black Quant Empire Research — open technical work on data infrastructure, machine learning and interactive tools for quantitative trading."
     />
     <title>Research - Black Quant Empire</title>
 
-    <link rel="stylesheet" href="/assets/css/shared.css?v=3" />
+    <link rel="stylesheet" href="/assets/css/shared.css?v=4" />
+    <link rel="stylesheet" href="/assets/css/pages/research.css?v=1" />
     <link rel="icon" href="/assets/images/logo.png" type="image/png" />
 
-    <style>
-      .research-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 28px;
-        margin-top: 40px;
-      }
-
-      .research-card {
-        background: var(--color-surface, #111);
-        border: 1px solid var(--color-border, #2a2a2a);
-        border-radius: 12px;
-        padding: 28px 30px;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-        transition: border-color 0.2s, box-shadow 0.2s;
-        text-decoration: none;
-      }
-
-      .research-card:hover {
-        border-color: var(--color-accent, #c4a82b);
-        box-shadow: 0 4px 24px rgba(196, 168, 43, 0.08);
-      }
-
-      .research-card-tag {
-        display: inline-block;
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--color-accent, #c4a82b);
-        background: rgba(196, 168, 43, 0.1);
-        border: 1px solid rgba(196, 168, 43, 0.25);
-        border-radius: 999px;
-        padding: 3px 10px;
-        width: fit-content;
-      }
-
-      .research-card-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--color-gray-100, #f0f0f0);
-        margin: 0;
-        line-height: 1.3;
-      }
-
-      .research-card-desc {
-        font-size: 0.93rem;
-        color: var(--color-gray-400, #888);
-        line-height: 1.6;
-        margin: 0;
-        flex: 1;
-      }
-
-      .research-card-meta {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        font-size: 0.8rem;
-        color: var(--color-gray-500, #666);
-        border-top: 1px solid var(--color-border, #2a2a2a);
-        padding-top: 14px;
-        margin-top: auto;
-      }
-
-      .research-card-meta span {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-      }
-
-      .research-card-link {
-        margin-left: auto;
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--color-accent, #c4a82b);
-        white-space: nowrap;
-      }
-
-      .page-header {
-        padding: 64px 0 32px;
-        border-bottom: 1px solid var(--color-border, #2a2a2a);
-        margin-bottom: 0;
-      }
-
-      .page-header h1 {
-        font-size: 2.2rem;
-        font-weight: 800;
-        color: var(--color-gray-100, #f0f0f0);
-        margin: 0 0 10px;
-      }
-
-      .page-header p {
-        font-size: 1.05rem;
-        color: var(--color-gray-400, #888);
-        max-width: 600px;
-        margin: 0;
-        line-height: 1.6;
-      }
-    </style>
+    <!-- Without script there is no graph to search or lay out, so the
+         controls and the canvas step aside for the plain list below them. -->
+    <noscript>
+      <style>
+        .search-wrap,
+        .graph-wrap {
+          display: none;
+        }
+      </style>
+    </noscript>
   </head>
 
   <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Header Placeholder (loaded by components.js) -->
     <div id="header-placeholder"></div>
 
     <main id="main-content">
-      <div class="container">
-
-        <div class="page-header">
+      <!-- Intro band: the start page's market network, scoped to a short
+           banner behind the heading. See assets/js/research-hero.js -->
+      <section class="intro" id="introHero">
+        <canvas class="intro-canvas" id="introCanvas" aria-hidden="true"></canvas>
+        <div class="intro-vignette" aria-hidden="true"></div>
+        <div class="intro-grain" aria-hidden="true"></div>
+        <div class="intro-content" id="introContent">
           <h1>Research</h1>
-          <p>
-            Open technical work from Black Quant Empire — infrastructure, codecs,
-            and tooling built for quantitative trading at scale.
+          <p class="intro-sub">
+            Open technical work from Black Quant Empire — the data
+            infrastructure, models and tools behind the trading.
           </p>
         </div>
+      </section>
 
-        <div class="research-grid">
+      <!-- The project explorer: a cluster graph that re-flows into a
+           reading list. See assets/js/research-graph.js -->
+      <section class="research-explorer" aria-labelledby="projects-heading">
+        <h2 id="projects-heading" class="sr-only">Projects</h2>
 
-          <!-- BQE-DeComp -->
-          <a class="research-card" href="/research/bqe_decomp.html">
-            <span class="research-card-tag">Infrastructure</span>
-            <h2 class="research-card-title">BQE-DeComp</h2>
-            <p class="research-card-desc">
-              A domain-specific binary codec for 1-minute OHLCV equity data.
-              Decodes 4 million rows directly into NumPy arrays in ~9 ms using
-              parallel lz4 decompression across independent row bands.
-              6.8× smaller than CSV, 2.4× faster to load than raw .npy.
-            </p>
-            <div class="research-card-meta">
-              <span>Rust · PyO3 · lz4</span>
-              <span>v10</span>
-              <span class="research-card-link">Read more →</span>
+        <div class="explorer-inner">
+          <div class="search-wrap">
+            <div class="search-row">
+              <div class="search-field" id="searchField">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <label class="sr-only" for="searchInput">Search research projects</label>
+                <input
+                  class="search-input"
+                  type="search"
+                  id="searchInput"
+                  placeholder="Search"
+                  autocomplete="off"
+                />
+              </div>
+
+              <button type="button" class="view-toggle" id="viewToggle" aria-pressed="false">
+                <svg class="view-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <line x1="8" y1="6" x2="21" y2="6"></line>
+                  <line x1="8" y1="12" x2="21" y2="12"></line>
+                  <line x1="8" y1="18" x2="21" y2="18"></line>
+                  <circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"></circle>
+                  <circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"></circle>
+                  <circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"></circle>
+                </svg>
+                <span id="viewToggleLabel">List</span>
+              </button>
             </div>
-          </a>
+            <span class="search-count" id="searchCount" aria-live="polite"></span>
+          </div>
 
-          <!-- MarketJEPA -->
-          <a class="research-card" href="/research/marketjepa.html">
-            <span class="research-card-tag">Machine Learning</span>
-            <h2 class="research-card-title">MarketJEPA</h2>
-            <p class="research-card-desc">
-              A self-supervised world model for the stock market — a JEPA
-              (Joint-Embedding Predictive Architecture) trained with SIGReg on
-              the full BQE equity universe to learn a latent representation of
-              price action, with classifier heads and a decision policy on top
-              that aim to generate alpha.
-            </p>
-            <div class="research-card-meta">
-              <span>PyTorch · JEPA · SIGReg</span>
-              <span>Stage A–C</span>
-              <span class="research-card-link">Read more →</span>
+          <div class="graph-wrap" id="graphWrap">
+            <canvas class="graph-canvas" id="graphCanvas" aria-hidden="true"></canvas>
+            <p class="graph-hint">Select a project to open its write-up</p>
+            <div class="graph-legend">
+              <span><i class="legend-dot" style="background: var(--color-gold)"></i>Infrastructure</span>
+              <span><i class="legend-dot" style="background: var(--color-navy-light)"></i>Machine Learning</span>
+              <span><i class="legend-dot" style="background: var(--color-success)"></i>Interactive</span>
             </div>
-          </a>
 
-          <!-- HistoryMap -->
-          <a class="research-card" href="/research/historymap/">
-            <span class="research-card-tag">Interactive</span>
-            <h2 class="research-card-title">HistoryMap</h2>
-            <p class="research-card-desc">
-              An interactive world-history atlas: historical borders from
-              9500 BC to 2010 on a time slider, with curated era reports on
-              hegemony, wars, art & architecture and schools of thought,
-              clickable empires, a toggleable capital-cities layer, 475+
-              dated chronicle entries, 220+ event markers and live Wikipedia
-              integration. Bilingual (German/English).
-            </p>
-            <div class="research-card-meta">
-              <span>Leaflet · GeoJSON</span>
-              <span>48 map epochs</span>
-              <span class="research-card-link">Open the atlas →</span>
-            </div>
-          </a>
+            <!-- The project nodes are built here by assets/js/research-graph.js,
+                 from the PAPERS array it carries. -->
+          </div>
 
-          <!-- Market Tape -->
-          <a class="research-card" href="/research/markettape/">
-            <span class="research-card-tag">Interactive</span>
-            <h2 class="research-card-title">Market Tape</h2>
-            <p class="research-card-desc">
-              A broadcast-style rundown for Fed events and earnings calls,
-              built without a market-data vendor: the schedule, the live feeds
-              and the reported numbers are assembled by a search-grounded
-              language model under a strict JSON contract, published as static
-              JSON, and rendered with live countdowns and on-air lamps in the
-              browser.
-            </p>
-            <div class="research-card-meta">
-              <span>React · Claude API · web search</span>
-              <span>Fed + earnings</span>
-              <span class="research-card-link">Open the board →</span>
-            </div>
-          </a>
+          <!-- Same projects, same order, for anyone without script. -->
+          <noscript>
+            <ul class="research-fallback" role="list">
+              <li>
+                <a href="/research/bqe_decomp.html">
+                  <span class="fallback-tag">Infrastructure</span>
+                  <span class="fallback-title">BQE-DeComp</span>
+                  <span class="fallback-desc">
+                    A binary codec for 1-minute OHLCV data that loads 4 million
+                    rows into NumPy arrays in ~9 ms. Rust · PyO3 · lz4
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/research/marketjepa.html">
+                  <span class="fallback-tag">Machine Learning</span>
+                  <span class="fallback-title">MarketJEPA</span>
+                  <span class="fallback-desc">
+                    A self-supervised world model for the stock market, trained
+                    with SIGReg on the full BQE equity universe.
+                    PyTorch · JEPA · SIGReg
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/research/historymap/">
+                  <span class="fallback-tag">Interactive</span>
+                  <span class="fallback-title">HistoryMap</span>
+                  <span class="fallback-desc">
+                    An interactive atlas of world borders from 9500 BC to 2010,
+                    with era reports and clickable empires. Leaflet · GeoJSON
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/research/markettape/">
+                  <span class="fallback-tag">Interactive</span>
+                  <span class="fallback-title">Market Tape</span>
+                  <span class="fallback-desc">
+                    A broadcast-style rundown for Fed events and earnings calls,
+                    with live countdowns. React · Claude API
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href="/stack/">
+                  <span class="fallback-tag">Interactive</span>
+                  <span class="fallback-title">Stack</span>
+                  <span class="fallback-desc">
+                    A scrollable multi-timeframe chart feed for the S&amp;P 500.
+                    Canvas · yfinance
+                  </span>
+                </a>
+              </li>
+            </ul>
+          </noscript>
 
-          <!-- Stack -->
-          <a class="research-card" href="/stack/">
-            <span class="research-card-tag">Interactive</span>
-            <h2 class="research-card-title">Stack</h2>
-            <p class="research-card-desc">
-              A scrollable chart feed for the S&amp;P 500: monthly, weekly, daily
-              and hourly candles stacked in one column per stock, with drawn
-              levels shared across all four timeframes and the faster panes'
-              viewport marked on the slower ones. Prices are fetched ahead of
-              time by a scheduled GitHub Action and served as static JSON.
-            </p>
-            <div class="research-card-meta">
-              <span>Canvas · yfinance · Actions</span>
-              <span>4 timeframes</span>
-              <span class="research-card-link">Open the charts →</span>
-            </div>
-          </a>
-
+          <p class="research-note">
+            Each project links to its own write-up or to the tool itself.
+            Questions about any of this work are welcome —
+            <a href="/contact.html">get in touch</a>.
+          </p>
         </div>
-      </div>
+      </section>
     </main>
 
+    <!-- Footer Placeholder (loaded by components.js) -->
     <div id="footer-placeholder"></div>
+
+    <!-- Scripts -->
     <script src="/assets/js/components.js"></script>
     <script src="/assets/js/navigation.js"></script>
+    <script src="/assets/js/research-hero.js?v=1"></script>
+    <script src="/assets/js/research-graph.js?v=1"></script>
   </body>
 </html>
