@@ -676,6 +676,15 @@ header {
   height: 24px;
 }
 
+/* Nav wave: a slim signal trace built by navigation.js (initNavWave), drawn
+   through the real, measured centre of each mobile menu item rather than
+   guessed coordinates. Hidden by default - desktop's horizontal nav has
+   nothing for a vertical trace to run through - switched on for the mobile
+   dropdown below. */
+.nav-wave {
+  display: none;
+}
+
 /* Mobile Navigation (up to 768px) */
 @media (max-width: 768px) {
   .header-content {
@@ -732,8 +741,58 @@ header {
   }
 
   .nav-list {
+    position: relative;
+    z-index: 1;
     flex-direction: column;
     gap: 0;
+  }
+
+  /* The trace sits behind the list, in the same blue and the same glow as
+     the hero's price line (assets/js/hero-network.js uses
+     rgba(89,192,255,*) with a 10px shadowBlur; this is the same colour,
+     turned down for a small, static UI element rather than a full canvas). */
+  .nav-wave {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .nav-wave-path {
+    fill: none;
+    stroke: var(--color-navy-light);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    opacity: 0.55;
+    filter: drop-shadow(0 0 3px rgba(89, 192, 255, 0.6));
+    stroke-dasharray: 5 5;
+    animation: nav-wave-flow 8s linear infinite;
+  }
+
+  .nav-wave-node {
+    fill: var(--color-navy-light);
+    opacity: 0.85;
+    filter: drop-shadow(0 0 2px rgba(89, 192, 255, 0.7));
+  }
+
+  .nav-wave-node.is-current {
+    fill: var(--color-gold);
+    opacity: 1;
+    filter: drop-shadow(0 0 3px rgba(var(--rgb-gold), 0.8));
+  }
+
+  @keyframes nav-wave-flow {
+    to {
+      stroke-dashoffset: -60;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nav-wave-path {
+      animation: none;
+    }
   }
 
   .nav-item {
@@ -745,7 +804,12 @@ header {
   }
 
   .nav-link {
-    padding: var(--space-4) var(--space-3);
+    /* Symmetric padding, so the centred text sits in the middle of the
+       whole box rather than the middle of whatever's left after the
+       gutter. The left side reserves room for the trace; the matching
+       right padding is just there to balance it. */
+    padding: var(--space-4) 44px;
+    justify-content: center;
     border-radius: 0;
   }
 
@@ -756,7 +820,7 @@ header {
   .nav-link[aria-current="page"] {
     background-color: var(--color-navy-mid);
     border-left: 4px solid var(--color-gold);
-    padding-left: calc(var(--space-3) - 4px);
+    padding-left: 40px; /* 44px minus the 4px border-left, keeps it centred */
   }
 }
 
