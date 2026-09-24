@@ -9,7 +9,23 @@ looking. Lives at **/research/stack/**.
 The site's Worker keeps them in D1 and refreshes them on weekday evenings
 (`worker/stack.ts`): the constituent list from Wikipedia, then daily bars (10
 years) and hourly bars (60 days) from Yahoo, 20 tickers per cron run from
-22:00 UTC until all ~500 are done. The page reads them at the same paths as
+22:00 UTC until all ~500 are done.
+
+The refresh is incremental. For a ticker D1 already holds, it asks Yahoo for
+only the last month of days and the last 5 days of hours (a few KB), checks
+that the overlapping closes still match what is stored, and appends. The
+whole 10-year history is downloaded again only when:
+
+- nothing is stored yet;
+- the overlap disagrees, because a dividend or split re-adjusted every earlier
+  price (prices are adjusted, like yfinance's `auto_adjust=True`);
+- there is a gap, because the ticker was skipped for longer than a month;
+- it is that ticker's turn for the periodic full check, about once every
+  30 days, spread so each evening takes a small share.
+
+That brings a night's download from the full ~46 MB dataset (several times
+more as raw Yahoo JSON) to a few MB, and keeps each run's CPU time low. The
+cron log line reports `full` alongside `refreshed`. The page reads them at the same paths as
 before — `data/index.json` and `data/<TICKER>.json` — and the Worker answers
 from D1, falling back to the snapshot committed in `data/` for anything D1
 does not hold yet.

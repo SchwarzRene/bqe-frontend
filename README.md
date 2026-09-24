@@ -415,7 +415,11 @@ slow upstream degrades to stored data rather than an error.
 
 The Stack job is batched because one Worker invocation may make only a
 limited number of outbound requests: each run takes the next tickers not yet
-refreshed today, and a failed ticker is retried 20 minutes later.
+refreshed today, and a failed ticker is retried 20 minutes later. It is also
+incremental: a ticker already in D1 fetches only its last month of days and
+five days of hours and appends them. The full 10-year download happens only
+when the stored history no longer matches (a dividend or split), when there
+is a gap, or on that ticker's roughly monthly full check.
 
 Nothing is committed back to git any more. The data files still in
 `research/stack/data/` are the last snapshot and only matter until D1 has

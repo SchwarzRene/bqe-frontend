@@ -5,7 +5,7 @@
 
 import type { Env } from "./env";
 import { isoNow, jsonText, mapLimit, utcDay } from "./http";
-import { fetchQuote, yahooSymbol } from "./yahoo";
+import { type Quote, refreshQuote, yahooSymbol } from "./yahoo";
 
 const WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies";
 const USER_AGENT = "bqe market-data (+https://github.com/SchwarzRene/bqe-frontend)";
@@ -17,6 +17,11 @@ const MIN_CONSTITUENTS = 400;
 // A failed ticker is retried after this long, so a throttled evening still
 // fills in over the two-hour window without hammering the same symbol.
 const RETRY_AFTER_MS = 20 * 60_000;
+
+// Every ticker gets a full 10-year download about once every this many days,
+// staggered so each night carries a small share of them. Merging catches
+// dividends and splits by itself; this is the safety net under it.
+const FULL_REFRESH_DAYS = 30;
 
 const CACHE = { "Cache-Control": "public, max-age=3600" };
 
@@ -80,6 +85,7 @@ export interface RefreshReport {
   constituents?: string;
   attempted: number;
   refreshed: number;
+  full: number; // of those refreshed, how many needed the whole history
   failed: string[];
   remaining: number;
 }
@@ -90,7 +96,7 @@ export interface RefreshReport {
  */
 export async function refreshStack(env: Env, now = new Date()): Promise<RefreshReport> {
   const today = utcDay(now);
-  const report: RefreshReport = { attempted: 0, refreshed: 0, failed: [], remaining: 0 };
+  const report: RefreshReport = { attempted: 0, refreshed: 0, full: 0, failed: [], remaining: 0 };
 
   const lastListDay = await env.DB.prepare("SELECT body FROM documents WHERE key = 'stack:constituents-day'")
     .first<{ body: string }>();
@@ -112,34 +118,69 @@ export async function refreshStack(env: Env, now = new Date()): Promise<RefreshR
     .bind(today, retryCutoff, batch)
     .all<{ symbol: string; file: string; name: string; sector: string }>();
 
+  // What is already stored, in one query rather than one per ticker.
+  const stored = new Map<string, Quote>();
+  if (due.length) {
+    const { results: rows } = await env.DB.prepare(
+      "SELECT file, body FROM series WHERE file IN (SELECT value FROM json_each(?))",
+    )
+      .bind(JSON.stringify(due.map((t) => t.file)))
+      .all<{ file: string; body: string }>();
+    for (const row of rows) {
+      try {
+        stored.set(row.file, JSON.parse(row.body));
+      } catch {
+        /* unreadable: treated as missing, so it is downloaded whole */
+      }
+    }
+  }
+
+  const epochDay = Math.floor(now.getTime() / 86_400_000);
+  const done: { s: string }[] = [];
+  const failed: { s: string; e: string }[] = [];
+  let full = 0;
+
   // Four at a time: polite to Yahoo, and well inside the per-invocation
   // limit on simultaneous open connections.
-  const outcomes = await mapLimit(due, 4, async (t) => {
-    const stamp = isoNow();
+  await mapLimit(due, 4, async (t) => {
     try {
-      const quote = await fetchQuote(t.file);
-      const body = JSON.stringify({ s: t.symbol, n: t.name, sec: t.sector, updated: stamp, ...quote });
-      await env.DB.batch([
-        env.DB.prepare(
-          `INSERT INTO series (file, body, updated) VALUES (?1, ?2, ?3)
-           ON CONFLICT (file) DO UPDATE SET body = excluded.body, updated = excluded.updated`,
-        ).bind(t.file, body, stamp),
-        env.DB.prepare(
-          "UPDATE tickers SET refreshed_at = ?2, attempted_at = ?2, last_error = NULL WHERE symbol = ?1",
-        ).bind(t.symbol, stamp),
-      ]);
-      return true;
-    } catch (err) {
-      await env.DB.prepare("UPDATE tickers SET attempted_at = ?2, last_error = ?3 WHERE symbol = ?1")
-        .bind(t.symbol, stamp, String(err).slice(0, 200))
+      const forceFull = (epochDay + hash(t.symbol)) % FULL_REFRESH_DAYS === 0;
+      const fresh = await refreshQuote(t.file, stored.get(t.file) ?? null, forceFull, now.getTime());
+      const stamp = isoNow();
+      const body = JSON.stringify({ s: t.symbol, n: t.name, sec: t.sector, updated: stamp, ...fresh.quote });
+      await env.DB.prepare(
+        `INSERT INTO series (file, body, updated) VALUES (?1, ?2, ?3)
+         ON CONFLICT (file) DO UPDATE SET body = excluded.body, updated = excluded.updated`,
+      )
+        .bind(t.file, body, stamp)
         .run();
-      return false;
+      done.push({ s: t.symbol });
+      if (fresh.full) full++;
+    } catch (err) {
+      failed.push({ s: t.symbol, e: String(err).slice(0, 200) });
     }
   });
 
+  // Ticker bookkeeping in two statements for the whole batch: the free plan
+  // allows 50 D1 queries per invocation, and the upserts above use 20.
+  const stamp = isoNow();
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE tickers SET refreshed_at = ?1, attempted_at = ?1, last_error = NULL
+        WHERE symbol IN (SELECT json_extract(value, '$.s') FROM json_each(?2))`,
+    ).bind(stamp, JSON.stringify(done)),
+    env.DB.prepare(
+      `UPDATE tickers SET attempted_at = ?1,
+              last_error = (SELECT json_extract(value, '$.e') FROM json_each(?2)
+                             WHERE json_extract(value, '$.s') = tickers.symbol)
+        WHERE symbol IN (SELECT json_extract(value, '$.s') FROM json_each(?2))`,
+    ).bind(stamp, JSON.stringify(failed)),
+  ]);
+
   report.attempted = due.length;
-  report.refreshed = outcomes.filter(Boolean).length;
-  report.failed = due.filter((_, i) => !outcomes[i]).map((t) => t.symbol);
+  report.refreshed = done.length;
+  report.full = full;
+  report.failed = failed.map((f) => f.s);
 
   const left = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM tickers WHERE active = 1 AND (refreshed_at IS NULL OR refreshed_at < ?)",
@@ -249,6 +290,13 @@ function text(html: string): string {
     .replace(/&nbsp;|&#160;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** A small stable number per symbol, to stagger the full refreshes. */
+function hash(text: string): number {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+  return h;
 }
 
 export async function putDocument(env: Env, key: string, body: string): Promise<void> {

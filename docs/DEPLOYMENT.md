@@ -23,15 +23,18 @@ Everything fits Cloudflare's free tiers except, possibly, one thing:
 | D1 storage | 500 MB per database | ~45 MB of prices |
 | D1 writes | 100,000 rows / day | ~1,100 on a weekday evening |
 | Cron triggers | 5 per account | 3 |
-| **CPU per invocation** | **10 ms** | **a Stack batch parses ~40 Yahoo responses** |
+| **CPU per invocation** | **10 ms** | **a Stack batch merges 20 tickers** |
 
-The Stack refresh is the one job that may outgrow the free plan's 10 ms CPU
-limit per invocation, because 10 years of daily bars is a sizeable JSON
-document to parse. If the Worker's logs show Stack runs ending in
-`exceededCpu`, either lower `STACK_BATCH` in `wrangler.toml` (and accept that
-fewer tickers are refreshed each night), or move to **Workers Paid ($5/month)**,
-which allows 30 s of CPU per invocation and makes the batching a non-issue
-(raise `STACK_BATCH` to 100 there). The other jobs wait on the network, which
+The Stack refresh is incremental: most tickers need only a month of days and
+five days of hours from Yahoo, merged onto what D1 holds, and just a few a
+night download the whole 10 years (see `research/stack/README.md`). It should
+fit the free plan's 10 ms CPU limit most nights. Nights with many full
+downloads cost more: the first night of all, and days when many stocks go
+ex-dividend at once. If the Worker's logs show Stack runs ending in
+`exceededCpu`, lower `STACK_BATCH` in `wrangler.toml`, or move to **Workers
+Paid ($5/month)**, which allows 30 s of CPU per invocation (raise
+`STACK_BATCH` to 100 there). A run that hits the limit writes nothing and is
+retried 20 minutes later. The other jobs wait on the network, which
 costs no CPU time, and fit the free plan comfortably.
 
 Gemini's free tier covers Market Tape: 8 grounded requests per run, 2 runs a
