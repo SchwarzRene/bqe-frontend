@@ -257,13 +257,19 @@
       id: "markettape", tag: "Interactive", title: "Market Tape",
       desc: "A broadcast-style rundown for Fed events and earnings calls, assembled by a search-grounded model under a strict JSON contract and rendered with live countdowns.",
       short: "Live broadcast rundown for Fed events and earnings calls.",
-      stack: "React · Claude API", href: "/research/markettape/"
+      stack: "React · Gemini API", href: "/research/markettape/"
     },
     {
       id: "stack", tag: "Interactive", title: "Stack",
       desc: "A scrollable chart feed for the S&P 500: monthly, weekly, daily and hourly candles per stock, with drawn levels shared across timeframes.",
       short: "Multi-timeframe candle charts for the S&P 500.",
       stack: "Canvas · yfinance", href: "/research/stack/"
+    },
+    {
+      id: "tradingjournal", tag: "Interactive", title: "Trading Journal",
+      desc: "A trading journal: log trades with live P&L, mark up the chart around each one, keep dated notes linked to the trades they are about, and read the stats that come out of it.",
+      short: "Trade log with live P&L, chart markup and a journal.",
+      stack: "JavaScript · Lightweight Charts", href: "/research/tradingjournal/"
     }
   ];
 

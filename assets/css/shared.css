@@ -642,6 +642,36 @@ header {
   background-color: var(--color-navy-mid);
 }
 
+.login-form[hidden] {
+  display: none;
+}
+
+/* Empty required fields are not errors until the visitor has typed. */
+.login-form-group input:invalid:not(:user-invalid) {
+  border-color: var(--color-gray-400);
+}
+
+.login-error {
+  color: var(--color-error);
+  font-size: var(--text-sm);
+  min-height: 1.4em;
+  margin: 0;
+}
+
+.login-error.is-ok {
+  color: var(--color-success);
+}
+
+.login-account {
+  color: var(--color-white);
+  margin: 0;
+}
+
+.login-secondary {
+  background-color: transparent;
+  border-color: var(--color-gray-400);
+}
+
 /* Mobile Menu Toggle Button */
 .nav-toggle {
   display: none !important;

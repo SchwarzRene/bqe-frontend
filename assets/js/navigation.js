@@ -174,12 +174,76 @@ function initLoginModal() {
     }
   });
 
-  if (loginForm) {
-    loginForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      alert('Demo mode: this form does not work.');
-    });
+  wireAccount(loginBtn, loginModal, loginForm);
+}
+
+// The session helper lives in its own file so the research apps, which do
+// not carry this header, can load it too.
+function loadSession() {
+  if (window.BQE && window.BQE.login) return Promise.resolve(window.BQE);
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '/assets/js/session.js';
+    script.onload = () => resolve(window.BQE);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function wireAccount(loginBtn, loginModal, loginForm) {
+  let BQE;
+  try { BQE = await loadSession(); } catch (_) { return; }
+
+  const panel = document.getElementById('account-panel');
+  const title = document.getElementById('login-title');
+  const error = document.getElementById('login-error');
+
+  function show(user) {
+    loginForm.hidden = !!user;
+    panel.hidden = !user;
+    title.textContent = user ? 'Account' : 'Login';
+    loginBtn.textContent = user ? user.username : 'Login';
+    loginBtn.setAttribute('aria-label', user ? `Account: ${user.username}` : 'Open login');
+    if (user) document.getElementById('account-name').textContent = user.username;
   }
+  show(await BQE.user);
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    error.textContent = '';
+    const button = loginForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const user = await BQE.login(loginForm.username.value, loginForm.password.value);
+      loginForm.reset();
+      show(user);
+    } catch (err) {
+      error.textContent = err.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  const passwordForm = document.getElementById('password-form');
+  const passwordStatus = document.getElementById('password-status');
+  passwordForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    passwordStatus.textContent = '';
+    passwordStatus.classList.remove('is-ok');
+    try {
+      await BQE.changePassword(passwordForm.current.value, passwordForm.next.value);
+      passwordForm.reset();
+      passwordStatus.textContent = 'Password changed. Other devices have been signed out.';
+      passwordStatus.classList.add('is-ok');
+    } catch (err) {
+      passwordStatus.textContent = err.message;
+    }
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    await BQE.logout();
+    show(null);
+  });
 }
 
 // ─── Bootstrap: watch for header being injected ───────────────────────────────

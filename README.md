@@ -30,6 +30,8 @@ GitHub Actions jobs).
 visitor ─▶ Cloudflare ─┬─ static file ─────────────▶ _site/ (CDN)
                        ├─ /api/quotes/:symbol ──────▶ Worker ─▶ Yahoo (cached 60 s)
                        ├─ /api/contact ─────────────▶ Worker ─▶ D1
+                       ├─ /api/auth/*, /api/state/* ─▶ Worker ─▶ D1 (accounts, saved work)
+                       ├─ /api/market/* ────────────▶ Worker ─▶ Yahoo (Trading Journal)
                        └─ /research/*/data/*.json ──▶ Worker ─▶ D1, else the committed file
 cron ──────────────────────────────────────────────▶ Worker ─▶ Yahoo · Wikipedia · Gemini ─▶ D1
 ```
@@ -108,6 +110,7 @@ handful of things `build.sh` leaves out.
 │   │   ├── formula-network.js Start page formula band animation (canvas)
 │   │   ├── research-hero.js  Research intro band animation (canvas)
 │   │   ├── research-graph.js Research project graph, list view and search
+│   │   ├── session.js      Sign-in and per-user saving, shared by site and apps
 │   │   └── form.js         Contact form validation (WCAG error handling)
 │   ├── images/             Page imagery, each as .webp + .jpg/.png fallback
 │   ├── captions/de.vtt     Captions for assets/video.mp4
@@ -121,6 +124,7 @@ handful of things `build.sh` leaves out.
     │   └── utils/*.png     Its figures
     ├── marketjepa/         Self-supervised world model
     │   └── index.html
+    ├── tradingjournal/     Trade log, chart markup and journal (own README)
     ├── markettape.html     Write-up for the Market Tape app
     ├── markettape/         The Market Tape app itself (own README)
     ├── historymap/         Interactive history atlas (own README)
@@ -404,6 +408,27 @@ slow upstream degrades to stored data rather than an error.
 | `GET /research/stack/data/*.json` | `worker/stack.ts` | Prices from D1; the committed file until D1 has them. |
 | `GET /research/markettape/data/*.json` | `worker/markettape.ts` | Rundown from D1; the committed file until D1 has it. |
 | `POST /api/admin/run/{stack,markettape}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
+| `POST /api/auth/{login,logout,password}`, `GET /api/auth/me` | `worker/auth.ts` | Sign-in with an HttpOnly session cookie. |
+| `GET/PUT /api/state/{stack,journal}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
+| `GET /api/market/{quote,candles}` | `worker/market.ts` | Yahoo quotes and candles for the Trading Journal, cached at the edge. |
+
+### Accounts and saved work
+
+Visitors can use every research app without an account, but **nothing a
+guest does is stored** — not on the server and not in their browser. It
+lives in the open tab and is gone on reload. A signed-in user's work in
+Stack (marked charts, drawings, theories) and in the Trading Journal is
+saved to their account and follows them to any device.
+
+There is no sign-up. The one account, `ceo`, is created by
+`migrations/0002_users.sql`. Its starting password is weak and its hash is
+in this public repository: change it after the first sign-in (Login →
+Change password), which also signs out every other session.
+
+An app opts in with `/assets/js/session.js`: `BQE.store("<app>")` loads and
+saves its document (a no-op for guests), and `BQE.mountAccountChip(el)`
+shows who is signed in. A new app also needs its name added to `APPS` in
+`worker/state.ts`.
 
 ## Data and automation
 

@@ -2,11 +2,14 @@
 // reach this code; only the paths in wrangler.toml's run_worker_first do,
 // plus the cron triggers.
 
+import { handleAuth, pruneAuth } from "./auth";
 import { handleContact, pruneContact } from "./contact";
 import type { Env } from "./env";
 import { json } from "./http";
+import { handleMarket } from "./market";
 import { refreshTape, serveTapeFile } from "./markettape";
 import { refreshStack, serveStackFile } from "./stack";
+import { handleState } from "./state";
 import { fetchQuote, isValidSymbol, UpstreamError } from "./yahoo";
 
 const QUOTE_TTL = 60; // seconds a live quote is reused at the edge
@@ -27,6 +30,15 @@ export default {
         if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
         return handleContact(request, env);
       }
+
+      m = path.match(/^\/api\/auth\/([a-z]+)$/);
+      if (m) return handleAuth(request, env, m[1]);
+
+      m = path.match(/^\/api\/state\/([a-z]+)$/);
+      if (m) return handleState(request, env, m[1]);
+
+      m = path.match(/^\/api\/market\/([a-z]+)$/);
+      if (m) return handleMarket(request, ctx, m[1]);
 
       m = path.match(/^\/api\/admin\/run\/(stack|markettape)$/);
       if (m) {
@@ -61,6 +73,7 @@ export default {
       case "10 22 * * 1-5": {
         console.log("markettape refresh:", await refreshTape(env, new Date(controller.scheduledTime)));
         ctx.waitUntil(pruneContact(env));
+        ctx.waitUntil(pruneAuth(env));
         break;
       }
       default:

@@ -88,15 +88,26 @@ Cloudflare installs `package.json`'s dependencies before the build command.
 The deploy comes before the migrations so the database exists on the very
 first deploy; until the tables exist the Worker serves the committed files.
 
-**3. The secrets.** Stored on the Worker, never in git:
+**3. The secrets.** Stored on the Worker, never in git and never in
+`wrangler.toml`. Either in the dashboard — Workers & Pages → `bqe-frontend` →
+**Settings** → **Variables and Secrets** → **Add** → type **Secret** — or
+from a terminal in this repository:
 
 ```bash
 npx wrangler secret put GEMINI_API_KEY   # free key: https://aistudio.google.com/apikey
 npx wrangler secret put ADMIN_TOKEN      # any long random string: openssl rand -hex 32
 ```
 
-(or Worker → **Settings** → **Variables and Secrets**). `ADMIN_TOKEN` guards
-`POST /api/admin/run/{stack,markettape}`, which runs a job on demand.
+`GEMINI_API_KEY` is what Market Tape uses; the Worker reads it as
+`env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
+`POST /api/admin/run/{stack,markettape}`, which runs a job on demand. For
+`npm run dev` locally, put the same names in a `.dev.vars` file
+(git-ignored) instead.
+
+**Then change the `ceo` password.** The account comes from
+`migrations/0002_users.sql` with the password you chose, and that file is
+public. Sign in on the site → click `ceo` in the header → **Change
+password**.
 
 **4. Fill the data.** Either wait for the evening, or run it now:
 

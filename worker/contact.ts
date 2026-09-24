@@ -9,7 +9,7 @@
 //     "UPDATE contact_messages SET answered_at = datetime('now') WHERE id = 1"
 
 import type { Env } from "./env";
-import { isoNow, json, utcDay } from "./http";
+import { hashIp, isoNow, json } from "./http";
 
 const SUBJECTS = new Set([
   "subscription", "general", "careers", "partnership", "media", "feedback", "accessibility",
@@ -88,11 +88,4 @@ export async function pruneContact(env: Env): Promise<void> {
       new Date(Date.now() - 86_400_000).toISOString(),
     ),
   ]);
-}
-
-/** A salted hash that changes every day, so it cannot follow anyone across days. */
-async function hashIp(ip: string): Promise<string> {
-  const data = new TextEncoder().encode(`${utcDay()}|bqe-contact|${ip}`);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(digest)].slice(0, 16).map((b) => b.toString(16).padStart(2, "0")).join("");
 }

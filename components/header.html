@@ -62,7 +62,7 @@
   <div id="login-modal" class="login-modal" hidden>
     <div class="login-modal-content">
       <button id="login-close" class="login-modal-close" aria-label="Close login">&times;</button>
-      <h2>Login</h2>
+      <h2 id="login-title">Login</h2>
       <form id="login-form" class="login-form">
         <div class="login-form-group">
           <label for="username">Username</label>
@@ -71,6 +71,7 @@
             id="username"
             name="username"
             placeholder="Enter username"
+            autocomplete="username"
             required
           />
         </div>
@@ -81,11 +82,31 @@
             id="password"
             name="password"
             placeholder="Enter password"
+            autocomplete="current-password"
             required
           />
         </div>
+        <p id="login-error" class="login-error" role="alert"></p>
         <button type="submit" class="login-submit">Sign in</button>
       </form>
+
+      <!-- Shown instead of the form once signed in (navigation.js). -->
+      <div id="account-panel" class="login-form" hidden>
+        <p class="login-account">Signed in as <strong id="account-name"></strong>. Your work in the research apps is saved to this account.</p>
+        <form id="password-form" class="login-form">
+          <div class="login-form-group">
+            <label for="current-password">Current password</label>
+            <input type="password" id="current-password" name="current" autocomplete="current-password" required />
+          </div>
+          <div class="login-form-group">
+            <label for="new-password">New password (at least 8 characters)</label>
+            <input type="password" id="new-password" name="next" autocomplete="new-password" minlength="8" required />
+          </div>
+          <p id="password-status" class="login-error" role="status"></p>
+          <button type="submit" class="login-submit">Change password</button>
+        </form>
+        <button type="button" id="logout-btn" class="login-submit login-secondary">Sign out</button>
+      </div>
     </div>
   </div>
 </header>

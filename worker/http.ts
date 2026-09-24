@@ -47,3 +47,36 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   await Promise.all(workers);
   return out;
 }
+
+/**
+ * The visitor's IP as a salted hash that changes every day, so it can rate
+ * limit within a day but cannot follow anyone across days. The IP itself is
+ * never stored.
+ */
+export async function hashIp(ip: string, day = utcDay()): Promise<string> {
+  const data = new TextEncoder().encode(`${day}|bqe|${ip}`);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return hex(digest).slice(0, 32);
+}
+
+export function hex(buffer: ArrayBuffer | Uint8Array): string {
+  return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** A request from a page on another site: refuse anything that changes state. */
+export function crossSite(request: Request): boolean {
+  const origin = request.headers.get("Origin");
+  return !!origin && origin !== new URL(request.url).origin;
+}
+
+/** Read a JSON object body, or null when it is missing, too large or malformed. */
+export async function readJson(request: Request, maxBytes: number): Promise<any | null> {
+  const text = await request.text();
+  if (!text || text.length > maxBytes) return null;
+  try {
+    const body = JSON.parse(text);
+    return body && typeof body === "object" && !Array.isArray(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
