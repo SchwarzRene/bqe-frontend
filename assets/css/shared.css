@@ -496,6 +496,24 @@ header {
   box-shadow: 0 4px 12px rgba(var(--rgb-gold), 0.2);
 }
 
+/* The menu's Login entry: phones only, where .login-button is hidden. */
+.nav-item-login {
+  display: none;
+}
+
+.nav-login {
+  width: 100%;
+  font: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .nav-item-login {
+    display: block;
+  }
+}
+
 /* Login Button */
 .login-button {
   background-color: var(--color-navy-mid);
@@ -539,7 +557,9 @@ header {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  /* Above the cookie banner (9999): on a phone the banner otherwise covers
+     the Sign in button. */
+  z-index: 10000;
 }
 
 .login-modal[hidden] {

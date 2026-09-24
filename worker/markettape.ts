@@ -17,6 +17,9 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_MODEL = "gemini-3.8-flash";
 const DEFAULT_WATCHLIST = ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL"];
 const MAX_RESULTS = 6;
+// A first rundown built on demand (see serveTapeFile) is tried at most this
+// often, so visitors cannot run up the Gemini quota while it keeps failing.
+const BOOTSTRAP_EVERY_MS = 30 * 60_000;
 
 // How long after its start an event still counts as "on air", per kind.
 // Mirrors LIVE_WINDOW_MIN in the page.
@@ -47,12 +50,23 @@ export interface TapeEvent {
 // serving
 // --------------------------------------------------------------------------
 
-export async function serveTapeFile(request: Request, env: Env, file: string): Promise<Response> {
+export async function serveTapeFile(request: Request, env: Env, ctx: ExecutionContext, file: string): Promise<Response> {
   const key = FILES[file];
   if (key) {
     try {
-      const row = await env.DB.prepare("SELECT body FROM documents WHERE key = ?").bind(key).first<{ body: string }>();
-      if (row) return jsonText(row.body, 200, { "Cache-Control": "public, max-age=300" });
+      const row = await readDoc(env, key);
+      if (row) return jsonText(row, 200, { "Cache-Control": "public, max-age=300" });
+
+      // No rundown yet — a fresh deploy, before the first scheduled run.
+      // Build it now, while this visitor waits (about a minute), instead of
+      // showing an empty board until 12:10 or 22:10 UTC.
+      if (file === "schedule.json" && (await claimBootstrap(env))) {
+        const run = refreshTape(env, new Date(), { results: false });
+        ctx.waitUntil(run); // finish even if the visitor leaves
+        console.log("markettape: first rundown on demand:", await run);
+        const fresh = await readDoc(env, key);
+        if (fresh) return jsonText(fresh, 200, { "Cache-Control": "public, max-age=300" });
+      }
     } catch (err) {
       console.warn("markettape: D1 read failed, serving the committed file", err);
     }
@@ -60,11 +74,30 @@ export async function serveTapeFile(request: Request, env: Env, file: string): P
   return env.ASSETS.fetch(request);
 }
 
+async function readDoc(env: Env, key: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT body FROM documents WHERE key = ?").bind(key).first<{ body: string }>();
+  return row?.body ?? null;
+}
+
+/** Take the on-demand slot, unless a run started within BOOTSTRAP_EVERY_MS. Atomic. */
+async function claimBootstrap(env: Env): Promise<boolean> {
+  const now = isoNow();
+  const cutoff = new Date(Date.now() - BOOTSTRAP_EVERY_MS).toISOString();
+  const result = await env.DB.prepare(
+    `INSERT INTO documents (key, body, updated) VALUES ('markettape:bootstrap', ?1, ?1)
+     ON CONFLICT (key) DO UPDATE SET body = excluded.body, updated = excluded.updated
+     WHERE documents.updated < ?2`,
+  )
+    .bind(now, cutoff)
+    .run();
+  return result.meta.changes > 0;
+}
+
 // --------------------------------------------------------------------------
 // refresh (cron)
 // --------------------------------------------------------------------------
 
-export async function refreshTape(env: Env, now = new Date()): Promise<string> {
+export async function refreshTape(env: Env, now = new Date(), { results: withResults = true } = {}): Promise<string> {
   if (!env.GEMINI_API_KEY) {
     return "GEMINI_API_KEY is not set — `npx wrangler secret put GEMINI_API_KEY`";
   }
@@ -93,6 +126,9 @@ export async function refreshTape(env: Env, now = new Date()): Promise<string> {
   );
   const stamp = isoNow();
   await putDocument(env, FILES["schedule.json"], JSON.stringify({ updated: stamp, watchlist: tickers, events }));
+  // The on-demand first run skips the numbers, to answer sooner; the next
+  // scheduled run fills them in.
+  if (!withResults) return `${events.length} events (results on the next scheduled run)`;
 
   // Only events that have already started can have numbers attached.
   const due = events.filter((e) => started(e, now)).slice(0, MAX_RESULTS);

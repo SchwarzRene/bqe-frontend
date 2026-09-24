@@ -109,7 +109,9 @@ npx wrangler secret put ADMIN_TOKEN      # any long random string: openssl rand 
 public. Sign in on the site → click `ceo` in the header → **Change
 password**.
 
-**4. Fill the data.** Either wait for the evening, or run it now:
+**4. Fill the data.** Market Tape fills itself: the first visit to
+`/research/markettape/` after a deploy builds the rundown if there is none
+(about a minute). Stack prices wait for the evening run, or run them now:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/markettape

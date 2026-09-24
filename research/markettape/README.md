@@ -29,15 +29,23 @@ answers those paths from D1, and falls back to a committed file if there is one.
 1. Get a free Gemini API key at <https://aistudio.google.com/apikey>.
 2. Store it on the Worker: `npx wrangler secret put GEMINI_API_KEY`
    (or Worker → Settings → Variables and Secrets in the dashboard).
-3. Run it once by hand instead of waiting for the schedule:
+3. Open the page. When there is no rundown yet — a fresh deploy, before
+   the first scheduled run — the Worker builds one while that first visitor
+   waits (about a minute; the page says so). That on-demand build is tried
+   at most once every 30 minutes, so a failing key or model name cannot run
+   up the quota. It skips the reported numbers; the next scheduled run adds
+   them.
+
+   To force a full run at any time instead:
 
    ```bash
    curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
      https://<your-site>/api/admin/run/markettape
    ```
 
-Until the first run the board renders empty and says so; the always-on channel
-links still work. A run is two schedule queries plus at most six result
+If a build fails the board says so, and the always-on channel links still
+work; the Worker's logs show why (`markettape: gemini 404` is a wrong model
+name, `429` the free tier's rate limit). A run is two schedule queries plus at most six result
 queries, well inside the free tier's daily limit. On the free tier Google may
 use prompts to improve its products — nothing private goes into these ones.
 

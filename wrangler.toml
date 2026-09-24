@@ -15,6 +15,11 @@ main = "worker/index.ts"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Keep variables added in the dashboard when deploying. Secrets are never
+# touched by a deploy; this also protects plain-text variables set there.
+# (Top-level: under a [table] heading wrangler would ignore it.)
+keep_vars = true
+
 [assets]
 directory = "./_site"
 binding = "ASSETS"
@@ -53,10 +58,6 @@ crons = [
   "10 12 * * 1-5",
   "10 22 * * 1-5",
 ]
-
-# Keep variables added in the dashboard when deploying. Secrets are never
-# touched by a deploy; this also protects plain-text variables set there.
-keep_vars = true
 
 [vars]
 # Tickers refreshed per cron run. 40 runs a night × 20 = 800 slots for ~503

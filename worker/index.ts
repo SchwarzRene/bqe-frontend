@@ -51,7 +51,7 @@ export default {
       if (m && method === "GET") return serveStackFile(request, env, m[1]);
 
       m = path.match(/^\/research\/markettape\/data\/([a-z]+\.json)$/);
-      if (m && method === "GET") return serveTapeFile(request, env, m[1]);
+      if (m && method === "GET") return serveTapeFile(request, env, ctx, m[1]);
 
       if (path.startsWith("/api/")) return json({ error: "not found" }, 404);
     } catch (err) {

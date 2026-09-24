@@ -150,10 +150,31 @@ function initLoginModal() {
   if (loginBtn.dataset.loginReady === 'true') return;
   loginBtn.dataset.loginReady = 'true';
 
+  // The modal is written inside <header>, whose z-index makes a stacking
+  // context: nothing in it can rise above the cookie banner, which then
+  // covers the Sign in button on phones. At the end of <body> it can.
+  document.body.appendChild(loginModal);
+
   loginBtn.addEventListener('click', () => {
     loginModal.removeAttribute('hidden');
     loginModal.focus();
   });
+
+  // The burger menu's own entry, for phones: close the menu, open the modal.
+  const navLoginBtn = document.getElementById('nav-login-btn');
+  if (navLoginBtn) {
+    navLoginBtn.addEventListener('click', () => {
+      const nav = document.getElementById('primary-navigation');
+      const toggle = document.querySelector('.nav-toggle');
+      nav?.classList.remove('is-open');
+      toggle?.setAttribute('aria-expanded', 'false');
+      toggle?.setAttribute('aria-label', 'Open navigation menu');
+      loginModal.removeAttribute('hidden');
+      (document.getElementById('username')?.offsetParent
+        ? document.getElementById('username')
+        : document.getElementById('logout-btn'))?.focus();
+    });
+  }
 
   loginClose.addEventListener('click', () => {
     loginModal.setAttribute('hidden', '');
@@ -204,6 +225,8 @@ async function wireAccount(loginBtn, loginModal, loginForm) {
     title.textContent = user ? 'Account' : 'Login';
     loginBtn.textContent = user ? user.username : 'Login';
     loginBtn.setAttribute('aria-label', user ? `Account: ${user.username}` : 'Open login');
+    const navLoginBtn = document.getElementById('nav-login-btn');
+    if (navLoginBtn) navLoginBtn.textContent = user ? `Account (${user.username})` : 'Login';
     if (user) document.getElementById('account-name').textContent = user.username;
   }
   show(await BQE.user);
