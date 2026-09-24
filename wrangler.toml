@@ -54,6 +54,10 @@ crons = [
   "10 22 * * 1-5",
 ]
 
+# Keep variables added in the dashboard when deploying. Secrets are never
+# touched by a deploy; this also protects plain-text variables set there.
+keep_vars = true
+
 [vars]
 # Tickers refreshed per cron run. 40 runs a night × 20 = 800 slots for ~503
 # tickers, so failures get retried. Each ticker is two Yahoo requests.
@@ -61,7 +65,7 @@ STACK_BATCH = "20"
 # Earnings watchlist for Market Tape, space separated.
 MARKETTAPE_TICKERS = "NVDA AAPL MSFT AMZN GOOGL"
 # Gemini model for Market Tape. Must support Google Search grounding.
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.8-flash"
 
 [observability]
 enabled = true

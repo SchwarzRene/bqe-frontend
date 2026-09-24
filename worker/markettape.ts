@@ -14,7 +14,7 @@ import { isoNow, jsonText, mapLimit } from "./http";
 import { putDocument } from "./stack";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.8-flash";
 const DEFAULT_WATCHLIST = ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL"];
 const MAX_RESULTS = 6;
 
