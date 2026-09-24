@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Trading Journal — log trades, mark up charts and keep a journal. Black Quant Empire research.">
+  <title>Trading Journal - Black Quant Empire</title>
+  <link rel="icon" href="/assets/images/logo.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Pinned to v4: v5 replaced the series.setMarkers API used in charts.js. -->
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/research/" title="Back to Research"><span class="brand-mark">▲</span><span class="brand-text">tradelog</span></a>
+    <nav class="nav" aria-label="Trading journal">
+      <a href="#/dashboard" data-route="dashboard">Dashboard</a>
+      <a href="#/trades" data-route="trades">Trades</a>
+      <a href="#/journal" data-route="journal">Journal</a>
+      <a href="#/symbols" data-route="symbols">Symbols</a>
+    </nav>
+    <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
+    <span id="account"></span>
+    <button class="btn ghost" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light/dark">◐</button>
+  </header>
+  <div id="guest-note" class="guest-note" hidden>
+    Guest mode: try everything, but nothing is saved. Your trades and notes are gone when you leave or reload.
+  </div>
+  <main id="view"></main>
+  <dialog id="modal"></dialog>
+  <div id="toast"></div>
+  <script src="/assets/js/session.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

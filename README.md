@@ -20,8 +20,21 @@ site (`index.html`, `pages/about.html`, `pages/strategy.html`).
 
 The site is a Cloudflare Worker serving static assets, connected directly to
 this repository. Push to `main` and Cloudflare pulls, runs `./build.sh`, and
-deploys `_site/` — live usually inside a minute. No code runs: the Worker is a
-CDN in front of those files.
+deploys `_site/` together with the Worker in `worker/` — live usually inside
+a minute. Static files are served straight from the CDN; the Worker only runs
+for `/api/*`, for the price and rundown data, and on its cron schedule. There
+is no other server: this replaced `bqe-backend` (Azure Container Apps plus
+GitHub Actions jobs).
+
+```
+visitor ─▶ Cloudflare ─┬─ static file ─────────────▶ _site/ (CDN)
+                       ├─ /api/quotes/:symbol ──────▶ Worker ─▶ Yahoo (cached 60 s)
+                       ├─ /api/contact ─────────────▶ Worker ─▶ D1
+                       ├─ /api/auth/*, /api/state/* ─▶ Worker ─▶ D1 (accounts, saved work)
+                       ├─ /api/market/* ────────────▶ Worker ─▶ Yahoo (Trading Journal)
+                       └─ /research/*/data/*.json ──▶ Worker ─▶ D1, else the committed file
+cron ──────────────────────────────────────────────▶ Worker ─▶ Yahoo · Wikipedia · Gemini ─▶ D1
+```
 
 There is no API token and no GitHub secret anywhere in this setup. Cloudflare
 watches the repository through its GitHub App, so there is no credential to
@@ -38,16 +51,16 @@ Consequences worth remembering:
   local preview must be served from the root (see [Local preview](#local-preview)),
   and opening a page as a `file://` URL shows it unstyled.
 - Repository furniture never reaches the CDN. `build.sh` leaves out `.git`,
-  `.github/`, `.gitignore`, `docs/`, `README.md`, `wrangler.toml` and itself,
+  `.github/`, `.gitignore`, `docs/`, `README.md`, `wrangler.toml`, the
+  Worker's source (`worker/`, `migrations/`, `test/`, `package.json`) and itself,
   so adding documentation here cannot bloat the site. This matters more than
   it looks: publishing the root would push `.git` at Cloudflare, and a pack
   file over 25 MiB fails the deploy outright.
-- There is no server-side code in this repository. Anything needing a backend
-  either runs ahead of time and is committed as JSON (see
-  [Data and automation](#data-and-automation)), or lives in
-  [`bqe-backend`](https://github.com/SchwarzRene/bqe-backend).
+- All server-side code is in `worker/` (see [The Worker](#the-worker)). Its
+  data lives in a Cloudflare D1 database called `bqe`.
 - `_headers` at the root sets the security and caching headers Cloudflare
-  applies. Edit it there, not in the build script.
+  applies to static files. Responses the Worker builds itself get the same
+  security headers from `worker/http.ts`, since `_headers` does not reach them.
 
 ## Repository layout
 
@@ -59,10 +72,14 @@ handful of things `build.sh` leaves out.
 ├── _headers                Security and caching headers Cloudflare applies
 ├── docs/
 │   └── DEPLOYMENT.md       Cloudflare setup, secrets, custom domain
-├── wrangler.toml           Tells Cloudflare to publish _site/, not the root
+├── wrangler.toml           Worker config: assets, D1 binding, cron schedule
+├── worker/                 The Worker: API, data serving, scheduled jobs
+├── migrations/             D1 schema, applied by wrangler
+├── test/                   Worker unit tests (vitest)
+├── package.json            Worker tooling (wrangler, typescript, vitest)
 ├── build.sh                Assembles _site/ — what Cloudflare publishes
 ├── .github/workflows/
-│   └── ci.yml              Link check on every push and pull request
+│   └── ci.yml              Link check, Worker typecheck/tests/bundle
 │
 ├── index.html              Start page (market-network hero, formula-network band)
 │
@@ -93,6 +110,7 @@ handful of things `build.sh` leaves out.
 │   │   ├── formula-network.js Start page formula band animation (canvas)
 │   │   ├── research-hero.js  Research intro band animation (canvas)
 │   │   ├── research-graph.js Research project graph, list view and search
+│   │   ├── session.js      Sign-in and per-user saving, shared by site and apps
 │   │   └── form.js         Contact form validation (WCAG error handling)
 │   ├── images/             Page imagery, each as .webp + .jpg/.png fallback
 │   ├── captions/de.vtt     Captions for assets/video.mp4
@@ -106,18 +124,18 @@ handful of things `build.sh` leaves out.
     │   └── utils/*.png     Its figures
     ├── marketjepa/         Self-supervised world model
     │   └── index.html
+    ├── tradingjournal/     Trade log, chart markup and journal (own README)
     ├── markettape.html     Write-up for the Market Tape app
     ├── markettape/         The Market Tape app itself (own README)
     ├── historymap/         Interactive history atlas (own README)
     └── stack/              S&P 500 chart feed (own README)
         ├── index.html
-        ├── live.example.json  Template for pointing the page at bqe-backend
-        └── data/*.json     One file per ticker, refreshed from bqe-backend
+        ├── live.example.json  Template for pointing live quotes elsewhere
+        └── data/*.json     Last committed snapshot; D1 serves fresher copies
 ```
 
-The fetchers, their dependencies and the live-quotes service are **not** here any
-more — they live in
-[`bqe-backend`](https://github.com/SchwarzRene/bqe-backend).
+The fetchers and the live-quotes service are in `worker/`; the Python versions
+in [`bqe-backend`](https://github.com/SchwarzRene/bqe-backend) are retired.
 
 **Why the research projects are all folders.** `assets/js/research-graph.js`
 lists BQE-DeComp, MarketJEPA, HistoryMap, Market Tape and Stack as five equal
@@ -359,46 +377,80 @@ and a swatch in the page's legend.
 
 ### A page that needs live data
 
-The site's Worker only serves files; no code of ours runs there. So there are
-two routes, and which one you want depends on how fresh the data has to be.
+Everything dynamic goes through the Worker. Two patterns, depending on how
+fresh the data has to be:
 
-**Refreshed daily, committed as JSON** — the pattern `research/stack/` uses:
+**Refreshed on a schedule, stored in D1** — what `research/stack/` and
+`research/markettape/` do:
 
-1. Write a fetcher in `bqe-backend`'s `automation/scripts/` that produces compact JSON.
-2. Add its dependencies to `bqe-backend`'s `requirements-automation.txt`.
-3. Add a workflow there that runs it on a schedule and commits the result into
-   this repository (copy `market-data.yml`; it already checks this repository
-   out and handles a branch that moved underneath it).
-4. Have the page `fetch()` the committed JSON, with a fallback for the window
-   before the first run.
+1. Write the job as a function in `worker/` that fetches, shapes and stores
+   JSON (`putDocument()` in `worker/stack.ts` for a single document, or a
+   table of its own via a new file in `migrations/`).
+2. Add a cron expression to `[triggers]` in `wrangler.toml` and a `case` for
+   it in `scheduled()` in `worker/index.ts`.
+3. Serve it at the path the page reads, and add that path to
+   `run_worker_first`. Fall back to `env.ASSETS.fetch(request)` so a committed
+   copy covers the time before the first run.
 
-**Fresh on load** — add an endpoint to the `bqe-backend` API and call it from
-the page, as `research/stack/` does for live quotes. This is the only route for
-anything intraday: browsers cannot call Yahoo directly, because those endpoints
-send no CORS headers. Give every such request a short deadline and a fall-back
-to committed data, so a slow or sleeping backend degrades to yesterday's close
-rather than an error.
+**Fresh on load** — add a route under `/api/` in `worker/index.ts`, as
+`/api/quotes` does for live bars. Browsers cannot call Yahoo directly (no
+CORS headers), which is why this lives on the Worker. Cache upstream answers
+with `caches.default`, and give the page a short deadline and a fallback so a
+slow upstream degrades to stored data rather than an error.
 
+## The Worker
+
+| Path | Source | What it does |
+|---|---|---|
+| `GET /api/health` | `worker/index.ts` | Liveness; the Stack page probes it to find the API. |
+| `GET /api/quotes/:symbol` | `worker/yahoo.ts` | Daily + hourly bars from Yahoo, cached 60 s at the edge. |
+| `POST /api/contact` | `worker/contact.ts` | Stores a contact form submission in D1 (validated, rate-limited, honeypot). |
+| `GET /research/stack/data/*.json` | `worker/stack.ts` | Prices from D1; the committed file until D1 has them. |
+| `GET /research/markettape/data/*.json` | `worker/markettape.ts` | Rundown from D1; the committed file until D1 has it. |
+| `POST /api/admin/run/{stack,markettape}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
+| `POST /api/auth/{login,logout,password}`, `GET /api/auth/me` | `worker/auth.ts` | Sign-in with an HttpOnly session cookie. |
+| `GET/PUT /api/state/{stack,journal}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
+| `GET /api/market/{quote,candles}` | `worker/market.ts` | Yahoo quotes and candles for the Trading Journal, cached at the edge. |
+
+### Accounts and saved work
+
+Visitors can use every research app without an account, but **nothing a
+guest does is stored** — not on the server and not in their browser. It
+lives in the open tab and is gone on reload. A signed-in user's work in
+Stack (marked charts, drawings, theories) and in the Trading Journal is
+saved to their account and follows them to any device.
+
+There is no sign-up. The one account, `ceo`, is created by
+`migrations/0002_users.sql`. Its starting password is weak and its hash is
+in this public repository: change it after the first sign-in (Login →
+Change password), which also signs out every other session.
+
+An app opts in with `/assets/js/session.js`: `BQE.store("<app>")` loads and
+saves its document (a no-op for guests), and `BQE.mountAccountChip(el)`
+shows who is signed in. A new app also needs its name added to `APPS` in
+`worker/state.ts`.
 
 ## Data and automation
 
-The scheduled jobs that produce this data live in
-**[`bqe-backend`](https://github.com/SchwarzRene/bqe-backend)**, not here.
-
-| Workflow (in bqe-backend) | Schedule (UTC) | Commits into this repository |
+| Cron (UTC) | Job | Writes to D1 |
 |---|---|---|
-| `market-data.yml` | 22:20, Mon–Fri | `research/stack/data/*.json` |
-| `market-tape.yml` | 12:10 and 22:10, Mon–Fri | `research/markettape/data/*.json` |
+| every 3 min, 22:00–23:59, Mon–Fri | Stack prices: constituents from Wikipedia, bars from Yahoo, 20 tickers a run | `tickers`, `series` |
+| 12:10 and 22:10, Mon–Fri | Market Tape: Fed calendar and earnings via Gemini + Google Search | `documents` |
+| with the Market Tape runs | Deletes contact messages 30 days after they were answered | `contact_messages` |
 
-They check this repository out, write the refreshed JSON, and push. That push
-triggers the deploy workflow here like any other, so new data reaches the site
-by the normal route.
+The Stack job is batched because one Worker invocation may make only a
+limited number of outbound requests: each run takes the next tickers not yet
+refreshed today, and a failed ticker is retried 20 minutes later. It is also
+incremental: a ticker already in D1 fetches only its last month of days and
+five days of hours and appends them. The full 10-year download happens only
+when the stored history no longer matches (a dividend or split), when there
+is a gap, or on that ticker's roughly monthly full check.
 
-The data is committed rather than served from an API on purpose: it is 46 MB of
-static JSON that changes once a day, which is exactly what a CDN is good at and
-exactly what a scale-to-zero container is bad at.
+Nothing is committed back to git any more. The data files still in
+`research/stack/data/` are the last snapshot and only matter until D1 has
+filled in — the index switches to D1 once it holds prices for 90% of the list.
 
-Both jobs can be started by hand from the **Actions** tab of `bqe-backend`.
+Checks for the Worker: `npm test` (unit tests), `npm run typecheck`.
 
 ## Local preview
 
@@ -413,19 +465,22 @@ python3 -m http.server 8000
 A plain file server is enough — and it is *required*, because the pages use
 absolute paths and `components.js` fetches the header and footer over HTTP.
 
-To preview exactly what Cloudflare will serve, including `_headers`:
+To run the Worker too — API, D1 and all — against a local database:
 
 ```bash
-npx wrangler pages dev .
+npm install
+npx wrangler d1 migrations apply bqe --local
+npm run dev                                  # → http://localhost:8787
+curl "localhost:8787/__scheduled?cron=*/3+22-23+*+*+1-5"   # fire the Stack job
 ```
 
-The Python fetchers are not in this repository any more; see
-[`bqe-backend`](https://github.com/SchwarzRene/bqe-backend).
+For Market Tape locally, put `GEMINI_API_KEY=...` in `.dev.vars` (git-ignored).
 
 ## Deploying
 
-Push to `main`. Cloudflare does the rest; there is nothing to release and no
-secret to keep alive.
+Push to `main`. Cloudflare builds, deploys the Worker and applies any new D1
+migrations. The only secrets are the Gemini key and the admin token, both
+stored on the Worker, never in git.
 
 Full setup — the Cloudflare project, the two API secrets, the custom domain —
 is in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.

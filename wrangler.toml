@@ -1,24 +1,71 @@
 # Cloudflare Workers configuration.
 #
-# Without this file wrangler improvises: it treats the whole repository as the
-# assets directory, which sweeps in .git and fails because a pack file is
-# larger than the 25 MiB per-asset limit. This points it at the directory
-# build.sh produces instead.
+# One Worker does everything the site needs: it serves the static files in
+# _site/ (built by build.sh), answers /api/*, and runs the scheduled jobs that
+# used to live in bqe-backend on GitHub Actions and Azure. There is no server.
 #
-# This is a static-assets Worker — there is no `main`, so no code runs. It is
-# a CDN in front of _site/, and _headers next to the pages still applies.
+#   request ─▶ static asset?  ─▶ served from the CDN, no code runs
+#          └─▶ run_worker_first path ─▶ worker/index.ts ─▶ D1 / Yahoo
+#   cron   ─▶ worker/index.ts scheduled() ─▶ Yahoo / Wikipedia / Gemini ─▶ D1
+#
+# See docs/DEPLOYMENT.md for the one-time setup (database, secrets).
 
 name = "bqe-frontend"
+main = "worker/index.ts"
 compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = "./_site"
+binding = "ASSETS"
 
-# "auto-trailing-slash" is the default and the one this site needs: it maps
-# /research/stack/ to research/stack/index.html and /pages/about to
-# pages/about.html, which is how every link in the site is written.
+# "auto-trailing-slash" maps /research/stack/ to research/stack/index.html and
+# /pages/about to pages/about.html, which is how every link in the site is
+# written.
 html_handling = "auto-trailing-slash"
-
-# The site has no 404 page of its own, so a miss gets Cloudflare's plain 404
-# rather than a redirect to somewhere misleading.
 not_found_handling = "none"
+
+# Assets win by default, so without this a committed data file would shadow
+# the fresher copy in D1. These paths go to the Worker first; it serves from
+# D1 and falls back to the committed file when D1 has nothing yet.
+run_worker_first = [
+  "/api/*",
+  "/research/stack/data/*",
+  "/research/markettape/data/*",
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bqe"
+# database_id is filled in by `npx wrangler d1 create bqe` (paste the id here),
+# or left out: wrangler then creates the database on the first deploy.
+migrations_dir = "migrations"
+
+[triggers]
+crons = [
+  # Stack prices: a batch every 3 minutes for the two hours after 22:00 UTC
+  # on weekdays — the US close has settled by then. Each run takes the next
+  # tickers not yet refreshed today, so the 500 are spread over many small
+  # invocations instead of one that would hit the subrequest limit.
+  "*/3 22-23 * * 1-5",
+  # Market Tape: before the US open (the day's schedule) and after the close
+  # (the reported numbers).
+  "10 12 * * 1-5",
+  "10 22 * * 1-5",
+]
+
+# Keep variables added in the dashboard when deploying. Secrets are never
+# touched by a deploy; this also protects plain-text variables set there.
+keep_vars = true
+
+[vars]
+# Tickers refreshed per cron run. 40 runs a night × 20 = 800 slots for ~503
+# tickers, so failures get retried. Each ticker is two Yahoo requests.
+STACK_BATCH = "20"
+# Earnings watchlist for Market Tape, space separated.
+MARKETTAPE_TICKERS = "NVDA AAPL MSFT AMZN GOOGL"
+# Gemini model for Market Tape. Must support Google Search grounding.
+GEMINI_MODEL = "gemini-3.8-flash"
+
+[observability]
+enabled = true

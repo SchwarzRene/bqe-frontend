@@ -110,8 +110,8 @@
   <p>The interesting part is not the interface. It is where the data comes from. There is no
   calendar API, no earnings-date vendor, no IR-webcast registry and no wire feed behind this
   page. Every schedule row, every stream URL and every reported figure is produced at runtime
-  by <strong>Claude with the web-search tool</strong>, under a strict JSON response contract,
-  and then normalized and validated by the client. The application is, in effect, a typed UI
+  by <strong>Google's Gemini with Google Search grounding</strong>, under a strict JSON response
+  contract, and then normalized and validated before the page ever sees it. The application is, in effect, a typed UI
   layer over a search-grounded model — an experiment in how far <em>the model as the data
   source</em> can be pushed for a domain that normally requires four separate paid
   integrations.</p>
@@ -155,8 +155,8 @@ merges the two result sets into one time-ordered rundown.</p>
   </div>
   <div class="arrowdown">↓</div>
   <div class="flow-row">
-    <div class="flow-stage">askClaude()</div>
-    <div class="flow-body">POST /v1/messages with <span class="sh">web_search_20250305</span> → text blocks</div>
+    <div class="flow-stage">askGemini()</div>
+    <div class="flow-body">POST generateContent with <span class="sh">google_search</span> grounding → text parts</div>
   </div>
   <div class="arrowdown">↓</div>
   <div class="flow-row">
@@ -450,8 +450,9 @@ And the per-event <em>Find stream &amp; links</em> button is gone: link discover
 same prefetch, so the links are simply there or not.</p>
 
 <div class="key">
-  <strong>Running it:</strong> add an <code>ANTHROPIC_API_KEY</code> repository secret, allow
-  Actions to write to the repository, then run the <em>Market tape</em> workflow once by hand.
+  <strong>Running it:</strong> store a free Gemini key on the site's Worker as the
+  <code>GEMINI_API_KEY</code> secret; the Worker's cron runs the searches twice each weekday and
+  keeps the result in its database.
   Until that first run the board renders empty and says so, with the always-on channels still
   working. A run costs a handful of search-grounded requests — two schedule queries plus at most
   six result queries.
@@ -482,7 +483,7 @@ same prefetch, so the links are simply there or not.</p>
   <div><span class="f">  tzParts · tzOffsetMin · etToTs</span> <span class="d">— ET wall clock ⇄ epoch, two-pass DST solve (§4)</span></div>
   <div><span class="f">  etToday · etClock · dayLabel · countdown</span> <span class="d">— clock furniture for header and rundown</span></div>
   <div><span class="f">  collectText · extractJSON</span> <span class="d">— balanced-brace parser with truncation salvage (§3)</span></div>
-  <div><span class="f">  askClaude</span> <span class="d">— Messages API + web_search tool, JSON-only round trip</span></div>
+  <div><span class="f">  loadJSON</span> <span class="d">— reads data/schedule.json and results.json, which the Worker serves</span></div>
   <div><span class="f">  fedPrompt · earningsPrompt</span> <span class="d">— schedule contracts, 10-day / 21-day windows (§2)</span></div>
   <div><span class="f">  streamPrompt · resultPrompt</span> <span class="d">— feed discovery and the metrics readout (§2)</span></div>
   <div><span class="f">  MarketTape()</span> <span class="d">— load, statusOf, next, fetchResult, findStream, watchlist (§1, §5)</span></div>
@@ -505,7 +506,7 @@ same prefetch, so the links are simply there or not.</p>
 </p>
 
 <p class="muted" style="margin-top:40px;text-align:center;">
-Market Tape · React · Claude Messages API with web search · no market-data vendor.<br>
+Market Tape · React · Gemini API with Google Search grounding · no market-data vendor.<br>
 <a href="/research/markettape/">Open the live board →</a><br>
 Schedules, links and figures are model-sourced from live web search and can be wrong or stale —
 confirm anything you trade on against the primary source. Research instrumentation only; no

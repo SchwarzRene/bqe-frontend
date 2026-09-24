@@ -2,40 +2,49 @@
 
 A broadcast-style rundown of Federal Reserve events and earnings calls, live at
 **/research/markettape/**. The write-up is at
-`webpage/research/markettape.html`.
+`research/markettape.html`.
 
 ## How the data gets here
 
-The page is static, so the searches run ahead of time:
+The page is static, so the searches run ahead of time, on the site's Worker:
 
 ```
-.github/workflows/market-tape.yml   weekdays 12:10 + 22:10 UTC, or manual
-automation/scripts/fetch_market_tape.py    Messages API + web search -> JSON
-webpage/research/markettape/data/          generated: schedule.json, results.json
-webpage/research/markettape/app.js         the page (bundled React, no CDN)
+wrangler.toml [triggers]           weekdays 12:10 + 22:10 UTC
+worker/markettape.ts               Gemini API + Google Search grounding -> D1
+/research/markettape/data/*.json   served by the Worker from D1
+research/markettape/app.js         the page (bundled React, no CDN)
 ```
 
 `schedule.json` holds the rundown (Fed events 10 days out, earnings 21 days for
 the watchlist). `results.json` holds the reported numbers for events that have
 already started, keyed by event id. Everything time-based — the on-air windows,
 the countdown, the Today/Tomorrow grouping — is computed in the browser against
-the viewer's own clock, because a committed file cannot know what is on air now.
+the viewer's own clock.
+
+The page still reads `data/schedule.json` and `data/results.json`; the Worker
+answers those paths from D1, and falls back to a committed file if there is one.
 
 ## Setup
 
-1. Add a repository secret `ANTHROPIC_API_KEY` (Settings → Secrets and
-   variables → Actions).
-2. Settings → Actions → General → Workflow permissions → *Read and write*, so
-   the job can commit what it fetched.
-3. Actions → **Market tape** → Run workflow, once, by hand.
+1. Get a free Gemini API key at <https://aistudio.google.com/apikey>.
+2. Store it on the Worker: `npx wrangler secret put GEMINI_API_KEY`
+   (or Worker → Settings → Variables and Secrets in the dashboard).
+3. Run it once by hand instead of waiting for the schedule:
 
-Until that first run the board renders empty and says so; the always-on channel
-links still work. A run is two schedule queries plus at most six result queries.
+   ```bash
+   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+     https://<your-site>/api/admin/run/markettape
+   ```
 
-## Changing the watchlist
+Until the first run the board renders empty and says so; the always-on channel
+links still work. A run is two schedule queries plus at most six result
+queries, well inside the free tier's daily limit. On the free tier Google may
+use prompts to improve its products — nothing private goes into these ones.
 
-The `tickers` input on a manual run overrides it for that run. To change the
-default, edit the `--tickers` list in the workflow's *Build the rundown* step.
+## Changing the watchlist or the model
+
+`MARKETTAPE_TICKERS` and `GEMINI_MODEL` under `[vars]` in `wrangler.toml`.
+The model must support Google Search grounding.
 
 ## Rebuilding the page
 
@@ -51,10 +60,11 @@ React is bundled in, so the page loads no third-party scripts at runtime.
 ## Running it locally
 
 ```bash
-python automation/scripts/fetch_market_tape.py \
-  --out webpage/research/markettape/data
-cd webpage && python3 -m http.server 8000
-# open http://localhost:8000/research/markettape/
+echo "GEMINI_API_KEY=..." > .dev.vars      # git-ignored
+npx wrangler d1 migrations apply bqe --local
+npm run dev
+curl "localhost:8787/__scheduled?cron=10+12+*+*+1-5"
+# open http://localhost:8787/research/markettape/
 ```
 
 `fetch` needs `http://`, so opening `index.html` off the filesystem won't load

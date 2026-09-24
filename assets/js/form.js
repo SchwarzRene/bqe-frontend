@@ -32,7 +32,7 @@ function validateAndSubmitForm(form) {
     // Show errors
     displayValidationErrors(form, errors);
   } else {
-    // Form is valid - submit it (mock)
+    // Form is valid - submit it
     submitForm(form, formData);
   }
 }
@@ -180,9 +180,31 @@ function submitForm(form, formData) {
   submitButton.disabled = true;
   submitButton.textContent = 'Sending...';
 
-  // Simulate API call (in real app, would send to server)
-  setTimeout(() => {
-    // Success message
+  // The site's Worker stores the message (worker/contact.ts), and re-checks
+  // every field, so the rules above are a courtesy, not the gate.
+  fetch('/api/contact', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.fromEntries(formData.entries())),
+  })
+    .then(async (res) => {
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) return showSent();
+      if (res.status === 422 && body.fields) {
+        displayValidationErrors(form, body.fields);
+        return;
+      }
+      showFailure(body.error && res.status === 429
+        ? body.error
+        : 'Your message could not be sent. Please try again, or email us directly.');
+    })
+    .catch(() => showFailure('Your message could not be sent — check your connection and try again.'))
+    .finally(() => {
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
+    });
+
+  function showSent() {
     formStatus.innerHTML = `
       <div style="background-color: var(--color-black-muted); border: 2px solid var(--color-success); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-6);">
         <p style="color: var(--color-success); margin: 0;">
@@ -194,17 +216,22 @@ function submitForm(form, formData) {
     formStatus.hidden = false;
     formStatus.scrollIntoView({ behavior: 'smooth' });
 
-    // Reset form
     form.reset();
     clearAllFieldErrors(form);
+    setTimeout(() => { formStatus.hidden = true; }, 5000);
+  }
 
-    // Reset button
-    setTimeout(() => {
-      submitButton.disabled = false;
-      submitButton.textContent = originalText;
-      formStatus.hidden = true;
-    }, 5000);
-  }, 1000);
+  // Nothing is reset on failure, so the visitor does not lose what they wrote.
+  function showFailure(message) {
+    formStatus.innerHTML = `
+      <div style="background-color: var(--color-black-muted); border: 2px solid var(--color-error); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-6);">
+        <p style="color: var(--color-error); margin: 0;"></p>
+      </div>
+    `;
+    formStatus.querySelector('p').textContent = message;
+    formStatus.hidden = false;
+    formStatus.scrollIntoView({ behavior: 'smooth' });
+  }
 }
 
 /**

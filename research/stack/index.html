@@ -95,6 +95,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   border:1px solid var(--rule);border-radius:999px;padding:3px 8px;white-space:nowrap;
 }
 .src.live{color:var(--up);border-color:var(--up)}
+.acct{color:var(--muted);white-space:nowrap}
+@media (max-width:560px){ .acct .bqe-label{display:none} }
 .iconbtn{
   width:34px;height:30px;border:1px solid var(--rule);border-radius:7px;
   display:grid;place-items:center;color:var(--muted);background:var(--pane);
@@ -282,11 +284,13 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 </style>
 </head>
 <body>
+<script src="/assets/js/session.js"></script>
 
 <div class="bar">
   <div class="wordmark">Stack<i>.</i></div>
   <span class="src" id="src">Simulated prices</span>
   <div class="count" id="count"></div>
+  <span id="account" class="acct"></span>
   <button class="iconbtn" id="locBtn" aria-pressed="false" aria-label="Show where the faster charts sit">
     <svg viewBox="0 0 24 24"><path d="M9 4v16M15 4v16"/><path d="M4 4h16v16H4z" opacity=".45"/></svg>
   </button>
@@ -888,10 +892,10 @@ const TF = [
    ------------------------------------------------------------ */
 const DATA_BASE = "data/";
 let dataset = null;                                  // {updated, files}
-/* Optional live source. Drop a live.json next to this page holding
-   {"proxy":"https://your-worker.workers.dev"} and every card asks it for
-   fresh bars first, falling back to the committed snapshot when it is
-   missing, slow or rate-limited. See worker/README.md. */
+/* Live source. The site's own Worker answers /api/quotes/SYMBOL with
+   fresh bars (worker/index.ts); every card asks it first and falls back to
+   the stored snapshot when it is missing, slow or rate-limited. A live.json
+   next to this page holding {"proxy":"https://..."} points it elsewhere. */
 let live = null;                                     // {proxy}
 let liveSeen = false;                                // has the proxy answered?
 const realCache = new Map();
@@ -971,7 +975,18 @@ async function initData(){
       const cfg = await res.json();
       if (cfg && typeof cfg.proxy === "string" && /^https?:\/\//.test(cfg.proxy)) live = cfg;
     }
-  } catch(e){ /* no live source configured — the snapshot is the source */ }
+  } catch(e){ /* no live.json — try the site's own API below */ }
+  if (!live){
+    /* Same-origin API, when this page is served by the Worker. A static
+       preview (python -m http.server) has none and answers 404 at once. */
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), 1500);
+    try {
+      const res = await fetch("/api/health", { cache:"no-store", signal: stop.signal });
+      if (res.ok) live = { proxy: location.origin + "/api/quotes" };
+    } catch(e){ /* no API — the snapshot is the source */ }
+    finally { clearTimeout(timer); }
+  }
   try {
     const res = await fetch(DATA_BASE + "index.json", { cache:"no-cache" });
     if (!res.ok) return;
@@ -1023,36 +1038,24 @@ function refreshSymbol(sym){
 /* ============================================================
    3. Saved state: bookmarks + drawings
    ============================================================ */
-const LSKEY = "stack.v1";
+/* Bookmarks, drawings, theories and the locator setting. For a signed-in
+   user they are saved to their account (the Worker's /api/state/stack); a
+   guest's live in this tab only and are gone on reload — nothing is stored
+   for guests, not even in this browser. */
+const LEGACY_KEY = "stack.v1";   // where this page used to keep state, per browser
 let state = { saved: [], draw: {}, notes: {}, locator: false };
-let db = null, downloads = null;
+let downloads = null;
+const account = window.BQE ? window.BQE.store("stack") : null;
 
-try {
-  const raw = localStorage.getItem(LSKEY);
-  if (raw){
-    const p = JSON.parse(raw);
-    if (p && typeof p === "object"){
-      state.saved = Array.isArray(p.saved) ? p.saved : [];
-      state.draw  = (p.draw && typeof p.draw === "object") ? p.draw : {};
-      state.notes = (p.notes && typeof p.notes === "object") ? p.notes : {};
-      state.locator = !!p.locator;
-    }
-  }
-} catch(e){ /* storage unavailable — run from memory */ }
-
-function persistLocal(){
-  try { localStorage.setItem(LSKEY, JSON.stringify(state)); } catch(e){}
+function applyState(p){
+  if (!p || typeof p !== "object") return;
+  state.saved = Array.isArray(p.saved) ? p.saved : [];
+  state.draw  = (p.draw && typeof p.draw === "object") ? p.draw : {};
+  state.notes = (p.notes && typeof p.notes === "object") ? p.notes : {};
+  state.locator = !!p.locator;
 }
-let dbTimer = 0;
 function persist(){
-  persistLocal();
-  if (!db) return;
-  clearTimeout(dbTimer);
-  dbTimer = setTimeout(() => {
-    db.doc("workspace/main")
-      .set({ saved: state.saved, draw: state.draw, notes: state.notes, updated: Date.now() })
-      .catch(() => {});
-  }, 700);
+  if (account) account.save({ saved: state.saved, draw: state.draw, notes: state.notes, locator: state.locator });
 }
 function isSaved(sym){ return state.saved.indexOf(sym) >= 0; }
 function toggleSaved(sym){
@@ -1065,23 +1068,42 @@ function toggleSaved(sym){
 function lines(sym){ return state.draw[sym] || (state.draw[sym] = []); }
 
 (async function(){
-  if (!window.claude || typeof claude.use !== "function") return;
-  try { db = await claude.use("db"); } catch(e){ db = null; }
-  if (db){
+  if (window.BQE) window.BQE.mountAccountChip(document.getElementById("account"),
+    { note: "Your marked charts, drawings and theories are saved to your account." });
+  if (account){
+    account.onStatus = (status, detail) => {
+      if (status === "conflict") toast("Changed in another tab — reload to keep saving");
+      else if (status === "error") toast("Could not save: " + detail);
+    };
     try {
-      const snap = await db.doc("workspace/main").get();
-      if (snap.exists && snap.data){
-        if (Array.isArray(snap.data.saved)) state.saved = snap.data.saved;
-        if (snap.data.draw && typeof snap.data.draw === "object") state.draw = snap.data.draw;
-        if (snap.data.notes && typeof snap.data.notes === "object") state.notes = snap.data.notes;
-        persistLocal();
-        redrawAll();
-        document.querySelectorAll(".star").forEach(b => {
-          b.setAttribute("aria-pressed", isSaved(b.dataset.sym) ? "true" : "false");
-        });
+      let data = await account.load();
+      if (account.signedIn){
+        // First sign-in on a browser that kept state the old way: move it
+        // into the account, then drop the local copy.
+        if (!data){
+          try {
+            const raw = localStorage.getItem(LEGACY_KEY);
+            if (raw){
+              data = JSON.parse(raw);
+              account.save(data, { now: true });
+              localStorage.removeItem(LEGACY_KEY);
+            }
+          } catch(e){ /* storage blocked or unreadable — start empty */ }
+        }
+        if (data){
+          applyState(data);
+          redrawAll();
+          document.querySelectorAll(".star").forEach(b => {
+            b.setAttribute("aria-pressed", isSaved(b.dataset.sym) ? "true" : "false");
+          });
+          document.getElementById("locBtn").setAttribute("aria-pressed", state.locator ? "true":"false");
+          document.getElementById("fsLoc").setAttribute("aria-pressed", state.locator ? "true":"false");
+          if (onlySaved) rebuild();
+        }
       }
-    } catch(e){}
+    } catch(e){ toast("Could not load your saved charts — reload to try again"); }
   }
+  if (!window.claude || typeof claude.use !== "function") return;
   try { downloads = await claude.use("downloads"); } catch(e){ downloads = null; }
   if (downloads) document.getElementById("fsPng").hidden = false;
 })();
@@ -2131,7 +2153,7 @@ function fillSectors(){
 fillSectors();
 function setLocator(on){
   state.locator = on;
-  persistLocal();
+  persist();
   document.getElementById("locBtn").setAttribute("aria-pressed", on ? "true":"false");
   document.getElementById("fsLoc").setAttribute("aria-pressed", on ? "true":"false");
   redrawAll();

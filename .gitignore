@@ -1,5 +1,6 @@
 # Secrets — never commit these. See docs/DEPLOYMENT.md.
 .env
+.dev.vars
 .env.*
 !.env.example
 
