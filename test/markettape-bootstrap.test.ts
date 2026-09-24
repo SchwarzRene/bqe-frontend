@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { serveTapeFile } from "../worker/markettape";
+import { describeGeminiError, serveTapeFile } from "../worker/markettape";
 
 /** Just enough of D1 for the documents table. */
 function fakeDb() {
@@ -90,5 +90,42 @@ describe("Market Tape first rundown on demand", () => {
     const res = await serveTapeFile(new Request("https://site/research/markettape/data/schedule.json"), env, ctx, "schedule.json");
     expect(res.status).toBe(404);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("describeGeminiError", () => {
+  const body = (quotaId: string, quotaValue: string, retryDelay = "20s") =>
+    JSON.stringify({
+      error: {
+        code: 429,
+        status: "RESOURCE_EXHAUSTED",
+        message: "You exceeded your current quota, please check your plan and billing details.",
+        details: [
+          { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaMetric: "generativelanguage.googleapis.com/generate_content_free_tier_requests", quotaId, quotaValue }] },
+          { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay },
+        ],
+      },
+    });
+
+  it("says so when the model has no free tier, and does not retry", () => {
+    const r = describeGeminiError(429, body("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "0"));
+    expect(r.summary).toContain("limit 0");
+    expect(r.summary).toContain("no free-tier quota");
+    expect(r.retryAfterMs).toBeNull();
+  });
+
+  it("does not retry a used-up daily quota", () => {
+    const r = describeGeminiError(429, body("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "20"));
+    expect(r.summary).toContain("daily quota is used up");
+    expect(r.retryAfterMs).toBeNull();
+  });
+
+  it("retries a per-minute limit after the delay Google gives", () => {
+    const r = describeGeminiError(429, body("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", "5", "12.5s"));
+    expect(r.retryAfterMs).toBe(12_500);
+  });
+
+  it("keeps non-JSON errors readable", () => {
+    expect(describeGeminiError(500, "upstream exploded").summary).toBe("upstream exploded");
   });
 });

@@ -162,7 +162,7 @@ export async function refreshTape(env: Env, now = new Date(), { results: withRes
  * grounding cannot be combined with a JSON response schema, so the prompt
  * asks for JSON and extractJson digs it out of the text.
  */
-async function askGemini(key: string, model: string, prompt: string): Promise<unknown> {
+async function askGemini(key: string, model: string, prompt: string, retried = false): Promise<unknown> {
   const res = await fetch(`${GEMINI_BASE}/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
@@ -173,8 +173,14 @@ async function askGemini(key: string, model: string, prompt: string): Promise<un
     signal: AbortSignal.timeout(180_000),
   });
   if (!res.ok) {
-    // 429 is the free tier's rate limit; the next scheduled run tries again.
-    console.warn(`markettape: gemini ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const problem = describeGeminiError(res.status, await res.text());
+    console.warn(`markettape: gemini ${res.status} (${model}): ${problem.summary}`);
+    // A short per-minute limit clears by itself: wait as long as Google
+    // asks and try once more. A limit of 0 or a daily one will not.
+    if (problem.retryAfterMs != null && !retried) {
+      await new Promise((resolve) => setTimeout(resolve, problem.retryAfterMs!));
+      return askGemini(key, model, prompt, true);
+    }
     return null;
   }
   const body = await res.json<any>();
@@ -185,6 +191,40 @@ async function askGemini(key: string, model: string, prompt: string): Promise<un
   }
   const text = candidate.content.parts.map((p: { text?: string }) => p.text ?? "").join("\n");
   return extractJson(text);
+}
+
+/**
+ * The part of a Gemini error that says what to do about it. A 429 names the
+ * exact quota that was hit and its size; "limit 0" means this model has no
+ * free-tier allowance on this key at all, which no amount of waiting fixes.
+ * Exported for tests.
+ */
+export function describeGeminiError(status: number, text: string): { summary: string; retryAfterMs: number | null } {
+  let error: any;
+  try {
+    error = JSON.parse(text)?.error;
+  } catch {
+    return { summary: text.slice(0, 500), retryAfterMs: null };
+  }
+  const details: any[] = Array.isArray(error?.details) ? error.details : [];
+  const violations: any[] = details.flatMap((d) => (Array.isArray(d?.violations) ? d.violations : []));
+  const quotas = violations
+    .filter((v) => v?.quotaId || v?.quotaMetric)
+    .map((v) => `${v.quotaId || v.quotaMetric} limit ${v.quotaValue ?? "?"}`);
+  const delay = details.find((d) => typeof d?.retryDelay === "string")?.retryDelay as string | undefined;
+  const delayMs = delay && /^\d+(\.\d+)?s$/.test(delay) ? Math.ceil(parseFloat(delay) * 1000) : null;
+
+  const noFreeTier = violations.some((v) => String(v?.quotaValue) === "0");
+  const daily = violations.some((v) => /PerDay/i.test(String(v?.quotaId)));
+  const parts = [error?.status || `HTTP ${status}`];
+  if (quotas.length) parts.push(quotas.join("; "));
+  if (noFreeTier) parts.push("this model has no free-tier quota on this key: pick another model or enable billing");
+  else if (daily) parts.push("the daily quota is used up: it resets at midnight Pacific time");
+  if (delay) parts.push(`retry after ${delay}`);
+  if (!quotas.length && error?.message) parts.push(String(error.message).slice(0, 300));
+
+  const retryable = status === 429 && !noFreeTier && !daily && delayMs != null && delayMs <= 60_000;
+  return { summary: parts.join(" — "), retryAfterMs: retryable ? delayMs : null };
 }
 
 // --------------------------------------------------------------------------
