@@ -16,10 +16,10 @@ function fakeDb() {
             },
             async run() {
               if (sql.includes("'markettape:bootstrap'")) {
-                const [now, cutoff] = args;
+                const [model, now, cutoff] = args;
                 const row = docs.get("markettape:bootstrap");
-                if (row && !(row.updated < cutoff)) return { meta: { changes: 0 } };
-                docs.set("markettape:bootstrap", { body: now, updated: now });
+                if (row && !(row.updated < cutoff) && row.body === model) return { meta: { changes: 0 } };
+                docs.set("markettape:bootstrap", { body: model, updated: now });
                 return { meta: { changes: 1 } };
               }
               docs.set(args[0], { body: args[1], updated: args[2] });
@@ -65,7 +65,7 @@ describe("Market Tape first rundown on demand", () => {
     const body = await res.json<any>();
     expect(body.events.map((e: any) => e.id)).toEqual(["fomc", "nvda-q3"]);
     expect(calls).toHaveLength(2); // fed + earnings, no results pass
-    expect(calls[0]).toContain("gemini-3.8-flash:generateContent");
+    expect(calls[0]).toContain("gemini-3.7-flash:generateContent");
 
     // Served from D1 now, with no further model calls.
     await serveTapeFile(request, env, ctx, "schedule.json");
@@ -79,6 +79,11 @@ describe("Market Tape first rundown on demand", () => {
     expect((await serveTapeFile(request, env, ctx, "schedule.json")).status).toBe(404);
     expect((await serveTapeFile(request, env, ctx, "schedule.json")).status).toBe(404);
     expect(fetch).toHaveBeenCalledTimes(2); // one run (fed + earnings), not two
+
+    // Switching the model is the usual fix, so it is tried at once.
+    env.GEMINI_MODEL = "another-model";
+    await serveTapeFile(request, env, ctx, "schedule.json");
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it("does not bootstrap for results.json, and needs the key", async () => {

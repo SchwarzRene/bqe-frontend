@@ -14,7 +14,7 @@ import { isoNow, jsonText, mapLimit } from "./http";
 import { putDocument } from "./stack";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_MODEL = "gemini-3.8-flash";
+const DEFAULT_MODEL = "gemini-3.7-flash";
 const DEFAULT_WATCHLIST = ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL"];
 const MAX_RESULTS = 6;
 // A first rundown built on demand (see serveTapeFile) is tried at most this
@@ -60,7 +60,7 @@ export async function serveTapeFile(request: Request, env: Env, ctx: ExecutionCo
       // No rundown yet — a fresh deploy, before the first scheduled run.
       // Build it now, while this visitor waits (about a minute), instead of
       // showing an empty board until 12:10 or 22:10 UTC.
-      if (file === "schedule.json" && (await claimBootstrap(env))) {
+      if (file === "schedule.json" && (await claimBootstrap(env, env.GEMINI_MODEL || DEFAULT_MODEL))) {
         const run = refreshTape(env, new Date(), { results: false });
         ctx.waitUntil(run); // finish even if the visitor leaves
         console.log("markettape: first rundown on demand:", await run);
@@ -79,16 +79,19 @@ async function readDoc(env: Env, key: string): Promise<string | null> {
   return row?.body ?? null;
 }
 
-/** Take the on-demand slot, unless a run started within BOOTSTRAP_EVERY_MS. Atomic. */
-async function claimBootstrap(env: Env): Promise<boolean> {
-  const now = isoNow();
+/**
+ * Take the on-demand slot, unless a run with the same model started within
+ * BOOTSTRAP_EVERY_MS. Atomic. A different model — the usual fix after a
+ * failure — is tried straight away rather than after the pause.
+ */
+async function claimBootstrap(env: Env, model: string): Promise<boolean> {
   const cutoff = new Date(Date.now() - BOOTSTRAP_EVERY_MS).toISOString();
   const result = await env.DB.prepare(
-    `INSERT INTO documents (key, body, updated) VALUES ('markettape:bootstrap', ?1, ?1)
+    `INSERT INTO documents (key, body, updated) VALUES ('markettape:bootstrap', ?1, ?2)
      ON CONFLICT (key) DO UPDATE SET body = excluded.body, updated = excluded.updated
-     WHERE documents.updated < ?2`,
+     WHERE documents.updated < ?3 OR documents.body <> excluded.body`,
   )
-    .bind(now, cutoff)
+    .bind(model, isoNow(), cutoff)
     .run();
   return result.meta.changes > 0;
 }
