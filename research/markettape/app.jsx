@@ -298,6 +298,9 @@ function MarketTape() {
   const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(true);
   const [warn, setWarn] = useState("");
+  // Set once a load takes a while: on a fresh deploy the first rundown is
+  // built during that request, which takes about a minute.
+  const [slow, setSlow] = useState(false);
   const [selected, setSelected] = useState(null);
   const [embed, setEmbed] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -311,6 +314,8 @@ function MarketTape() {
   const load = useCallback(async () => {
     setLoading(true);
     setWarn("");
+    setSlow(false);
+    const slowTimer = setTimeout(() => setSlow(true), 4000);
     try {
       const [schedule, res] = await Promise.all([
         loadJSON("schedule.json"),
@@ -319,7 +324,7 @@ function MarketTape() {
       if (!schedule || !Array.isArray(schedule.events)) {
         setEvents([]);
         setMeta(null);
-        setWarn("No rundown published yet. The refresh job writes data/schedule.json — until it has run once, only the always-on channels below are available.");
+        setWarn("No rundown yet — it could not be built just now. It is tried again automatically; reload in a few minutes. The always-on channels below work in the meantime.");
       } else {
         const clean = schedule.events
           .filter((e) => e && e.date && e.title)
@@ -334,6 +339,8 @@ function MarketTape() {
     } catch (err) {
       setWarn(`Couldn't read the published rundown (${err.message}).`);
     }
+    clearTimeout(slowTimer);
+    setSlow(false);
     setLoading(false);
   }, []);
 
@@ -458,7 +465,9 @@ function MarketTape() {
             </div>
             <div className="tp-list">
               {loading && !events.length
-                ? <div className="tp-empty"><span className="tp-load" />Loading the published rundown…</div>
+                ? <div className="tp-empty"><span className="tp-load" />{slow
+                    ? "Building the first rundown — searching the web for Fed events and earnings dates. This takes about a minute…"
+                    : "Loading the published rundown…"}</div>
                 : rows.length ? rows
                 : <div className="tp-empty">
                     {filter === "all"
