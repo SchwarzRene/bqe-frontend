@@ -888,10 +888,10 @@ const TF = [
    ------------------------------------------------------------ */
 const DATA_BASE = "data/";
 let dataset = null;                                  // {updated, files}
-/* Optional live source. Drop a live.json next to this page holding
-   {"proxy":"https://your-worker.workers.dev"} and every card asks it for
-   fresh bars first, falling back to the committed snapshot when it is
-   missing, slow or rate-limited. See worker/README.md. */
+/* Live source. The site's own Worker answers /api/quotes/SYMBOL with
+   fresh bars (worker/index.ts); every card asks it first and falls back to
+   the stored snapshot when it is missing, slow or rate-limited. A live.json
+   next to this page holding {"proxy":"https://..."} points it elsewhere. */
 let live = null;                                     // {proxy}
 let liveSeen = false;                                // has the proxy answered?
 const realCache = new Map();
@@ -971,7 +971,18 @@ async function initData(){
       const cfg = await res.json();
       if (cfg && typeof cfg.proxy === "string" && /^https?:\/\//.test(cfg.proxy)) live = cfg;
     }
-  } catch(e){ /* no live source configured — the snapshot is the source */ }
+  } catch(e){ /* no live.json — try the site's own API below */ }
+  if (!live){
+    /* Same-origin API, when this page is served by the Worker. A static
+       preview (python -m http.server) has none and answers 404 at once. */
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), 1500);
+    try {
+      const res = await fetch("/api/health", { cache:"no-store", signal: stop.signal });
+      if (res.ok) live = { proxy: location.origin + "/api/quotes" };
+    } catch(e){ /* no API — the snapshot is the source */ }
+    finally { clearTimeout(timer); }
+  }
   try {
     const res = await fetch(DATA_BASE + "index.json", { cache:"no-cache" });
     if (!res.ok) return;

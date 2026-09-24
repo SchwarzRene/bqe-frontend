@@ -3,8 +3,8 @@
 # Assemble the directory Cloudflare publishes.
 #
 # The repository root is the site root, but a few things in it are repository
-# furniture rather than site content: the workflows, the docs, this script and
-# the README. Copying everything else into _site/ keeps them off the CDN.
+# furniture rather than site content: the workflows, the docs, this script,
+# the README and the Worker's source. Copying everything else into _site/ keeps them off the CDN.
 #
 # Cloudflare runs this as the project's build command, with _site as the
 # output directory. It also works locally:
@@ -27,6 +27,8 @@ for entry in * .[!.]*; do
   case "$entry" in
     "$OUT"|.git|.github|.gitignore|docs|build.sh|README.md|CNAME) continue ;;
     wrangler.toml|wrangler.jsonc|.wrangler|node_modules) continue ;;
+    # The Worker's source and tooling: bundled by wrangler, never published.
+    worker|migrations|test|package.json|package-lock.json|tsconfig.json) continue ;;
   esac
 
   cp -R "$entry" "$OUT"/
