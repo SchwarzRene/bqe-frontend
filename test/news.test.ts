@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateBriefing, pickInput } from "../worker/news/briefing";
 import { type CalendarConfig, fixedEvents, mergeMeetingResults, nasdaqEvent, parseEconomic, parseIcs, pickNasdaq } from "../worker/news/calendar";
 import { describeGeminiError } from "../worker/news/gemini";
-import { chatError, cleanMessages, handleChat, splitSources } from "../worker/news/chat";
+import { chatError, chatRegion, cleanMessages, handleChat, splitSources } from "../worker/news/chat";
 import { GeminiError, generate, RETRY_DELAYS_MS } from "../worker/news/gemini";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
@@ -404,5 +404,15 @@ describe("news chat", () => {
     const res = await handleChat(new Request("https://site/api/chat", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }) }), env);
     expect(res.status).toBe(401);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat view", () => {
+  it("takes one region, a combination, or all", () => {
+    expect(chatRegion("eu")).toBe("eu");
+    expect(chatRegion("ru,eu")).toBe("eu,ru");
+    expect(chatRegion("eu,mars")).toBe("eu");
+    expect(chatRegion(undefined)).toBe("all");
+    expect(chatRegion("all")).toBe("all");
   });
 });

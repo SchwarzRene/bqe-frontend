@@ -249,6 +249,6 @@ export function agenda({ title, cats, days = 5, perDay = 3, calLink }) {
   }
   return `<section class="card agenda" aria-labelledby="ag-h">
     <div class="card-head"><h2 class="h2" id="ag-h">${esc(title)}</h2><a class="more-link" href="#calendar" data-cal-open="${today}" data-cal-preset="${esc(calLink || '')}">Open calendar →</a></div>
-    ${rows.length ? rows.join('') : '<p class="empty">Nothing scheduled for this region.</p>'}
+    ${rows.length ? rows.join('') : '<p class="empty">Nothing scheduled for the selected regions.</p>'}
   </section>`;
 }

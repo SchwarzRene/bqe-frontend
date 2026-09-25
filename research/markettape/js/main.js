@@ -7,7 +7,7 @@ import { CATS, renderCalendarPage } from './calendar.js';
 import { chat, initChat, renderSuggest, session, setUser } from './chat.js';
 import { globeLabel, mapKeys, renderMap } from './map.js';
 import { liveCard, nextCard, renderCommodities, renderGeneral, renderStocks } from './pages.js';
-import { briefing, data, events, loadPrefs, PAGES, savePrefs, state, TZS } from './state.js';
+import { allRegions, briefing, data, events, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
 
 const $ = (id) => document.getElementById(id);
 const ICON_CAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
@@ -27,7 +27,7 @@ function renderChrome() {
   const globe = $('globe');
   globe.innerHTML = globeLabel();
   globe.setAttribute('aria-expanded', String(state.mapOpen));
-  globe.classList.toggle('filtered', state.region !== 'all');
+  globe.classList.toggle('filtered', !allRegions());
   renderMap($('mapbox'), renderChrome);
 }
 
@@ -80,8 +80,8 @@ document.addEventListener('click', (e) => {
   if (!t) return;
   const ds = t.dataset;
   if (ds.region) {
-    // Clicking the selected region again goes back to all.
-    state.region = ds.region === state.region && ds.region !== 'all' && t.closest('svg') ? 'all' : ds.region;
+    // Regions combine: a click adds or removes one; "All regions" clears the filter.
+    toggleRegion(ds.region);
     savePrefs(); render();
   } else if (ds.tz) {
     state.tz = ds.tz; savePrefs(); render();

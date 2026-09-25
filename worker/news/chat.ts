@@ -45,7 +45,7 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
 
   const view = {
     page: ["general", "stocks", "commodities", "calendar"].includes(body?.page) ? body.page : "general",
-    region: ["all", "us", "eu", "asia", "ru"].includes(body?.region) ? body.region : "all",
+    region: chatRegion(body?.region),
     tz: body?.tz === "ny" ? "New York" : "Vienna",
   };
   try {
@@ -163,6 +163,12 @@ const TOOLS = [
     ],
   },
 ];
+
+/** The page's region filter: "all", or a combination such as "eu,ru". */
+export function chatRegion(raw: unknown): string {
+  const picked = ["us", "eu", "asia", "ru"].filter((r) => String(raw ?? "").split(",").includes(r));
+  return picked.length ? picked.join(",") : "all";
+}
 
 export async function searchHeadlines(env: Env, query: string, days = 3, region = "any"): Promise<Item[]> {
   const words = String(query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3).slice(0, 5);

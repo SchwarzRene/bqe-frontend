@@ -281,7 +281,7 @@ Three pages share one header and filter row. Each page has the same order: overv
 
 | Part | Content |
 | --- | --- |
-| Shared header | "Updated" time, Vienna / New York toggle, Ask AI button (locked for guests), refresh button, account (Guest · Sign in, or name · Sign out); tabs General · Stocks · Commodities · Calendar; a 🌍 region button (All, US, Europe, Asia, Russia) that folds open a world map to click the region on, with headline and event counts per region |
+| Shared header | "Updated" time, Vienna / New York toggle, Ask AI button (locked for guests), refresh button, account (Guest · Sign in, or name · Sign out); tabs General · Stocks · Commodities · Calendar; a 🌍 region button (All, US, Europe, Asia, Russia, or any combination, e.g. Europe + Russia) that folds open a world map to click regions on and off, with headline and event counts per region |
 | Chat panel | Opens from the right on any page; suggested questions for the current page; answers with source links; closes with Esc |
 | General | On now, next up and today's key events (with the AI's line on the day); overview and top 5 stories on macro, central banks and world news; "Elsewhere today" links to the top Stocks and Commodities stories; "Coming up": the next days' key events; headlines (tabs): World, Economy, Central banks |
 | Stocks | Stock market overview and top 5 stories; My companies (one line per ticker, hidden if no news); earnings ahead; headlines (tabs): Markets, Companies, Earnings |

@@ -3,7 +3,7 @@
 // the first time it is opened, so a page that never opens it never pays for it.
 
 import { esc } from './format.js';
-import { events, items, REGIONS, regionOf, state } from './state.js';
+import { allRegions, events, items, R_NAME, REGIONS, regionOf, state } from './state.js';
 
 let svg = null;
 let loading = null;
@@ -22,8 +22,9 @@ const flag = { all: '🌍', us: '🇺🇸', eu: '🇪🇺', asia: '🌏', ru: '�
 
 /** The globe button's label. */
 export function globeLabel() {
-  const name = REGIONS.find((r) => r[0] === state.region)[1];
-  return `<span class="emoji" aria-hidden="true">${flag[state.region]}</span><span class="lbl">Region</span>${esc(name)}
+  const one = state.regions.length === 1 ? state.regions[0] : null;
+  const name = allRegions() ? 'All regions' : one ? REGIONS.find((r) => r[0] === one)[1] : state.regions.map((c) => R_NAME[c]).join(' + ');
+  return `<span class="emoji" aria-hidden="true">${flag[one || 'all']}</span><span class="lbl">${one || allRegions() ? 'Region' : 'Regions'}</span>${esc(name)}
     <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
 }
 
@@ -47,17 +48,16 @@ export function renderMap(el, onReady) {
   el.innerHTML = `
     <div class="mapwrap">${svg || '<p class="meta">The map could not be loaded; use the list.</p>'}</div>
     <div class="maplist" role="group" aria-label="Region">
-      <p class="hint">Click a region on the map, or pick one here. Global news is always shown.</p>
       ${REGIONS.map(([id, label]) => {
         const c = count(id);
-        return `<button type="button" data-region="${id}" aria-pressed="${state.region === id}"><span>${flag[id]} ${esc(label)}</span><small>${c.heads} news · ${c.evs} events</small></button>`;
+        return `<button type="button" data-region="${id}" aria-pressed="${id === 'all' ? allRegions() : state.regions.includes(id)}"><span>${flag[id]} ${esc(label)}</span><small>${c.heads} news · ${c.evs} events</small></button>`;
       }).join('')}
     </div>`;
   const map = el.querySelector('svg');
   if (map) {
-    map.classList.toggle('all', state.region === 'all');
+    map.classList.toggle('all', allRegions());
     map.querySelectorAll('.region').forEach((p) => {
-      const on = p.dataset.region === state.region;
+      const on = state.regions.includes(p.dataset.region);
       p.classList.toggle('on', on);
       p.setAttribute('aria-pressed', String(on));
     });

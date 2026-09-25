@@ -9,6 +9,7 @@ export const PAGES = [
   ['calendar', 'Calendar'],
 ];
 export const REGIONS = [['all', 'All regions'], ['us', 'United States'], ['eu', 'Europe'], ['asia', 'Asia'], ['ru', 'Russia']];
+const REGION_CODES = ['us', 'eu', 'asia', 'ru'];
 export const TZS = [['vie', 'Vienna'], ['ny', 'New York']];
 export const TZ_ID = { vie: 'Europe/Vienna', ny: 'America/New_York' };
 export const R_NAME = { us: 'US', eu: 'Europe', asia: 'Asia', ru: 'Russia', global: 'Global' };
@@ -18,7 +19,7 @@ export const OVERVIEW_KEY = { all: 'all', us: 'us', eu: 'europe', asia: 'asia', 
 
 export const state = {
   page: 'general',
-  region: 'all',
+  regions: [], // the regions picked, any combination; none = all
   tz: 'vie',
   mapOpen: false,
   hlTab: { general: 0, stocks: 0, commodities: 0 },
@@ -39,7 +40,8 @@ const PREFS_KEY = 'bqe:market-news';
 export function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-    if (REGIONS.some((r) => r[0] === p.region)) state.region = p.region;
+    if (Array.isArray(p.regions)) setRegions(p.regions);
+    else if (typeof p.region === 'string') setRegions([p.region]); // saved before regions combined
     if (TZ_ID[p.tz]) state.tz = p.tz;
     if (p.cal) {
       if (p.cal.view === 'month' || p.cal.view === 'week') state.cal.view = p.cal.view;
@@ -52,14 +54,31 @@ export function loadPrefs() {
 export function savePrefs() {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify({
-      region: state.region, tz: state.tz,
+      regions: state.regions, tz: state.tz,
       cal: { view: state.cal.view, cats: state.cal.cats, minImp: state.cal.minImp },
     }));
   } catch { /* not stored: fine */ }
 }
 
+/** Pick regions; picking every region is the same as picking none (all). */
+export function setRegions(list) {
+  const picked = REGION_CODES.filter((c) => list.includes(c));
+  state.regions = picked.length === REGION_CODES.length ? [] : picked;
+}
+
+/** Add or remove one region; 'all' clears the filter. */
+export function toggleRegion(code) {
+  if (code === 'all') return setRegions([]);
+  setRegions(state.regions.includes(code) ? state.regions.filter((c) => c !== code) : state.regions.concat(code));
+}
+
+export const allRegions = () => !state.regions.length;
+
+/** The filter as the chat API takes it: "all", or codes joined by commas. */
+export const regionParam = () => (allRegions() ? 'all' : state.regions.join(','));
+
 /** Whether something in region `code` passes the region filter. Global news always does. */
-export const keep = (code) => state.region === 'all' || code === state.region || code === 'global';
+export const keep = (code) => allRegions() || code === 'global' || state.regions.includes(code);
 export const regionOf = (x) => CODE[x.region] || 'global';
 
 export const briefing = () => (data.D && data.D.briefing) || null;
