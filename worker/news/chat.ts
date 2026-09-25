@@ -52,10 +52,27 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
     const out = await answer(env, messages, view);
     return json({ ...out, remaining: Math.max(0, limit - count) });
   } catch (err) {
-    console.warn("news chat failed", String(err));
-    const status = err instanceof GeminiError && err.status === 429 ? 429 : 502;
-    return json({ error: status === 429 ? "The model is busy right now — try again in a minute." : "The model could not answer right now." }, status);
+    console.warn("news chat failed", err instanceof Error ? err.stack || err.message : String(err));
+    // A question that got no answer does not count against the daily limit.
+    await env.DB.prepare("UPDATE news_chat_usage SET count = count - 1 WHERE user_id = ? AND day = ? AND count > 0")
+      .bind(user.id, utcDay())
+      .run()
+      .catch(() => {});
+    return json(chatError(err), err instanceof GeminiError && err.status === 429 ? 429 : 502);
   }
+}
+
+/**
+ * What the chat shows when it has no answer. Only signed-in users get here,
+ * so the reason is spelled out — Gemini's own error (wrong model name, key,
+ * quota) is what it takes to fix it, and it carries no secrets.
+ */
+export function chatError(err: unknown): { error: string } {
+  if (err instanceof GeminiError) {
+    if (err.status === 429) return { error: `The model is busy or over its quota — try again in a minute. (${err.message.slice(0, 300)})` };
+    return { error: `The model could not answer: ${err.message.slice(0, 300)}` };
+  }
+  return { error: `The chat failed on the server: ${String(err instanceof Error ? err.message : err).slice(0, 300)}` };
 }
 
 export function cleanMessages(raw: unknown): { role: "user" | "model"; text: string }[] | null {
@@ -277,7 +294,10 @@ async function answer(
   }
 
   const text = textOf(body);
-  if (!text.trim()) throw new GeminiError("empty answer", 502);
+  if (!text.trim()) {
+    const c = body?.candidates?.[0];
+    throw new GeminiError(`empty answer (${c?.finishReason ?? body?.promptFeedback?.blockReason ?? "no candidate"})`, 502);
+  }
   const { answer: prose, ids } = splitSources(text, new Set(known.keys()));
   const sources: { label: string; url: string; id?: string }[] = ids.map((id) => {
     const i = known.get(id)!;

@@ -335,6 +335,23 @@ describe("Market News flow", () => {
     expect(again.status).toBe(429);
   });
 
+  it("shows Gemini's reason when the chat fails, and does not count the question", async () => {
+    vi.stubGlobal("fetch", async (url: string) =>
+      url.includes("generativelanguage")
+        ? new Response(JSON.stringify({ error: { code: 404, status: "NOT_FOUND", message: "models/gemini-9 is not found for API version v1beta" } }), { status: 404 })
+        : new Response("", { status: 404 }));
+    const env = envWith();
+    env.DB.raw.exec("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES ('" + (await sha256("tok")) + "', 1, '2026-01-01', '2999-01-01')");
+    const res = await handleChat(new Request("https://site/api/chat", {
+      method: "POST",
+      headers: { Cookie: "bqe_session=tok", Origin: "https://site" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    }), env);
+    expect(res.status).toBe(502);
+    expect((await res.json<any>()).error).toBe("The model could not answer: NOT_FOUND — models/gemini-9 is not found for API version v1beta");
+    expect(env.DB.raw.prepare("SELECT count FROM news_chat_usage").get()).toEqual({ count: 0 });
+  });
+
   it("prunes what is older than 7 days", async () => {
     internet();
     const env = envWith();

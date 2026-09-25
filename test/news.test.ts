@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateBriefing, pickInput } from "../worker/news/briefing";
 import { type CalendarConfig, fixedEvents, mergeMeetingResults, nasdaqEvent, parseEconomic, parseIcs, pickNasdaq } from "../worker/news/calendar";
 import { describeGeminiError } from "../worker/news/gemini";
-import { cleanMessages, handleChat, splitSources } from "../worker/news/chat";
+import { chatError, cleanMessages, handleChat, splitSources } from "../worker/news/chat";
+import { GeminiError } from "../worker/news/gemini";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
 import { dedupe, eventWordsFor, isBlocked, isPromo, sameStory, scoreItem, staleSources, titleWords } from "../worker/news/store";
@@ -340,6 +341,13 @@ describe("news chat", () => {
       ids: ["3fa9c1d2e4b5", "77aa01bc02de"],
     });
     expect(splitSources("No news on that.\n**Sources:** none", known)).toEqual({ answer: "No news on that.", ids: [] });
+  });
+
+  it("says why the model could not answer", () => {
+    expect(chatError(new GeminiError("NOT_FOUND — models/x is not found for API version v1beta", 404)).error)
+      .toBe("The model could not answer: NOT_FOUND — models/x is not found for API version v1beta");
+    expect(chatError(new GeminiError("RESOURCE_EXHAUSTED", 429)).error).toMatch(/^The model is busy or over its quota/);
+    expect(chatError(new Error("D1_ERROR: no such table")).error).toBe("The chat failed on the server: D1_ERROR: no such table");
   });
 
   it("answers 401 to a guest without calling the model", async () => {
