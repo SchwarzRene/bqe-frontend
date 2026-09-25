@@ -44,6 +44,9 @@ research/markettape/js/          its code, as ES modules: main (loading, control
                                  Stocks, Commodities), calendar (the Calendar page and agendas),
                                  map (the region picker), chat (Ask AI, sign-in), state, format
 research/markettape/worldmap.svg the region map, built by docs/tools/market-news-map.py
+assets/images/market-news/        the page's pictures: page banners, commodity groups, story topics,
+                                 calendar category icons (PNG masks, tinted per category), quiet
+                                 state, link preview; prompts in docs/market-news-image-prompts.md
 ```
 
 **Endpoints**

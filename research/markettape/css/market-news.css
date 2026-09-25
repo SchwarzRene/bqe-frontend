@@ -397,3 +397,42 @@ body dialog.bqe-login .err { color: var(--red); }
 .hbars i { width: 3px; height: 9px; border-radius: 1px; background: var(--line-strong); }
 .hbars i.on { background: var(--accent); }
 .hbars.est i.on { background: transparent; box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ── Images (assets/images/market-news) ── */
+/* Overview: the page's banner fades in behind the right side of the card. */
+.card.has-art { position: relative; overflow: hidden; }
+.card.has-art > :not(.ov-art) { position: relative; z-index: 1; }
+.ov-art { position: absolute; top: 0; right: 0; height: 100%; width: 68%; object-fit: cover; object-position: right center; opacity: .55; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%); mask-image: linear-gradient(to right, transparent 0%, #000 55%); }
+@media (max-width: 640px) { .ov-art { width: 100%; opacity: .22; } }
+/* Top stories: a picture for the story's topic */
+.story { grid-template-columns: 28px minmax(0, 1fr) 148px; }
+.story-art { width: 148px; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); align-self: start; margin-top: 4px; }
+@media (max-width: 640px) { .story { grid-template-columns: 28px minmax(0, 1fr); } .story-art { display: none; } }
+/* Commodity groups: a picture strip on top, the name over it */
+.group { border-top: 0; padding-top: 0; overflow: hidden; }
+.group-art { position: relative; margin: 0 -20px; height: 128px; border-bottom: 3px solid var(--c-commodities); }
+.group-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.group-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,8,16,0) 35%, rgba(5,8,16,.85) 100%); }
+.group-art .h2 { position: absolute; left: 20px; bottom: 10px; z-index: 1; font-size: 20px; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+/* Calendar: the banner behind the toolbar */
+.cal-hero { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 20px; background: var(--surface); }
+.cal-hero > :not(.hero-art) { position: relative; z-index: 1; }
+.hero-art { position: absolute; top: 0; right: 0; width: 70%; height: 100%; object-fit: cover; object-position: right center; opacity: .6; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 60%); mask-image: linear-gradient(to right, transparent 0%, #000 60%); }
+/* Quiet states */
+.live { position: relative; overflow: hidden; }
+.live > :not(.quiet-art) { position: relative; z-index: 1; }
+.quiet-art { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 70%; object-fit: cover; opacity: .55; pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 60%); mask-image: linear-gradient(180deg, transparent, #000 60%); }
+.quiet { position: relative; text-align: center; }
+.quiet img { width: 100%; height: 140px; object-fit: cover; border-radius: 8px; opacity: .7; display: block; }
+.quiet .empty { position: absolute; left: 0; right: 0; bottom: 8px; }
+/* Category icons: the PNG is a mask, filled with the category's color */
+.cicon { display: inline-block; flex: none; background: var(--c); -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; vertical-align: -3px; margin-right: 2px; }
+.cats button[aria-pressed="false"] .cicon { background: var(--muted); }
+/* Controls and text stay readable over the pictures. */
+.seg { background: var(--surface); }
+.btn, .icon-btn { background-color: var(--surface); }
+.btn.primary { background-color: var(--accent); }
+@media (min-width: 900px) { .overview.has-art p { max-width: min(72ch, 60%); } }

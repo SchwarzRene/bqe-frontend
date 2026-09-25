@@ -3,7 +3,7 @@
 
 import { agenda, byImportance, catOf, impOf } from './calendar.js';
 import { companiesCard } from './companies.js';
-import { countdown, esc, hl, impDots, itemSources, keyLabel, safeUrl, time, todayKey, tzLabel, dayKey } from './format.js';
+import { countdown, esc, hl, IMG, impDots, itemSources, keyLabel, safeUrl, time, todayKey, topicImage, tzLabel, dayKey } from './format.js';
 import { allRegions, briefing, byHeadlineImportance, CODE, data, events, items, keep, OVERVIEW_KEY, R_NAME, ranks, regionOf, state } from './state.js';
 
 const GROUP_WORDS = {
@@ -35,7 +35,8 @@ function overview(page, title) {
   const text = parts.length ? parts.map(([label, t]) => (label ? `<strong>${esc(label)}:</strong> ` : '') + esc(t)).join('<br>') : (ov ? esc(ov.all) : '');
   const themes = b ? b.pages[page].themes : [];
   return `
-    <section class="card overview" aria-labelledby="ov-h">
+    <section class="card overview has-art" aria-labelledby="ov-h">
+      <img class="ov-art" src="${IMG}banner-${page}.webp" alt="" aria-hidden="true" decoding="async">
       <div class="card-head">
         <div><div class="eyebrow">${b ? esc(b.label) : 'Briefing'}</div><h1 class="h1" id="ov-h" style="margin-top:4px">${esc(title)}</h1></div>
         <span class="meta">${b ? `Written ${time(b.generatedAt)} ${tzLabel()}` : ''}</span>
@@ -61,6 +62,7 @@ function storyList(page) {
         ${x.why ? `<p class="why"><b>Why it matters:</b> ${esc(x.why)}</p>` : ''}
         <div class="src">${x.sources.map((src) => `<a href="${esc(safeUrl(src.url))}" target="_blank" rel="noopener">${esc(src.label)} ↗</a>`).join('')}</div>
       </div>
+      <img class="story-art" src="${topicImage(x.topic, x.title)}" alt="" aria-hidden="true" loading="lazy" decoding="async">
     </article>`).join('') : `<p class="empty">${briefing() ? 'No top stories for the selected regions.' : 'Top stories appear with the first briefing.'}</p>`;
   return `<section class="card" aria-labelledby="ts-h"><div class="card-head"><h2 class="h2" id="ts-h">Top stories</h2><span class="meta">Ranked by importance</span></div>${body}</section>`;
 }
@@ -119,7 +121,7 @@ export function liveCard() {
       <div class="sub">${R_NAME[regionOf(e)]} · since ${time(e.start)}, until about ${time(e.end)}</div>
       ${e.streamUrl ? `<a class="btn primary" href="${esc(safeUrl(e.streamUrl))}" target="_blank" rel="noopener">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>Watch live</a>` : ''}`).join('')
-      : '<div class="none">Nothing live right now for the selected regions.</div>'}`;
+      : `<div class="none">Nothing live right now for the selected regions.</div><img class="quiet-art" src="${IMG}empty-quiet.webp" alt="" aria-hidden="true" decoding="async">`}`;
 }
 
 export function nextCard(filter = () => true) {
@@ -196,7 +198,7 @@ export function renderCommodities() {
         const next = events().find((e) => e.id === g.nextEventId && Date.parse(e.start) > now) ||
           events().find((e) => catOf(e) === 'commodities' && Date.parse(e.start) > now && GROUP_WORDS[g.name].test(e.title));
         return `<div class="card group">
-          <h2 class="h2" style="font-size:19px">${esc(g.name)}</h2>
+          <div class="group-art"><img src="${IMG}group-${g.name.toLowerCase()}.webp" alt="" aria-hidden="true" loading="lazy" decoding="async"><h2 class="h2">${esc(g.name)}</h2></div>
           <p class="sum">${esc(g.summary || (b ? 'No notable news today.' : 'The summary appears with the first briefing.'))}</p>
           ${g.rows.length ? `<div>${g.rows.map((r) => `<div class="line-row"><span class="k">${esc(r.name)}</span><span>${esc(r.line || 'No notable news today')}</span></div>`).join('')}</div>` : ''}
           <div>

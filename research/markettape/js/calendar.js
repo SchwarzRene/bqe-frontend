@@ -5,17 +5,19 @@
 // grid shows that day's key events first, and the day panel its summary.
 // Days without a ranking use the importance from the calendar's own config.
 
-import { addDays, dayKey, esc, hl, impDots, keyLabel, mondayOf, safeUrl, time, todayKey, weekday } from './format.js';
+import { addDays, dayKey, esc, hl, IMG, impDots, keyLabel, mondayOf, safeUrl, time, todayKey, weekday } from './format.js';
 import { data, events, keep, R_NAME, ranks, regionOf, state } from './state.js';
 
 export const CATS = [
-  { id: 'cb', label: 'Central banks', color: 'var(--c-cb)' },
-  { id: 'speech', label: 'Speeches', color: 'var(--c-speech)' },
-  { id: 'data', label: 'Economic data', color: 'var(--c-data)' },
-  { id: 'earnings', label: 'Earnings', color: 'var(--c-earnings)' },
-  { id: 'commodities', label: 'Commodities', color: 'var(--c-commodities)' },
+  { id: 'cb', label: 'Central banks', color: 'var(--c-cb)', icon: 'central-banks' },
+  { id: 'speech', label: 'Speeches', color: 'var(--c-speech)', icon: 'speeches' },
+  { id: 'data', label: 'Economic data', color: 'var(--c-data)', icon: 'data' },
+  { id: 'earnings', label: 'Earnings', color: 'var(--c-earnings)', icon: 'earnings' },
+  { id: 'commodities', label: 'Commodities', color: 'var(--c-commodities)', icon: 'commodities' },
 ];
 const CAT = Object.fromEntries(CATS.map((c) => [c.id, c]));
+/** A category's icon, tinted in its color (the PNG is used as a mask). */
+export const catIcon = (id, size = 16) => `<span class="cicon" style="--c:${CAT[id].color};--i:url('${IMG}icon-${CAT[id].icon}.png');width:${size}px;height:${size}px" aria-hidden="true"></span>`;
 const BANK_TYPES = new Set(['fed', 'eu-central-bank', 'asia-central-bank']);
 const PREVIEW = 3; // events per day cell in the month view
 
@@ -88,7 +90,8 @@ export function renderCalendarPage() {
 
   return `
     <section class="stack" aria-labelledby="cal-h" style="gap:16px">
-      <div class="cal-bar">
+      <div class="cal-bar cal-hero">
+        <img class="hero-art" src="${IMG}banner-calendar.webp" alt="" aria-hidden="true" decoding="async">
         <div class="cal-nav">
           <button type="button" class="icon-btn" data-cal-step="-1" aria-label="Previous ${cal.view}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
@@ -110,7 +113,7 @@ export function renderCalendarPage() {
       </div>
       <div class="filters">
         <div class="cats" role="group" aria-label="Categories">
-          ${CATS.map((c) => `<button type="button" data-cal-cat="${c.id}" aria-pressed="${cal.cats.includes(c.id)}"><span class="dot" style="background:${c.color}"></span>${c.label}<small>${counts[c.id]}</small></button>`).join('')}
+          ${CATS.map((c) => `<button type="button" data-cal-cat="${c.id}" aria-pressed="${cal.cats.includes(c.id)}">${catIcon(c.id)}${c.label}<small>${counts[c.id]}</small></button>`).join('')}
           ${cal.cats.length < CATS.length ? '<button type="button" class="reset" data-cal-cat="all">Show all</button>' : ''}
         </div>
       </div>
@@ -194,7 +197,7 @@ function eventDetail(e, now = Date.now()) {
     <span class="tm">${time(e.start)}</span>
     <div>
       <div class="nm">${esc(e.title)}</div>
-      <div class="sub"><span class="dot" style="background:${CAT[catOf(e)].color}"></span>${CAT[catOf(e)].label} · ${R_NAME[regionOf(e)]} ${impDots(impOf(e))}${isKey(e) ? ' <span class="pill gold">Key</span>' : ''}</div>
+      <div class="sub">${catIcon(catOf(e), 14)}${CAT[catOf(e)].label} · ${R_NAME[regionOf(e)]} ${impDots(impOf(e))}${isKey(e) ? ' <span class="pill gold">Key</span>' : ''}</div>
       ${e.result ? `<div class="res">${esc(e.result)}</div>` : live ? '<div class="res now">Live now</div>' : ''}
       ${e.streamUrl && Date.parse(e.end) > now ? `<a class="more-link" style="font-size:12px" href="${esc(safeUrl(e.streamUrl))}" target="_blank" rel="noopener">${live ? 'Watch live ↗' : 'Stream ↗'}</a>` : ''}
       ${heads.length ? `<details class="evheads"><summary>${heads.length} related headline${heads.length > 1 ? 's' : ''}</summary>${heads.map(hl).join('')}</details>` : ''}
@@ -220,7 +223,7 @@ function dayPanel(k) {
       ${summary ? `<div class="aisum"><span class="eyebrow">AI · the day in one line</span>${esc(summary)}</div>` : ''}
       <div class="dsec">
         <span class="eyebrow">Schedule${key.length ? ' · key events marked' : ''}</span>
-        ${list.length ? list.map((e) => eventDetail(e, now)).join('') : '<p class="empty">Nothing scheduled that matches the filters.</p>'}
+        ${list.length ? list.map((e) => eventDetail(e, now)).join('') : `<div class="quiet"><img src="${IMG}empty-quiet.webp" alt="" aria-hidden="true" loading="lazy"><p class="empty">Nothing scheduled that matches the filters.</p></div>`}
       </div>
       ${hidden > 0 ? `<p class="hidden-note">${hidden} more hidden by the filters. <button type="button" data-cal-cat="all" data-cal-imp="1">Show everything</button></p>` : ''}
     </aside>`;
