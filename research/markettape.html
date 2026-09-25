@@ -317,7 +317,8 @@ company, and the commodity groups.</p>
 
 <h2 id="chat"><span class="num">6</span> AI chat</h2>
 <p class="lead">Ask about today, get an answer with the headlines it came from.</p>
-<p>An <em>Ask AI</em> button on every page opens a chat panel. The model answers questions about
+<p>An <em>Ask AI</em> button on every page opens a chat panel for signed-in users; guests see
+it locked and are asked to sign in. The model answers questions about
 current events from the same data the app collects — today's headlines, calendar and results — and
 cites the headlines it used.</p>
 
@@ -377,7 +378,8 @@ answers.</p>
 <h3>Limits and security</h3>
 <ul>
   <li>The API key lives only in the Worker as a secret; the browser never sees it</li>
-  <li>The chat is limited to signed-in users, so nobody else can run up the bill</li>
+  <li><strong>AI features are for signed-in users only</strong> (the site's own accounts, <code>worker/auth.ts</code>): the chat and a fresh briefing on Refresh. Guests read the scheduled briefing, the calendar and the headlines, and get the sign-in dialog when they press Ask AI</li>
+  <li>The Worker enforces it: <code>POST /api/chat</code> and the refresh endpoint check the session cookie with <code>currentUser()</code> and answer <code>401</code> without one — the locked button alone keeps no one out</li>
   <li>Rate limit per user, e.g. 50 questions a day, and a monthly spending cap in the Anthropic console</li>
 </ul>
 
@@ -385,7 +387,7 @@ answers.</p>
 <p class="lead">Three pages, one header, the same order on each: overview, top stories, side panel, headlines.</p>
 <table>
   <tr><th>Part</th><th>Content</th></tr>
-  <tr><td><strong>Shared header</strong></td><td>"Updated" time, Vienna / New York toggle, Ask AI button, refresh button; tabs General · Stocks · Commodities; region filter (All, US, Europe, Asia, Russia)</td></tr>
+  <tr><td><strong>Shared header</strong></td><td>"Updated" time, Vienna / New York toggle, Ask AI button (locked for guests), refresh button, account (Guest · Sign in, or name · Sign out); tabs General · Stocks · Commodities; region filter (All, US, Europe, Asia, Russia)</td></tr>
   <tr><td><strong>Chat panel</strong></td><td>Opens from the right on any page; suggested questions for the current page; answers with source links; closes with Esc</td></tr>
   <tr><td><strong>General</strong></td><td>On now + next up; overview and top 5 stories on macro, central banks and world news; "Elsewhere today" links to the top Stocks and Commodities stories; this week's calendar; headlines: World, Economy, Central banks</td></tr>
   <tr><td><strong>Stocks</strong></td><td>Stock market overview and top 5 stories; My companies (one line per ticker, hidden if no news); earnings calendar; headlines: Markets, Companies, Earnings</td></tr>
@@ -446,7 +448,7 @@ their reported numbers, and stores them in D1.</p>
   <tr><td>Midday briefing</td><td>12:30</td><td>Yes</td></tr>
   <tr><td>Close briefing</td><td>16:30</td><td>Yes</td></tr>
   <tr><td>Weekend briefing</td><td>Sat 10:00</td><td>Yes</td></tr>
-  <tr><td>Extra briefing</td><td>On manual refresh, max 1 per 15 min</td><td>Yes</td></tr>
+  <tr><td>Extra briefing</td><td>On manual refresh by a signed-in user, max 1 per 15 min</td><td>Yes</td></tr>
 </table>
 
 <h3>Cost (approximate)</h3>
@@ -472,7 +474,7 @@ Cloudflare's free tier at this volume.</p>
   <tr><td>Paywalled links</td><td>Show source name so the reader knows before clicking</td></tr>
   <tr><td>Copyright</td><td>Store and show only headline, source, link, time; summaries in own words; no article bodies</td></tr>
   <tr><td>Feed terms of use</td><td>Personal, non-commercial use; check each publisher's RSS terms before making the page public</td></tr>
-  <tr><td>Chat costs grow with use</td><td>Sign-in required, per-user daily limit, monthly spending cap, prompt caching</td></tr>
+  <tr><td>Chat costs grow with use</td><td>AI features for signed-in users only, checked on the Worker; per-user daily limit, monthly spending cap, prompt caching</td></tr>
   <tr><td>Instructions hidden in headlines (prompt injection)</td><td>Headlines passed as data; system prompt tells the model to ignore instructions inside them; chat has read-only tools</td></tr>
   <tr><td>Chat gives advice or overstates</td><td>Answer rules: no trade recommendations, say when the news doesn't answer, always show sources</td></tr>
   <tr><td>Russian state media</td><td>Not used as sources: several are under EU broadcast bans. Russia coverage comes from independent outlets, BBC and the Bank of Russia; check the EU sanctions list before adding any Russian outlet</td></tr>

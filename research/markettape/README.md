@@ -165,7 +165,7 @@ A small, cheap model (Haiku class) is enough: the input is ~3–4k tokens, the o
 
 ## AI chat
 
-An "Ask AI" button on every page opens a chat panel. The model answers questions about current events from the same data the app collects, so it knows today's headlines, calendar and results, and it cites the headlines it used.
+An "Ask AI" button on every page opens a chat panel for signed-in users; guests see it locked and are asked to sign in. The model answers questions about current events from the same data the app collects, so it knows today's headlines, calendar and results, and it cites the headlines it used.
 
 **What the model knows**
 
@@ -227,7 +227,8 @@ Streaming (server-sent events) can come later; the first version returns the who
 **Limits and security**
 
 - The API key lives only in the Worker as a secret; the browser never sees it
-- The page is protected (e.g. Cloudflare Access) so nobody else can run up the bill
+- AI features are for signed-in users only (the site's accounts, `worker/auth.ts`): the chat and a fresh briefing on Refresh. Guests can read the scheduled briefing, the calendar and the headlines; Ask AI shows a lock and opens the sign-in dialog
+- The Worker enforces it: `POST /api/chat` and the refresh endpoint check the session cookie with `currentUser()` and answer `401` without one. The locked button alone keeps no one out
 - Rate limit per user, e.g. 50 questions a day, and a monthly spending cap in the Anthropic console
 
 ## UI
@@ -236,7 +237,7 @@ Three pages share one header and filter row. Each page has the same order: overv
 
 | Part | Content |
 | --- | --- |
-| Shared header | "Updated" time, Vienna / New York toggle, Ask AI button, refresh button; tabs General · Stocks · Commodities; region filter (All, US, Europe, Asia, Russia) |
+| Shared header | "Updated" time, Vienna / New York toggle, Ask AI button (locked for guests), refresh button, account (Guest · Sign in, or name · Sign out); tabs General · Stocks · Commodities; region filter (All, US, Europe, Asia, Russia) |
 | Chat panel | Opens from the right on any page; suggested questions for the current page; answers with source links; closes with Esc |
 | General | On now + next up; overview and top 5 stories on macro, central banks and world news; "Elsewhere today" links to the top Stocks and Commodities stories; this week's calendar; headlines: World, Economy, Central banks |
 | Stocks | Stock market overview and top 5 stories; My companies (one line per ticker, hidden if no news); earnings calendar; headlines: Markets, Companies, Earnings |
@@ -292,7 +293,7 @@ Fetch headlines often, but run the briefing model only at fixed times: that keep
 | Midday briefing | 12:30 | Yes |
 | Close briefing | 16:30 | Yes |
 | Weekend briefing | Sat 10:00 | Yes |
-| Extra briefing | On manual refresh, max 1 per 15 min | Yes |
+| Extra briefing | On manual refresh by a signed-in user, max 1 per 15 min | Yes |
 
 **Cost (approximate)**
 
@@ -318,7 +319,7 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 | Paywalled links | Show source name so the reader knows before clicking |
 | Copyright | Store and show only headline, source, link, time; summaries in own words; no article bodies |
 | Feed terms of use | Personal, non-commercial use; check each publisher's RSS terms before making the page public |
-| Chat costs grow with use | Access protection, per-user daily limit, monthly spending cap, prompt caching |
+| Chat costs grow with use | AI features for signed-in users only, checked on the Worker; per-user daily limit, monthly spending cap, prompt caching |
 | Instructions hidden in headlines (prompt injection) | Headlines passed as data; system prompt tells the model to ignore instructions inside them; chat has read-only tools |
 | Chat gives advice or overstates | Answer rules: no trade recommendations, say when the news doesn't answer, always show sources |
 | Russian state media | Not used as sources: several are under EU broadcast bans. Russia coverage comes from independent outlets, BBC and the Bank of Russia; check the EU sanctions list before adding any Russian outlet |
