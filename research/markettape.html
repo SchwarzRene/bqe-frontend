@@ -515,10 +515,11 @@ Cloudflare's free tier at this volume.</p>
   <tr><td><code>POST /api/chat</code></td><td>signed in</td><td>The chat; <code>401</code> for guests before any model call, <code>429</code> past the daily limit.</td></tr>
 </table>
 <p>The free plan allows five cron triggers per account, so one trigger, every 15 minutes, runs
-everything: <code>newsTick()</code> works out in New York time whether this run fetches (every run on
-weekdays, on the hour at weekends), writes a briefing (02:30, 08:00, 12:30, 16:30 on weekdays,
-Sat 10:00) — the cron's only model call — or rebuilds the calendar and prunes (05:00). After a deploy,
-the first run builds the calendar and the first briefing straight away. The only requests that can
+everything, one job per run so each stays inside the free plan's 10 ms of CPU: <code>newsTick()</code>
+works out in New York time whether this run rebuilds the calendar (05:00 and 05:30), writes a briefing
+(02:30, 08:00, 12:30, 16:30 on weekdays, Sat 10:00) — the cron's only model call — refreshes the
+calendar's results (:15 on weekdays), or fetches a third of the sources. After a deploy, the first runs
+build the calendar, fetch, and write the first briefing straight away. The only requests that can
 cause a model call are the chat and the refresh, both refused to guests before anything runs.</p>
 <div class="warn"><strong>Not checked from here:</strong> the feed and calendar URLs. The environment
 this was built in could not reach the publishers. A wrong URL shows up in the Worker's log

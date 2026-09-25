@@ -25,14 +25,26 @@ export interface Wall {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// Building an Intl.DateTimeFormat is far dearer than using one: one per zone.
+const FORMATS = new Map<string, Intl.DateTimeFormat>();
+
+function formatFor(tz: string): Intl.DateTimeFormat {
+  let f = FORMATS.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hourCycle: "h23",
+      weekday: "short",
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    });
+    FORMATS.set(tz, f);
+  }
+  return f;
+}
+
 /** The wall clock in `tz` at `ms`. */
 export function wallClock(ms: number, tz: string): Wall {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hourCycle: "h23",
-    weekday: "short",
-    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-  }).formatToParts(new Date(ms));
+  const parts = formatFor(tz).formatToParts(new Date(ms));
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
   const year = Number(get("year")), month = Number(get("month")), day = Number(get("day"));
   return {
@@ -101,13 +113,6 @@ export function briefingSlot(ms: number): Slot | null {
   return null;
 }
 
-/** Whether a cron run at `ms` should fetch: every run on weekdays, hourly at weekends. */
-export function shouldFetch(ms: number): boolean {
-  const w = wallClock(ms, ET);
-  const weekend = w.weekday === 0 || w.weekday === 6;
-  return !weekend || w.minute < 15;
-}
-
 /**
  * The hourly results refresh: weekdays, the run at a quarter past each hour.
  * A briefing slot is never at :15, so the two never share a run (and its
@@ -118,8 +123,17 @@ export function isResultsRun(ms: number): boolean {
   return w.weekday >= 1 && w.weekday <= 5 && w.minute >= 15 && w.minute < 30;
 }
 
-/** The daily calendar run: 05:00 New York time. */
-export function isCalendarRun(ms: number): boolean {
+/**
+ * The daily calendar runs, New York time: 05:00 (the economic calendar,
+ * meetings, fallbacks) and 05:30 (earnings, dated events, rules). Two runs,
+ * so each stays within the free plan's 10 ms of CPU.
+ */
+export function calendarRun(ms: number): 1 | 2 | null {
   const w = wallClock(ms, ET);
-  return w.hour === 5 && w.minute < 15;
+  if (w.hour !== 5) return null;
+  return w.minute < 15 ? 1 : w.minute >= 30 && w.minute < 45 ? 2 : null;
+}
+
+export function isCalendarRun(ms: number): boolean {
+  return calendarRun(ms) !== null;
 }

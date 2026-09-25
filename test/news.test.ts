@@ -7,7 +7,7 @@ import { GeminiError, generate, RETRY_DELAYS_MS } from "../worker/news/gemini";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
 import { dedupe, eventWordsFor, isBlocked, isPromo, sameStory, scoreItem, staleSources, titleWords } from "../worker/news/store";
-import { briefingSlot, isCalendarRun, shouldFetch, wallClock, zonedToUtc } from "../worker/news/time";
+import { briefingSlot, calendarRun, isCalendarRun, isResultsRun, wallClock, zonedToUtc } from "../worker/news/time";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -170,12 +170,15 @@ describe("news time", () => {
     expect(briefingSlot(Date.parse("2026-12-03T21:30:00Z"))).toBe("close");
   });
 
-  it("fetches every run on weekdays and hourly at weekends; the calendar at 05:00", () => {
-    expect(shouldFetch(Date.parse("2026-09-24T12:45:00Z"))).toBe(true);
-    expect(shouldFetch(Date.parse("2026-09-26T12:45:00Z"))).toBe(false);
-    expect(shouldFetch(Date.parse("2026-09-26T13:00:00Z"))).toBe(true);
+  it("results at a quarter past on weekdays; the calendar at 05:00", () => {
+    expect(isResultsRun(Date.parse("2026-09-24T12:15:00Z"))).toBe(true);
+    expect(isResultsRun(Date.parse("2026-09-24T12:30:00Z"))).toBe(false);
+    expect(isResultsRun(Date.parse("2026-09-26T12:15:00Z"))).toBe(false);
     expect(isCalendarRun(Date.parse("2026-09-24T09:00:00Z"))).toBe(true);
     expect(isCalendarRun(Date.parse("2026-09-24T09:15:00Z"))).toBe(false);
+    expect(calendarRun(Date.parse("2026-09-24T09:00:00Z"))).toBe(1);
+    expect(calendarRun(Date.parse("2026-09-24T09:30:00Z"))).toBe(2);
+    expect(calendarRun(Date.parse("2026-09-24T09:45:00Z"))).toBeNull();
     expect(wallClock(Date.parse("2026-09-24T03:00:00Z"), "America/New_York").date).toBe("2026-09-23");
   });
 });
@@ -239,6 +242,8 @@ describe("news calendar", () => {
       { summary: "Consumer Price Index for September 2026", start: Date.parse("2026-10-14T12:30:00Z") },
       { summary: "Employment Situation, October", start: Date.parse("2026-11-06T13:30:00Z") },
     ]);
+    // Only the days asked for are converted.
+    expect(parseIcs(ics, "America/New_York", "2026-11-01", "2026-11-10").map((e) => e.summary)).toEqual(["Employment Situation, October"]);
   });
 
   it("reads Nasdaq earnings rows: watchlist plus the largest, reported EPS as the result", () => {

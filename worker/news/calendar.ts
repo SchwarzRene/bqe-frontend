@@ -179,8 +179,14 @@ export interface IcsEvent {
   start: number; // epoch ms
 }
 
-/** VEVENTs with a SUMMARY and a DTSTART (UTC, TZID=…, or floating = `defaultTz`). */
-export function parseIcs(text: string, defaultTz = ET): IcsEvent[] {
+/**
+ * VEVENTs with a SUMMARY and a DTSTART (UTC, TZID=…, or floating = `defaultTz`).
+ * With `from`/`to` (YYYY-MM-DD), events outside those days (±1) are skipped
+ * before their time is converted: a schedule lists a whole year.
+ */
+export function parseIcs(text: string, defaultTz = ET, from = "", to = ""): IcsEvent[] {
+  const lo = from ? addDays(from, -1).replace(/-/g, "") : "";
+  const hi = to ? addDays(to, 1).replace(/-/g, "") : "";
   // Unfold continuation lines (RFC 5545: a line starting with a space or tab).
   const lines = text.replace(/\r?\n[ \t]/g, "").split(/\r?\n/);
   const out: IcsEvent[] = [];
@@ -198,6 +204,11 @@ export function parseIcs(text: string, defaultTz = ET): IcsEvent[] {
       if (name === "DTSTART") {
         const d = value.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/);
         if (!d) continue;
+        const day = `${d[1]}${d[2]}${d[3]}`;
+        if ((lo && day < lo) || (hi && day > hi)) {
+          current.start = NaN;
+          continue;
+        }
         const [h, mi] = [Number(d[4] ?? 0), Number(d[5] ?? 0)];
         current.start = d[7]
           ? Date.UTC(Number(d[1]), Number(d[2]) - 1, Number(d[3]), h, mi)
@@ -208,11 +219,11 @@ export function parseIcs(text: string, defaultTz = ET): IcsEvent[] {
   return out;
 }
 
-async function icsEvents(src: CalendarConfig["ics"][number], fromMs: number, toMs: number, fetcher: typeof fetch): Promise<CalendarEvent[]> {
+async function icsEvents(src: CalendarConfig["ics"][number], fromMs: number, toMs: number, fetcher: typeof fetch, from: string, to: string): Promise<CalendarEvent[]> {
   const res = await fetcher(src.url, { headers: { "User-Agent": USER_AGENT, Accept: "text/calendar" }, signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const out: CalendarEvent[] = [];
-  for (const e of parseIcs(await res.text())) {
+  for (const e of parseIcs(await res.text(), ET, from, to)) {
     if (e.start < fromMs || e.start > toMs) continue;
     const rule = src.include.find((r) => e.summary.toLowerCase().includes(r.match.toLowerCase()));
     if (!rule) continue;
@@ -387,18 +398,31 @@ export interface EconomicEvent extends CalendarEvent {
  * release (CPI m/m, y/y, core …) at the same time into one event whose result
  * lists their figures.
  */
+const INCLUDE = new WeakMap<EconomicConfig, RegExp[]>();
+
 export function economicEvents(rows: EconomicRow[], econ: EconomicConfig, now: number): EconomicEvent[] {
+  let patterns = INCLUDE.get(econ);
+  if (!patterns) INCLUDE.set(econ, (patterns = econ.include.map((r) => new RegExp(r.match, "i"))));
   const groups = new Map<string, { rule: EconomicConfig["include"][number]; rows: EconomicRow[] }>();
   for (const row of rows) {
     const country = econ.countries[row.country];
     if (!country) continue;
-    const rule = econ.include.find((r) => (!r.countries || r.countries.includes(row.country)) && new RegExp(r.match, "i").test(row.name));
+    const rule = econ.include.find((r, i) => (!r.countries || r.countries.includes(row.country)) && patterns![i].test(row.name));
     if (!rule) continue;
     const key = rule.kind === "speech" ? `${row.country}|${row.start}|${row.name}` : `${row.country}|${row.start}|${rule.match}`;
     const g = groups.get(key) ?? { rule, rows: [] };
     g.rows.push(row);
     groups.set(key, g);
   }
+  // New York is a whole number of hours off UTC, so its date is the same
+  // throughout any UTC hour: work it out once per hour, not once per event.
+  const dates = new Map<number, string>();
+  const etDate = (ms: number) => {
+    const hour = Math.floor(ms / 3_600_000);
+    let d = dates.get(hour);
+    if (!d) dates.set(hour, (d = wallClock(ms, ET).date));
+    return d;
+  };
   const out: EconomicEvent[] = [];
   for (const { rule, rows: list } of groups.values()) {
     const first = list[0];
@@ -415,7 +439,7 @@ export function economicEvents(rows: EconomicRow[], econ: EconomicConfig, now: n
       .filter((r) => r.actual != null && (r.actual !== 0 || released))
       .slice(0, 3)
       .map((r) => `${list.length > 1 ? `${r.name} ` : ""}${fmt(r.actual!)}${r.consensus != null && r.consensus !== 0 ? ` (exp. ${fmt(r.consensus)})` : ""}`);
-    const date = wallClock(first.start, ET).date;
+    const date = etDate(first.start);
     out.push({
       id: `${type}-${date}-${slug(`${first.country} ${rule.kind === "speech" ? first.name : rule.title}`)}`,
       type,
@@ -561,7 +585,7 @@ export async function refreshCalendar(
       : []),
     ["rules", async () => fixed.rules],
     ["fallback-rules", async () => (useFallback ? fixed.fallbackRules : [])],
-    ...cal.ics.map((s) => [s.id, async () => (s.fallback && !useFallback ? [] : icsEvents(s, fromMs, toMs, fetcher))] as [string, () => Promise<CalendarEvent[]>]),
+    ...cal.ics.map((s) => [s.id, async () => (s.fallback && !useFallback ? [] : icsEvents(s, fromMs, toMs, fetcher, from, to))] as [string, () => Promise<CalendarEvent[]>]),
     // Nasdaq from yesterday, whose reported EPS fills in the result.
     ["nasdaq", () => nasdaqEarnings(days(addDays(today, -1), to), cfg, fetcher)],
     ["yahoo", () => yahooEarnings(session, cfg, fromMs, toMs, fetcher)],

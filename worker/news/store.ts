@@ -4,7 +4,7 @@
 import type { Env } from "../env";
 import { isoNow } from "../http";
 import { putDocument } from "../stack";
-import { CONFIG, type Config, fetchAll, type RawItem, type SourceHealth } from "./feeds";
+import { CONFIG, type Config, fetchAll, type FetchPlan, type RawItem, type SourceHealth } from "./feeds";
 import { iso } from "./time";
 
 export interface Item {
@@ -28,8 +28,12 @@ const OVERLAP = 0.7;
 // filter + score
 // --------------------------------------------------------------------------
 
+const PROMO = new WeakMap<Config, RegExp>();
+
 export function isPromo(title: string, cfg: Config = CONFIG): boolean {
-  return cfg.promoPatterns.some((p) => new RegExp(p, "i").test(title));
+  let re = PROMO.get(cfg);
+  if (!re) PROMO.set(cfg, (re = new RegExp(cfg.promoPatterns.map((p) => `(?:${p})`).join("|"), "i")));
+  return re.test(title);
 }
 
 export function isBlocked(source: string, cfg: Config = CONFIG): boolean {
@@ -104,13 +108,28 @@ export interface Known {
  */
 export function dedupe(fresh: RawItem[], known: Known[]): { added: RawItem[]; merged: Known[] } {
   const byId = new Map(known.map((k) => [k.id, k]));
-  const pool: Known[] = [...known];
+  // Word -> stories using it, so a new title is compared only with stories
+  // that share a word with it, not with everything stored.
+  const index = new Map<string, Known[]>();
+  const order = new Map<Known, number>();
+  const remember = (k: Known) => {
+    order.set(k, order.size);
+    for (const w of k.words) {
+      const list = index.get(w);
+      if (list) list.push(k);
+      else index.set(w, [k]);
+    }
+  };
+  known.forEach(remember);
   const added: RawItem[] = [];
   const merged = new Set<Known>();
   for (const item of [...fresh].sort((a, b) => a.publishedAt.localeCompare(b.publishedAt))) {
     if (byId.has(item.id)) continue;
     const words = titleWords(item.title);
-    const twin = pool.find((k) => sameStory(words, k.words));
+    const candidates = new Set<Known>();
+    for (const w of words) for (const k of index.get(w) ?? []) candidates.add(k);
+    // The earliest stored story wins, as a scan in stored order would pick it.
+    const twin = [...candidates].sort((a, b) => order.get(a)! - order.get(b)!).find((k) => sameStory(words, k.words));
     if (twin) {
       byId.set(item.id, twin);
       const already = twin.source === item.source || twin.alsoIn.some((a) => a.source === item.source);
@@ -126,7 +145,7 @@ export function dedupe(fresh: RawItem[], known: Known[]): { added: RawItem[]; me
       publishedAt: item.publishedAt, tickers: item.tickers, title: item.title,
     };
     byId.set(item.id, entry);
-    pool.push(entry);
+    remember(entry);
     added.push(item);
   }
   // A merge into an item added in this same run is part of that insert.
@@ -150,19 +169,25 @@ export interface FetchReport {
   failed: string[];
 }
 
-/** Fetch every source and store what is new. */
-export async function ingest(env: Env, now = Date.now(), cfg: Config = CONFIG): Promise<FetchReport> {
-  const { items, health } = await fetchAll(cfg);
-  const cutoff = now - DAY_MS;
-  const eventWords = await todayEventWords(env, now);
-  const fresh = items.filter(
-    (i) => Date.parse(i.publishedAt) >= cutoff && !isPromo(i.title, cfg) && !isBlocked(i.source, cfg),
-  );
+// The free Workers plan allows 10 ms of CPU per run, and parsing every feed
+// alone costs about that. So each 15-minute run fetches a third of the
+// sources (each source every 45 minutes), and normalizes at most 80 new
+// headlines; the rest are still new on the next run.
+export const FETCH_PARTS = 3;
+export const MAX_NEW_PER_RUN = 80;
 
+/** Fetch this run's share of the sources and store what is new. */
+export async function ingest(
+  env: Env,
+  now = Date.now(),
+  cfg: Config = CONFIG,
+  fetcher: typeof fetch = fetch,
+  plan: FetchPlan = { part: Math.floor(now / 900_000) % FETCH_PARTS, of: FETCH_PARTS, budget: MAX_NEW_PER_RUN },
+): Promise<FetchReport> {
   const rows = await env.DB.prepare(
     "SELECT id, title, source, also_in, tickers, published_at, score FROM news_items WHERE published_at > ?",
   )
-    .bind(iso(now - 2 * DAY_MS))
+    .bind(iso(now - DAY_MS - 2 * 3_600_000))
     .all<{ id: string; title: string; source: string; also_in: string; tickers: string; published_at: string; score: number }>();
   const known: Known[] = (rows.results ?? []).map((r) => ({
     id: r.id,
@@ -173,6 +198,14 @@ export async function ingest(env: Env, now = Date.now(), cfg: Config = CONFIG): 
     tickers: parseList(r.tickers),
     publishedAt: r.published_at,
   }));
+  const knownTitles = new Set(known.map((k) => k.title.toLowerCase()));
+
+  const { items, health } = await fetchAll(cfg, fetcher, (title) => knownTitles.has(title.toLowerCase()), plan);
+  const cutoff = now - DAY_MS;
+  const eventWords = await todayEventWords(env, now);
+  const fresh = items
+    .filter((i) => Date.parse(i.publishedAt) >= cutoff && !isPromo(i.title, cfg) && !isBlocked(i.source, cfg))
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 
   const { added, merged } = dedupe(fresh, known);
   const stamp = isoNow();

@@ -5,9 +5,10 @@
 //   POST /api/chat          see chat.ts (signed in; daily limit per user)
 //
 // and one cron, every 15 minutes (see newsTick):
-//   fetch + dedupe         every run on weekdays, hourly at weekends
+//   fetch + dedupe         every run not doing one of the jobs below; a third
+//                          of the sources per run (each every ~45 minutes)
 //   briefing (Gemini)      02:30, 08:00, 12:30, 16:30 New York time on weekdays, Sat 10:00
-//   calendar + pruning     05:00 New York time (no model calls)
+//   calendar + pruning     05:00 and 05:30 New York time (no model calls)
 //   calendar results       hourly on weekdays, yesterday to tomorrow (no model calls)
 
 import { currentUser, pruneAuth } from "../auth";
@@ -15,10 +16,14 @@ import { pruneContact } from "../contact";
 import type { Env } from "../env";
 import { crossSite, isoNow, json } from "../http";
 import { buildBriefing, latestBriefing } from "./briefing";
-import { calendarIsEmpty, type CalendarEvent, readCalendar, refreshCalendar } from "./calendar";
-import { CONFIG } from "./feeds";
-import { type Item, eventWordsFor, ingest, itemsById, pruneNews, readHealth, recentItems, staleSources } from "./store";
-import { briefingSlot, isCalendarRun, isResultsRun, iso, shouldFetch } from "./time";
+import { CALENDAR, calendarIsEmpty, type CalendarEvent, readCalendar, refreshCalendar } from "./calendar";
+
+// The daily calendar in two runs (see calendarRun in time.ts).
+const CALENDAR_FIRST_HALF = ["meetings", "yahoo-economic", "fallback-rules", ...CALENDAR.ics.map((s) => s.id)];
+const CALENDAR_SECOND_HALF = ["dated", "rules", "nasdaq", "yahoo"];
+import { CONFIG, type FetchPlan } from "./feeds";
+import { type Item, eventWordsFor, FETCH_PARTS, ingest, itemsById, MAX_NEW_PER_RUN, pruneNews, readHealth, recentItems, staleSources } from "./store";
+import { briefingSlot, calendarRun, isResultsRun, iso } from "./time";
 
 export { handleChat } from "./chat";
 
@@ -117,6 +122,23 @@ async function claim(env: Env, key: string, everyMs: number): Promise<boolean> {
   return result.meta.changes > 0;
 }
 
+async function headlineCount(env: Env, now: number): Promise<number> {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM news_items WHERE published_at > ?").bind(iso(now - 86_400_000)).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Which third of the sources the next fetch run takes: a counter, so skipped runs do not skip a third. */
+async function nextFetchPart(env: Env): Promise<number> {
+  const row = await env.DB.prepare(
+    `INSERT INTO documents (key, body, updated) VALUES ('news:fetch-part', '0', ?1)
+     ON CONFLICT (key) DO UPDATE SET body = CAST((CAST(documents.body AS INTEGER) + 1) % ${FETCH_PARTS} AS TEXT), updated = excluded.updated
+     RETURNING body`,
+  )
+    .bind(isoNow())
+    .first<{ body: string }>();
+  return Number(row?.body ?? 0) % FETCH_PARTS;
+}
+
 async function refresh(request: Request, env: Env): Promise<Response> {
   if (crossSite(request)) return json({ error: "forbidden" }, 403);
   // Before anything else: a guest never costs a fetch or a model call.
@@ -136,7 +158,7 @@ async function refresh(request: Request, env: Env): Promise<Response> {
 // the cron
 // --------------------------------------------------------------------------
 
-export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG): Promise<string> {
+export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: FetchPlan): Promise<string> {
   const report: string[] = [];
   const record = async (name: string, run: () => Promise<unknown>) => {
     try {
@@ -147,37 +169,57 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG): Promise
     }
   };
 
-  // 05:00 New York: the calendar and the daily clean-up. That run skips the
-  // headline fetch, so the two stay within the per-run subrequest limit.
-  const calendarRun = isCalendarRun(ms);
-  if (shouldFetch(ms) && !calendarRun) await record("fetch", () => ingest(env, ms, cfg));
-  if (calendarRun) {
-    await record("calendar", () => refreshCalendar(env, ms, { cfg }));
+  // One job per run: the free Workers plan allows 10 ms of CPU per run, so
+  // the fetch, the calendar and the briefing never share one.
+  const part = calendarRun(ms);
+  if (part === 1) {
+    // 05:00 New York: the economic calendar, meetings and fallbacks, and the daily clean-up.
+    await record("calendar", () => refreshCalendar(env, ms, { cfg, only: CALENDAR_FIRST_HALF }));
     await record("prune", async () => {
       await Promise.all([pruneNews(env, ms), pruneContact(env), pruneAuth(env)]);
       return "done";
     });
-  } else if ((await calendarIsEmpty(env, ms)) && (await claim(env, "news:calendar-first", 60 * 60_000))) {
-    // A fresh deploy: the calendar is built by the first run, not at 05:00.
-    await record("calendar (first)", () => refreshCalendar(env, ms, { cfg }));
-  } else if (isResultsRun(ms)) {
+    return report.join(" · ");
+  }
+  if (part === 2) {
+    // 05:30 New York: earnings, dated events and the weekly rules.
+    await record("calendar", () => refreshCalendar(env, ms, { cfg, only: CALENDAR_SECOND_HALF }));
+    return report.join(" · ");
+  }
+  if ((await calendarIsEmpty(env, ms)) && (await claim(env, "news:calendar-first", 60 * 60_000))) {
+    // A fresh deploy: the calendar is built by the first runs, not at 05:00 —
+    // this half now, the other half on the next run.
+    await record("calendar (first)", () => refreshCalendar(env, ms, { cfg, only: CALENDAR_FIRST_HALF }));
+    return report.join(" · ");
+  }
+  if ((await claim(env, "news:calendar-first-2", 365 * 86_400_000))) {
+    await record("calendar (first, part 2)", () => refreshCalendar(env, ms, { cfg, only: CALENDAR_SECOND_HALF }));
+    return report.join(" · ");
+  }
+
+  // The briefing: the only model call the cron makes. At the briefing times,
+  // and after a fresh deploy as soon as there are headlines to write about.
+  if (env.GEMINI_API_KEY) {
+    const slot = briefingSlot(ms);
+    if (slot) {
+      await record("briefing", () => buildBriefing(env, slot, { now: ms, cfg }));
+      return report.join(" · ");
+    }
+    if (!(await latestBriefing(env)) && (await headlineCount(env, ms)) >= 5 && (await claim(env, "news:briefing-first", 30 * 60_000))) {
+      await record("briefing (first)", () => buildBriefing(env, "first", { force: true, now: ms, cfg }));
+      return report.join(" · ");
+    }
+  }
+
+  if (isResultsRun(ms)) {
     // Hourly on weekdays: results (actual vs. consensus, reported EPS, rate
     // decisions) appear once they are published.
     await record("calendar results", () =>
       refreshCalendar(env, ms, { cfg, back: 1, ahead: 1, only: ["meetings", "yahoo-economic", "nasdaq"] }));
-  }
-
-  // The only model calls the cron makes: the briefing.
-  if (!env.GEMINI_API_KEY) {
-    report.push("briefing skipped: GEMINI_API_KEY is not set");
     return report.join(" · ");
   }
-  const slot = briefingSlot(ms);
-  if (slot) {
-    await record("briefing", () => buildBriefing(env, slot, { now: ms, cfg }));
-  } else if (!(await latestBriefing(env)) && (await claim(env, "news:briefing-first", 60 * 60_000))) {
-    // A fresh deploy: the first briefing comes with the first fetch, not at the next slot.
-    await record("briefing (first)", () => buildBriefing(env, "first", { force: true, now: ms, cfg }));
-  }
+
+  // Every other run fetches the next third of the sources.
+  await record("fetch", async () => ingest(env, ms, cfg, fetch, plan ?? { part: await nextFetchPart(env), of: FETCH_PARTS, budget: MAX_NEW_PER_RUN }));
   return report.join(" · ");
 }

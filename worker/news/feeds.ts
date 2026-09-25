@@ -73,30 +73,49 @@ const YAHOO_SEARCH = "https://query2.finance.yahoo.com/v1/finance/search";
 // fetching
 // --------------------------------------------------------------------------
 
+/** True for a headline already stored: it is skipped before any further work. */
+export type Known = (title: string) => boolean;
+
 /**
  * Every source in parallel (a few at a time), 10 s each. A failed source is
  * skipped and reported in `health`; it never blocks the run.
+ *
+ * CPU is the scarce thing here (10 ms per run on the Workers free plan), so
+ * headlines already stored (`known`) are dropped right after parsing, and
+ * only the rest are normalized, classified and hashed.
  */
+export interface FetchPlan {
+  /** Which share of the sources this run fetches: sources i with i % of === part. */
+  part: number;
+  of: number;
+  /** New headlines normalized per run at most; the rest are still new next run. */
+  budget: number;
+}
+
 export async function fetchAll(
   cfg: Config = CONFIG,
   fetcher: typeof fetch = fetch,
+  known: Known = () => false,
+  plan: FetchPlan = { part: 0, of: 1, budget: Infinity },
 ): Promise<{ items: RawItem[]; health: Record<string, SourceHealth> }> {
-  const jobs: { id: string; run: () => Promise<RawItem[]> }[] = [
-    ...cfg.feeds.map((feed) => ({ id: feed.id, run: () => fetchFeed(feed, cfg, fetcher) })),
+  const budget = { left: plan.budget };
+  const all: { id: string; run: () => Promise<{ items: RawItem[]; seen: number }> }[] = [
+    ...cfg.feeds.map((feed) => ({ id: feed.id, run: () => fetchFeed(feed, cfg, fetcher, known, budget) })),
     ...cfg.watchlist.map((w) => ({
       id: `yahoo:${w.symbol}`,
-      run: () => fetchYahoo(w.symbol, "company", w.region, cfg, fetcher),
+      run: () => fetchYahoo(w.symbol, "company", w.region, cfg, fetcher, known, budget),
     })),
     ...cfg.commodities.map((c) => ({
       id: `yahoo:${c.symbol}`,
-      run: () => fetchYahoo(c.symbol, "commodities", "global", cfg, fetcher),
+      run: () => fetchYahoo(c.symbol, "commodities", "global", cfg, fetcher, known, budget),
     })),
   ];
+  const jobs = all.filter((_, i) => i % plan.of === plan.part);
   const health: Record<string, SourceHealth> = {};
   const lists = await mapLimit(jobs, 8, async (job) => {
     try {
-      const items = await job.run();
-      health[job.id] = { ok: true, count: items.length };
+      const { items, seen } = await job.run();
+      health[job.id] = { ok: true, count: seen };
       return items;
     } catch (err) {
       health[job.id] = { ok: false, count: 0, error: String(err instanceof Error ? err.message : err).slice(0, 200) };
@@ -115,20 +134,24 @@ async function get(url: string, fetcher: typeof fetch, accept: string): Promise<
   return res.text();
 }
 
-async function fetchFeed(feed: Feed, cfg: Config, fetcher: typeof fetch): Promise<RawItem[]> {
+async function fetchFeed(feed: Feed, cfg: Config, fetcher: typeof fetch, known: Known, budget: { left: number }): Promise<{ items: RawItem[]; seen: number }> {
   const xml = await get(feed.url, fetcher, "application/rss+xml, application/atom+xml, application/xml, text/xml");
   const entries = parseFeed(xml);
   if (!entries.length) throw new Error("no items in the feed");
   const out: RawItem[] = [];
+  const since = Date.now() - 26 * 3_600_000;
   for (const e of entries) {
-    const item = await toItem(
+    // Old and already-stored headlines cost nothing beyond the parse.
+    if (known(e.title) || Date.parse(e.date) < since || budget.left <= 0) continue;
+    budget.left--;
+    const item = toItem(
       { title: e.title, link: e.link, date: e.date, source: feed.name },
       { sourceId: feed.id, category: feed.category, region: feed.region, weight: feed.weight },
       cfg,
     );
     if (item) out.push(item);
   }
-  return out;
+  return { items: out, seen: entries.length };
 }
 
 async function fetchYahoo(
@@ -137,14 +160,18 @@ async function fetchYahoo(
   region: Region,
   cfg: Config,
   fetcher: typeof fetch,
-): Promise<RawItem[]> {
+  known: Known,
+  budget: { left: number },
+): Promise<{ items: RawItem[]; seen: number }> {
   const url = `${YAHOO_SEARCH}?${new URLSearchParams({ q: symbol, newsCount: "10", quotesCount: "0" })}`;
   const body = JSON.parse(await get(url, fetcher, "application/json"));
   const news: any[] = Array.isArray(body?.news) ? body.news : [];
   const out: RawItem[] = [];
   for (const n of news) {
     const when = Number(n?.providerPublishTime);
-    const item = await toItem(
+    if (known(cleanText(String(n?.title ?? ""))) || when * 1000 < Date.now() - 26 * 3_600_000 || budget.left <= 0) continue;
+    budget.left--;
+    const item = toItem(
       {
         title: String(n?.title ?? ""),
         link: String(n?.link ?? ""),
@@ -157,7 +184,7 @@ async function fetchYahoo(
     );
     if (item) out.push(item);
   }
-  return out;
+  return { items: out, seen: news.length };
 }
 
 // --------------------------------------------------------------------------
@@ -170,11 +197,15 @@ export interface FeedEntry {
   date: string;
 }
 
-/** RSS <item>s and Atom <entry>s, by pattern: Workers have no DOMParser. */
+const MAX_PER_FEED = 25;
+
+/** RSS <item>s and Atom <entry>s, by pattern: Workers have no DOMParser. The newest 25 per feed. */
 export function parseFeed(xml: string): FeedEntry[] {
   const out: FeedEntry[] = [];
-  const blocks = xml.match(/<item\b[\s\S]*?<\/item>|<entry\b[\s\S]*?<\/entry>/gi) ?? [];
-  for (const block of blocks.slice(0, 80)) {
+  let n = 0;
+  for (const m of xml.matchAll(/<item\b[\s\S]*?<\/item>|<entry\b[\s\S]*?<\/entry>/gi)) {
+    if (n++ >= MAX_PER_FEED) break;
+    const block = m[0];
     const title = cleanText(tag(block, "title"));
     let link = cleanText(tag(block, "link"));
     if (!/^https?:\/\//.test(link)) {
@@ -190,8 +221,12 @@ export function parseFeed(xml: string): FeedEntry[] {
   return out;
 }
 
+const TAGS = new Map<string, RegExp>();
+
 function tag(block: string, name: string): string {
-  const m = block.match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)</${name}>`, "i"));
+  let re = TAGS.get(name);
+  if (!re) TAGS.set(name, (re = new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)</${name}>`, "i")));
+  const m = block.match(re);
   return m ? m[1] : "";
 }
 
@@ -242,9 +277,21 @@ export function normalizeUrl(raw: string): string {
   return url.toString().replace(/\?$/, "");
 }
 
-export async function itemId(url: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(url));
-  return [...new Uint8Array(digest)].slice(0, 6).map((b) => b.toString(16).padStart(2, "0")).join("");
+/**
+ * 12 hex characters from the normalized URL: two independent 32-bit string
+ * hashes (cyrb53's mixing). Not cryptographic — it only has to tell URLs
+ * apart — and a small fraction of the CPU SHA-256 took.
+ */
+export function itemId(url: string): string {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < url.length; i++) {
+    const ch = url.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, "0").slice(2) + (h1 >>> 0).toString(16).padStart(8, "0").slice(2);
 }
 
 const COMMODITY_WORDS = /\b(oil|crude|brent|wti|opec\+?|natural gas|lng|gold|silver|copper|soybeans?|corn|wheat|coffee|grains?|harvest|wasde)\b/i;
@@ -265,29 +312,41 @@ export function classify(title: string, category: Category, region: Region): { c
   return { category: cat, region: reg };
 }
 
+const MATCHERS = new WeakMap<WatchItem[], { symbol: string; upper: string; name: RegExp; bare: RegExp | null }[]>();
+
 /** Watchlist tickers a headline is about: named, or given by Yahoo. */
 export function tickersFor(title: string, given: string[], watchlist: WatchItem[]): string[] {
-  const found = new Set<string>();
-  const upperGiven = new Set(given.map((t) => t.toUpperCase()));
-  for (const w of watchlist) {
-    const bare = w.symbol.split(".")[0];
-    const named = new RegExp(`\\b${escapeRe(w.name)}\\b`, "i").test(title);
-    const symbol = new RegExp(`(^|[^A-Za-z])${escapeRe(bare)}([^A-Za-z]|$)`).test(title) && bare.length >= 3;
-    if (upperGiven.has(w.symbol.toUpperCase()) || named || symbol) found.add(w.symbol);
+  let matchers = MATCHERS.get(watchlist);
+  if (!matchers) {
+    matchers = watchlist.map((w) => {
+      const bare = w.symbol.split(".")[0];
+      return {
+        symbol: w.symbol,
+        upper: w.symbol.toUpperCase(),
+        name: new RegExp(`\\b${escapeRe(w.name)}\\b`, "i"),
+        bare: bare.length >= 3 ? new RegExp(`(^|[^A-Za-z])${escapeRe(bare)}([^A-Za-z]|$)`) : null,
+      };
+    });
+    MATCHERS.set(watchlist, matchers);
   }
-  return [...found];
+  const upperGiven = given.length ? new Set(given.map((t) => t.toUpperCase())) : null;
+  const found: string[] = [];
+  for (const m of matchers) {
+    if (upperGiven?.has(m.upper) || m.name.test(title) || m.bare?.test(title)) found.push(m.symbol);
+  }
+  return found;
 }
 
 function escapeRe(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function toItem(
+function toItem(
   e: { title: string; link: string; date: string; source: string },
   meta: { sourceId: string; category: Category; region: Region; weight: number },
   cfg: Config,
   givenTickers: string[] = [],
-): Promise<RawItem | null> {
+): RawItem | null {
   const title = cleanText(e.title).slice(0, 300);
   const url = normalizeUrl(e.link);
   const published = Date.parse(e.date);
@@ -297,7 +356,7 @@ async function toItem(
   // A futures headline is about the commodity, not a watchlist company.
   const cat = meta.category === "commodities" ? "commodities" : tickers.length && category === "markets" ? "company" : category;
   return {
-    id: await itemId(url),
+    id: itemId(url),
     title,
     url,
     source: e.source.slice(0, 80),

@@ -51,7 +51,7 @@ research/markettape/index.html   the page
 
 **Which requests can cause a model call.** Only `POST /api/chat` and `POST /api/news/refresh`, both of which answer `401` to anyone not signed in before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's only model call is the scheduled briefing.
 
-**One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything and `newsTick()` decides per run what is due, in New York time: the headline fetch (every run on weekdays, on the hour at weekends), the briefing at the briefing times, the calendar's results hourly on weekdays, and at 05:00 the calendar plus the daily clean-up (7-day retention, old contact messages and sessions). Right after a deploy, the first run builds the calendar and the first briefing instead of waiting for their times.
+**One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything, and `newsTick()` gives each run exactly one job, in New York time: the calendar at 05:00 (economic calendar, meetings, fallbacks, plus the daily clean-up: 7-day retention, old contact messages and sessions) and 05:30 (earnings, dated events, rules); the briefing at the briefing times; the calendar's results at a quarter past each hour on weekdays; and the headline fetch in every other run. Right after a deploy, the first runs build the calendar (two runs), then fetch, then write the first briefing as soon as there are headlines, instead of waiting for their times.
 
 **Settings** (`[vars]` in `wrangler.toml`): `GEMINI_MODEL` (the briefing, and the chat unless set otherwise), `GEMINI_CHAT_MODEL` (optional, the chat), `GEMINI_FALLBACK_MODEL` (a comma-separated list, tried in order when the main model is overloaded, over its quota or not available on the key, after two short retries; `off` for none), `NEWS_CHAT_SEARCH` (`on` = Google Search grounding in the chat, off by default), `NEWS_CHAT_DAILY_LIMIT` (default 50). The watchlist, the commodity list and the feeds are in `worker/news/sources.json`; the calendar's fixed parts in `worker/news/calendar.json`.
 
@@ -63,7 +63,7 @@ research/markettape/index.html   the page
 - Eurostat has no headline feed in `sources.json`: its feed lists dataset updates, not news.
 - The feed and calendar URLs could not be checked from the environment this was built in. Any that are wrong show up in the Worker's log (`news: no items for 24 h from …`, `calendar: … failed`) and under the page's headlines; fix them in `sources.json` / `calendar.json`.
 
-**CPU.** The fetch parses ~20 feeds and 19 Yahoo answers per run. On the free plan's 10 ms CPU per invocation that is tight; if the log shows `exceededCpu` for the news cron, drop feeds from `sources.json` or move to Workers Paid. A run that fails writes nothing, and the next one, 15 minutes later, catches up.
+**CPU.** The Workers free plan allows 10 ms of CPU per run, which is why a run does one job only. A fetch run takes a third of the sources (so each source is read every 45 minutes), skips headlines already stored right after parsing, reads the newest 25 entries per feed, and normalizes at most 80 new headlines (the rest follow on the next run); measured at about 5–6 ms. The calendar is split over two runs for the same reason. If the log still shows `exceededCpu`, move to Workers Paid ($5/month, 30 s of CPU per run). A run that fails writes nothing, and the next one catches up.
 
 ## Goal and scope
 
@@ -327,8 +327,8 @@ Fetch headlines often, but run the briefing model only at fixed times: that keep
 
 | Job | When | AI? |
 | --- | --- | --- |
-| Fetch + dedupe | Every 15 min around the clock on weekdays (Asian, European and US sessions); hourly on weekends | No |
-| Calendar + clean-up | 05:00 | No |
+| Fetch + dedupe | Every 15 min around the clock, a third of the sources per run (each source every 45 min) | No |
+| Calendar + clean-up | 05:00 and 05:30 | No |
 | Calendar results | Hourly on weekdays, at :15 | No |
 | Asia close and European open briefing | 02:30 (08:30 Vienna) | Yes |
 | Pre-market briefing | 08:00 | Yes |
