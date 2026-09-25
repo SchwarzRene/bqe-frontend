@@ -102,7 +102,7 @@ async function drawChart(container, t, requestedInterval = null) {
     // Entry and exit are crosses rather than arrows: a vertical line at the
     // time (drawn by the drawing layer) through the price line at the price.
     const epoch = (iso) => Math.floor(new Date(iso).getTime() / 1000);
-    const marks = [{ t: epoch(t.entry_time), p: t.entry_price, color: entryColor }];
+    const marks = [{ t: epoch(t.entry_time), p: t.entry_price, color: entryColor, dashed: true }];
     if (t.exit_time) marks.push({ t: epoch(t.exit_time), p: t.exit_price, color: "#8b909b", dashed: true });
     const rendered = candleChart(container, candles, {
       digits: t.digits,
