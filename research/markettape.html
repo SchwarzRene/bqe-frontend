@@ -313,7 +313,7 @@ company, and the commodity groups.</p>
 </ul>
 
 <h3>Model choice</h3>
-<p>A small, cheap model (Haiku class) is enough: the input is ~3–4k tokens, the output under 1.5k.</p>
+<p>Gemini, through the same <code>GEMINI_API_KEY</code> and <code>GEMINI_MODEL</code> the calendar job already uses (<code>gemini-3.7-flash</code> today). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k, and the briefing needs no search grounding, so it does not use up the grounded-request limit the calendar job relies on.</p>
 
 <h2 id="chat"><span class="num">6</span> AI chat</h2>
 <p class="lead">Ask about today, get an answer with the headlines it came from.</p>
@@ -334,7 +334,7 @@ beyond this and, optionally, web search.</p>
   <tr><td>Older headlines</td><td>Up to 7 days in D1</td><td>Tool: <code>search_headlines(query, days, region)</code></td></tr>
   <tr><td>Event results</td><td>EPS vs. estimate, Fed rate and vote</td><td>Tool: <code>get_event_result(event_id)</code></td></tr>
   <tr><td>Prices</td><td>Latest move for a ticker or futures contract, from the existing Yahoo data</td><td>Tool: <code>get_price(symbol)</code></td></tr>
-  <tr><td>The wider web (optional)</td><td>Anything not in the app's data</td><td>Anthropic's web search tool, off by default</td></tr>
+  <tr><td>The wider web (optional)</td><td>Anything not in the app's data</td><td>Google Search grounding (<code>tools: [{ google_search: {} }]</code>), off by default</td></tr>
 </table>
 
 <h3>Answer rules (system prompt)</h3>
@@ -368,11 +368,10 @@ answers.</p>
 
 <h3>Model and cost</h3>
 <ul>
-  <li>Model: Sonnet-class for chat (better reasoning over many headlines), Haiku-class as the cheap option. Configurable in the Worker.</li>
-  <li>The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it is sent with prompt caching; cached input is billed at about 10% of the normal rate.</li>
-  <li>Rough cost per question at ~10k input and ~500 output tokens: about $0.01 with Haiku 4.5 ($1 / $5 per million tokens) and about $0.04 with Sonnet ($3 / $15), before caching savings.</li>
-  <li>At 20 questions a day that is roughly $8 a month with Haiku or $24 with Sonnet, less with caching. Web search, if enabled, adds $10 per 1,000 searches plus the tokens of the results.</li>
-  <li>Check current prices at <a href="https://docs.claude.com/en/docs/about-claude/pricing">Claude API pricing</a>.</li>
+  <li>Model: Gemini, with the existing <code>GEMINI_API_KEY</code> secret (Worker → Settings → Variables and Secrets). The model comes from <code>GEMINI_MODEL</code> in <code>wrangler.toml</code>; a separate <code>GEMINI_CHAT_MODEL</code> can point the chat at a larger model later.</li>
+  <li>A question is ~10k input and ~500 output tokens. The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it goes first in the prompt, where Gemini's context caching can reuse it on models that support it.</li>
+  <li>On the free tier this costs nothing but is rate-limited per minute and per day, and Google may use prompts to improve its products — the headlines are public, but the questions are the user's own words. The paid tier lifts both; check current <a href="https://ai.google.dev/gemini-api/docs/pricing">Gemini API pricing</a> and <a href="https://ai.google.dev/gemini-api/docs/rate-limits">rate limits</a>.</li>
+  <li>Google Search grounding, if turned on for the chat, counts against its own grounded-request limit, which the calendar job also uses.</li>
 </ul>
 
 <h3>Limits and security</h3>
@@ -380,7 +379,7 @@ answers.</p>
   <li>The API key lives only in the Worker as a secret; the browser never sees it</li>
   <li><strong>AI features are for signed-in users only</strong> (the site's own accounts, <code>worker/auth.ts</code>): the chat and a fresh briefing on Refresh. Guests read the scheduled briefing, the calendar and the headlines, and get the sign-in dialog when they press Ask AI</li>
   <li>The Worker enforces it: <code>POST /api/chat</code> and the refresh endpoint check the session cookie with <code>currentUser()</code> and answer <code>401</code> without one — the locked button alone keeps no one out</li>
-  <li>Rate limit per user, e.g. 50 questions a day, and a monthly spending cap in the Anthropic console</li>
+  <li>Rate limit per user, e.g. 50 questions a day, and, on the paid tier, a budget alert on the Google Cloud billing account</li>
 </ul>
 
 <h2 id="ui"><span class="num">7</span> UI</h2>
@@ -436,7 +435,7 @@ their reported numbers, and stores them in D1.</p>
 
 <h2 id="schedule"><span class="num">9</span> Schedule, cost and storage</h2>
 <p class="lead">Fetch headlines often, run the briefing model only at fixed times.</p>
-<p>That keeps the briefing cost around $1 a month. The chat is billed per question on top (see
+<p>That keeps the briefing to about 90 model calls a month. The chat is billed per question on top (see
 <a href="#chat">AI chat</a>).</p>
 
 <h3>Schedule (Cloudflare Cron Triggers, New York time)</h3>
@@ -452,8 +451,8 @@ their reported numbers, and stores them in D1.</p>
 </table>
 
 <h3>Cost (approximate)</h3>
-<p>About 90 briefings a month × ~4k input and ~1.5k output tokens. With a Haiku-class model that
-is roughly $0.50–1.50 per month; check current API pricing. Running the model every 15 minutes
+<p>About 90 briefings a month × ~4k input and ~1.5k output tokens — a handful of requests a day,
+well inside Gemini's free tier, and small change on the paid one. Running the model every 15 minutes
 instead would cost about 5–10× more for little gain. The fetch jobs, storage and Worker fit in
 Cloudflare's free tier at this volume.</p>
 
@@ -474,7 +473,7 @@ Cloudflare's free tier at this volume.</p>
   <tr><td>Paywalled links</td><td>Show source name so the reader knows before clicking</td></tr>
   <tr><td>Copyright</td><td>Store and show only headline, source, link, time; summaries in own words; no article bodies</td></tr>
   <tr><td>Feed terms of use</td><td>Personal, non-commercial use; check each publisher's RSS terms before making the page public</td></tr>
-  <tr><td>Chat costs grow with use</td><td>AI features for signed-in users only, checked on the Worker; per-user daily limit, monthly spending cap, prompt caching</td></tr>
+  <tr><td>Chat costs grow with use</td><td>AI features for signed-in users only, checked on the Worker; per-user daily limit, Gemini free-tier limits or a billing budget alert, context caching</td></tr>
   <tr><td>Instructions hidden in headlines (prompt injection)</td><td>Headlines passed as data; system prompt tells the model to ignore instructions inside them; chat has read-only tools</td></tr>
   <tr><td>Chat gives advice or overstates</td><td>Answer rules: no trade recommendations, say when the news doesn't answer, always show sources</td></tr>
   <tr><td>Russian state media</td><td>Not used as sources: several are under EU broadcast bans. Russia coverage comes from independent outlets, BBC and the Bank of Russia; check the EU sanctions list before adding any Russian outlet</td></tr>
@@ -486,7 +485,7 @@ Cloudflare's free tier at this volume.</p>
   <div class="ventry"><h4><span class="vtag">open</span>Watchlist</h4><div class="row">Which companies go on it — the same list the calendar job uses (<code>MARKETTAPE_TICKERS</code>)?</div></div>
   <div class="ventry"><h4><span class="vtag">open</span>Briefing language</h4><div class="row">English or German?</div></div>
   <div class="ventry"><h4><span class="vtag">open</span>Update rhythm</h4><div class="row">Are fixed briefings a day enough, or near-live updates?</div></div>
-  <div class="ventry"><h4><span class="vtag">open</span>Chat model</h4><div class="row">Sonnet-class or Haiku-class? Web search on or off?</div></div>
+  <div class="ventry"><h4><span class="vtag">open</span>Chat model</h4><div class="row">Gemini: provider decided. Same Flash model as the briefing, or a larger one for the chat? Google Search grounding on or off?</div></div>
   <div class="ventry"><h4><span class="vtag">later</span>Alerts</h4><div class="row">Push alert for importance-3 stories?</div></div>
   <div class="ventry win"><h4><span class="vtag">decided</span>Coverage</h4><div class="row">Europe (ECB, Eurostat, Euronews, European tickers and earnings), Asia and Russia (BBC Asia, Nikkei Asia, SCMP, The Moscow Times, Meduza, Bank of Russia), and commodities as a separate page. Chat about current events: yes.</div></div>
 </div>

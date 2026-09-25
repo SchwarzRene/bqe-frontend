@@ -161,7 +161,7 @@ Ranked down: opinion pieces, listicles, single-stock tips, celebrity business ne
 
 **Model choice**
 
-A small, cheap model (Haiku class) is enough: the input is ~3–4k tokens, the output under 1.5k.
+Gemini, through the same `GEMINI_API_KEY` and `GEMINI_MODEL` the calendar job already uses (`gemini-3.7-flash` today). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k, and the briefing needs no search grounding, so it does not use up the grounded-request limit the calendar job relies on.
 
 ## AI chat
 
@@ -180,7 +180,7 @@ The Worker builds the context for each question; the model has no other knowledg
 | Older headlines | Up to 7 days in D1 | Tool: `search_headlines(query, days, region)` |
 | Event results | EPS vs. estimate, Fed rate and vote, from the calendar job | Tool: `get_event_result(event_id)` |
 | Prices | Latest move for a ticker or futures contract, from the existing Yahoo data | Tool: `get_price(symbol)` |
-| The wider web (optional) | Anything not in the app's data | Anthropic's web search tool, off by default |
+| The wider web (optional) | Anything not in the app's data | Google Search grounding (`tools: [{ google_search: {} }]`), off by default |
 
 **Answer rules (system prompt)**
 
@@ -218,18 +218,17 @@ Streaming (server-sent events) can come later; the first version returns the who
 
 **Model and cost**
 
-- Model: Sonnet-class for chat (better reasoning over many headlines), Haiku-class as the cheap option. Configurable in the Worker.
-- The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it is sent with prompt caching; cached input is billed at about 10% of the normal rate.
-- Rough cost per question at ~10k input and ~500 output tokens: about $0.01 with Haiku 4.5 ($1 / $5 per million tokens) and about $0.04 with Sonnet ($3 / $15), before caching savings.
-- At 20 questions a day that is roughly $8 a month with Haiku or $24 with Sonnet, less with caching. Web search, if enabled, adds $10 per 1,000 searches plus the tokens of the results.
-- Check current prices at [Claude API pricing](https://docs.claude.com/en/docs/about-claude/pricing).
+- Model: Gemini, with the existing `GEMINI_API_KEY` secret (Worker → Settings → Variables and Secrets). The model comes from `GEMINI_MODEL` in `wrangler.toml`; a separate `GEMINI_CHAT_MODEL` can point the chat at a larger model later.
+- A question is ~10k input and ~500 output tokens. The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it goes first in the prompt, where Gemini's context caching can reuse it on models that support it.
+- On the free tier this costs nothing but is rate-limited per minute and per day, and Google may use prompts to improve its products — the headlines are public, but the questions are the user's own words. The paid tier lifts both; check current [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) and [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
+- Google Search grounding, if turned on for the chat, counts against its own grounded-request limit, which the calendar job also uses.
 
 **Limits and security**
 
 - The API key lives only in the Worker as a secret; the browser never sees it
 - AI features are for signed-in users only (the site's accounts, `worker/auth.ts`): the chat and a fresh briefing on Refresh. Guests can read the scheduled briefing, the calendar and the headlines; Ask AI shows a lock and opens the sign-in dialog
 - The Worker enforces it: `POST /api/chat` and the refresh endpoint check the session cookie with `currentUser()` and answer `401` without one. The locked button alone keeps no one out
-- Rate limit per user, e.g. 50 questions a day, and a monthly spending cap in the Anthropic console
+- Rate limit per user, e.g. 50 questions a day, and, on the paid tier, a budget alert on the Google Cloud billing account
 
 ## UI
 
@@ -281,7 +280,7 @@ Calendar events are stored in D1 and refreshed daily at 05:00 ET; results are wr
 
 ## Schedule, cost and storage
 
-Fetch headlines often, but run the briefing model only at fixed times: that keeps the briefing cost around $1 a month. The chat is billed per question on top (see AI chat).
+Fetch headlines often, but run the briefing model only at fixed times: that keeps the briefing to about 90 model calls a month. The chat is billed per question on top (see AI chat).
 
 **Schedule (Cloudflare Cron Triggers, New York time)**
 
@@ -297,7 +296,7 @@ Fetch headlines often, but run the briefing model only at fixed times: that keep
 
 **Cost (approximate)**
 
-About 90 briefings a month × ~4k input and ~1.5k output tokens. With a Haiku-class model that is roughly $0.50–1.50 per month; check current API pricing. Running the model every 15 minutes instead would cost about 5–10× more for little gain.
+About 90 briefings a month × ~4k input and ~1.5k output tokens — a handful of requests a day, well inside Gemini's free tier, and small change on the paid one. Running the model every 15 minutes instead would cost about 5–10× more for little gain.
 
 The fetch jobs, storage and Worker fit in Cloudflare's free tier at this volume.
 
@@ -319,7 +318,7 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 | Paywalled links | Show source name so the reader knows before clicking |
 | Copyright | Store and show only headline, source, link, time; summaries in own words; no article bodies |
 | Feed terms of use | Personal, non-commercial use; check each publisher's RSS terms before making the page public |
-| Chat costs grow with use | AI features for signed-in users only, checked on the Worker; per-user daily limit, monthly spending cap, prompt caching |
+| Chat costs grow with use | AI features for signed-in users only, checked on the Worker; per-user daily limit, Gemini free-tier limits or a billing budget alert, context caching |
 | Instructions hidden in headlines (prompt injection) | Headlines passed as data; system prompt tells the model to ignore instructions inside them; chat has read-only tools |
 | Chat gives advice or overstates | Answer rules: no trade recommendations, say when the news doesn't answer, always show sources |
 | Russian state media | Not used as sources: several are under EU broadcast bans. Russia coverage comes from independent outlets, BBC and the Bank of Russia; check the EU sanctions list before adding any Russian outlet |
@@ -334,7 +333,8 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 - [ ] Briefing language: English or German?
 - [ ] Three fixed briefings a day enough, or near-live updates?
 - [x] Chat with the model about current events: yes (see AI chat).
-- [ ] Chat model: Sonnet-class or Haiku-class? Web search on or off?
+- [x] AI provider: Gemini, with the existing `GEMINI_API_KEY`.
+- [ ] Chat model: the same Flash model as the briefing, or a larger one? Google Search grounding on or off?
 - [ ] Later: push alert for importance-3 stories?
 
 ## The calendar job (formerly Market Tape)

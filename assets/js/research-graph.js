@@ -257,7 +257,7 @@
       id: "markettape", tag: "Interactive", title: "Market News",
       desc: "A daily briefing on markets, stocks and commodities across the US, Europe, Asia and Russia: free headlines ranked and summarised by a model, an on-now calendar of Fed, ECB, data and earnings events, and a chat that answers from the collected headlines.",
       short: "AI-ranked market briefing with an on-now event calendar.",
-      stack: "RSS · Claude API", href: "/research/markettape/"
+      stack: "RSS · Gemini API", href: "/research/markettape/"
     },
     {
       id: "stack", tag: "Interactive", title: "Stack",
