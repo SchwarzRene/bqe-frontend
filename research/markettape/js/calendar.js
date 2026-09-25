@@ -68,6 +68,51 @@ function coverage() {
   return { from: dayKey(Date.parse(all[0].start)), to: dayKey(Date.parse(all[all.length - 1].start)) };
 }
 
+// --------------------------------------------------------------------------
+// where an event leads: its live stream, the publisher's own page, or
+// Yahoo's calendar for the day (with the consensus and the actual figure)
+// --------------------------------------------------------------------------
+
+// The official page for releases and meetings, by title.
+const OFFICIAL = [
+  [/\bFOMC\b|^United States:? .*rate decision|\bFed\b.*rate decision/i, 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', 'Federal Reserve'],
+  [/\bECB\b|^Euro Area .*rate decision/i, 'https://www.ecb.europa.eu/press/govcdec/mopo/html/index.en.html', 'ECB'],
+  [/Bank of England|^United Kingdom .*rate decision/i, 'https://www.bankofengland.co.uk/monetary-policy/the-interest-rate-bank-rate', 'Bank of England'],
+  [/\bSNB\b|^Switzerland .*rate decision/i, 'https://www.snb.ch/en/the-snb/mandates-goals/monetary-policy/decisions', 'SNB'],
+  [/Bank of Japan|^Japan .*rate decision/i, 'https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm', 'Bank of Japan'],
+  [/Bank of Russia|^Russia .*rate decision/i, 'https://www.cbr.ru/eng/dkp/', 'Bank of Russia'],
+  [/\bPBoC\b|loan prime rate/i, 'http://www.pbc.gov.cn/en/3688006/index.html', 'PBoC'],
+  [/EIA weekly petroleum/i, 'https://www.eia.gov/petroleum/supply/weekly/', 'EIA'],
+  [/EIA natural gas storage/i, 'https://ir.eia.gov/ngs/ngs.html', 'EIA'],
+  [/USDA crop progress/i, 'https://www.nass.usda.gov/Publications/National_Crop_Progress/', 'USDA'],
+  [/USDA .*export sales/i, 'https://apps.fas.usda.gov/export-sales/esrd1.html', 'USDA'],
+  [/WASDE/i, 'https://www.usda.gov/oce/commodity/wasde', 'USDA'],
+  [/OPEC/i, 'https://www.opec.org/opec_web/en/press_room/28.htm', 'OPEC'],
+  [/^US weekly jobless claims/i, 'https://www.dol.gov/ui/data.pdf', 'US Labor Department'],
+  [/China official PMIs/i, 'https://www.stats.gov.cn/english/PressRelease/', 'NBS China'],
+];
+
+/** The link an event's ↗ button opens, and what it is called. */
+export function eventLink(e) {
+  if (e.streamUrl && Date.parse(e.end) > Date.now()) return { url: e.streamUrl, label: isLive(e) ? 'Watch live' : 'Live stream' };
+  const official = OFFICIAL.find(([re]) => re.test(e.title));
+  if (official) return { url: official[1], label: official[2] };
+  if (e.type === 'earnings') {
+    const t = (e.tickers || [])[0];
+    return t
+      ? { url: `https://finance.yahoo.com/quote/${encodeURIComponent(t)}/`, label: `${t} on Yahoo Finance` }
+      : { url: `https://finance.yahoo.com/calendar/earnings?day=${e.start.slice(0, 10)}`, label: 'Earnings calendar' };
+  }
+  // Data releases and speakers from Yahoo's economic calendar: that day's page there.
+  return { url: `https://finance.yahoo.com/calendar/economic?day=${e.start.slice(0, 10)}`, label: 'Economic calendar' };
+}
+
+const linkBtn = (e) => {
+  const l = eventLink(e);
+  return `<a class="ev-link" href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener" title="${esc(l.label)} ↗" aria-label="Open: ${esc(l.label)}">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg></a>`;
+};
+
 const isLive = (e, now = Date.now()) => Date.parse(e.start) <= now && now < Date.parse(e.end);
 const catStyle = (e) => `--c:${CAT[catOf(e)].color}`;
 
@@ -180,6 +225,7 @@ function weekGrid(days) {
           <div class="wt"><span>${time(e.start)}${isLive(e, now) ? ' · live' : ''}</span>${impDots(impOf(e))}</div>
           <div class="wn">${esc(e.title)}</div>
           ${e.result ? `<div class="wr">${esc(e.result)}</div>` : ''}
+          ${linkBtn(e)}
         </div>`).join('') : '<span class="meta" style="padding:4px">—</span>'}</div>
     </div>`);
   }
@@ -199,9 +245,10 @@ function eventDetail(e, now = Date.now()) {
       <div class="nm">${esc(e.title)}</div>
       <div class="sub">${catIcon(catOf(e), 14)}${CAT[catOf(e)].label} · ${R_NAME[regionOf(e)]} ${impDots(impOf(e))}${isKey(e) ? ' <span class="pill gold">Key</span>' : ''}</div>
       ${e.result ? `<div class="res">${esc(e.result)}</div>` : live ? '<div class="res now">Live now</div>' : ''}
-      ${e.streamUrl && Date.parse(e.end) > now ? `<a class="more-link" style="font-size:12px" href="${esc(safeUrl(e.streamUrl))}" target="_blank" rel="noopener">${live ? 'Watch live ↗' : 'Stream ↗'}</a>` : ''}
+      ${live && e.streamUrl ? `<a class="more-link" style="font-size:12px" href="${esc(safeUrl(e.streamUrl))}" target="_blank" rel="noopener">Watch live ↗</a>` : ''}
       ${heads.length ? `<details class="evheads"><summary>${heads.length} related headline${heads.length > 1 ? 's' : ''}</summary>${heads.map(hl).join('')}</details>` : ''}
     </div>
+    ${linkBtn(e)}
   </div>`;
 }
 

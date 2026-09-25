@@ -92,6 +92,8 @@ function renderCompanies() {
 document.addEventListener('submit', (e) => { handleCompanySubmit(e); });
 
 document.addEventListener('click', (e) => {
+  // An event's ↗ link opens its page; it does not also pick the day.
+  if (e.target.closest('a.ev-link')) return;
   if (handleCompanies(e)) return;
   const t = e.target.closest('[data-region], [data-tz], [data-hl-tab], [data-hl-sort], [data-cal-day], [data-cal-step], [data-cal-today], [data-cal-view], [data-cal-imp], [data-cal-cat], [data-cal-open]');
   if (!t) return;
