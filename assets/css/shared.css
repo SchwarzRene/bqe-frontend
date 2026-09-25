@@ -692,6 +692,42 @@ header {
   border-color: var(--color-gray-400);
 }
 
+.login-switch {
+  color: var(--color-gray-300);
+  font-size: var(--text-sm);
+  text-align: center;
+  margin: 0;
+}
+
+.login-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--color-gold);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.login-ai {
+  font-size: var(--text-sm);
+  color: var(--color-gray-300);
+}
+
+.login-ai.is-on {
+  color: var(--color-success);
+}
+
+.login-admin {
+  text-align: center;
+  text-decoration: none;
+  border-color: var(--color-gold);
+}
+
+.login-admin[hidden] {
+  display: none;
+}
+
 /* Mobile Menu Toggle Button */
 .nav-toggle {
   display: none !important;

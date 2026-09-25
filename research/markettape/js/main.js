@@ -4,12 +4,12 @@
 
 import { addDays, esc, longDate, todayKey, time, tzLabel } from './format.js';
 import { CATS, renderCalendarPage } from './calendar.js';
-import { chat, initChat, renderSuggest, session, setUser } from './chat.js';
+import { chat, hasAi, initChat, renderSuggest, session, setUser } from './chat.js';
 import { globeLabel, mapKeys, renderMap } from './map.js';
 import { analysisOpen, closeAnalysis } from './analysis.js';
 import { companiesCard, handleCompanies, handleCompanySubmit, initCompanies, loadCharts } from './companies.js';
 import { liveCard, nextCard, renderCommodities, renderGeneral, renderStocks } from './pages.js';
-import { allRegions, briefing, data, events, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
+import { allRegions, applyPrefs, briefing, data, events, currentPrefs, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
 
 const $ = (id) => document.getElementById(id);
 const TAB_EMOJI = { general: '📰', stocks: '📈', commodities: '🛢️', calendar: '📅' };
@@ -170,12 +170,12 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 
-// A guest's Refresh re-reads the stored briefing. A signed-in user's asks
+// A guest's Refresh re-reads the stored briefing. A user with AI access asks
 // the Worker to fetch and write a new one (at most one per 15 minutes).
 const refreshBtn = $('refresh');
 refreshBtn.addEventListener('click', async () => {
   data.notice = '';
-  if (session.user) {
+  if (hasAi()) {
     refreshBtn.disabled = true;
     data.notice = 'Fetching headlines and writing a fresh briefing…';
     render();
@@ -209,6 +209,10 @@ setInterval(() => {
 }, 60000);
 
 loadPrefs();
+// A signed-in user's settings from the account replace this browser's.
+if (window.BQE && window.BQE.prefs) {
+  window.BQE.prefs.sync('news', currentPrefs(), (saved) => { applyPrefs(saved); savePrefs({ account: false }); render(); });
+}
 initChat();
 initCompanies(renderCompanies);
 route();

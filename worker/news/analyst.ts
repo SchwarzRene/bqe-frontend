@@ -4,7 +4,7 @@
 //   POST /api/company/analysis {ticker, name} write one: a Gemini call, counted against the
 //                                             chat's daily limit per user
 //
-// Signed-in users only, like the chat. The model gets what the page shows —
+// Signed-in users with AI access only, like the chat. The model gets what the page shows —
 // a year of daily prices worked into returns, volatility and drawdown, the
 // Yahoo fundamentals and analyst consensus, the last week's headlines about
 // the company and its upcoming calendar events — and writes a short analyst
@@ -12,7 +12,7 @@
 // No buy/sell calls and no price targets of its own. An analysis is stored
 // for six hours per ticker and shared by every user who opens the company.
 
-import { currentUser } from "../auth";
+import { aiDenied, currentUser } from "../auth";
 import type { Env } from "../env";
 import { crossSite, isoNow, json, readJson, utcDay } from "../http";
 import { fetchChart, toCandles } from "../market";
@@ -229,6 +229,8 @@ export async function handleAnalysis(request: Request, env: Env): Promise<Respon
   // Checked before anything else: a guest never costs a model call.
   const user = await currentUser(request, env);
   if (!user) return json({ error: "Sign in to get the AI analysis." }, 401);
+  const denied = aiDenied(user);
+  if (denied) return denied;
 
   const body = request.method === "POST" ? await readJson(request, 4096) : null;
   const ticker = String(body?.ticker ?? new URL(request.url).searchParams.get("ticker") ?? "").trim().toUpperCase();

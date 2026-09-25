@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Admin terminal – Black Quant Empire">
+  <title>Admin Terminal – Black Quant Empire</title>
+  <link rel="stylesheet" href="/assets/css/shared.css?v=5">
+  <link rel="stylesheet" href="/assets/css/pages/admin.css">
+  <link rel="icon" href="/assets/images/logo.png" type="image/png" />
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <div id="header-placeholder"></div>
+
+  <main id="main-content" class="admin">
+    <div class="container">
+      <!-- Everything below is filled in by admin.js once it knows who is
+           signed in. The Worker checks the admin role on every request, so
+           this page shows nothing a non-admin could not already see. -->
+      <div class="term" role="region" aria-labelledby="term-title">
+        <div class="term-bar">
+          <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <h1 id="term-title" class="term-title">bqe-admin — users</h1>
+          <span id="term-who" class="term-who"></span>
+        </div>
+
+        <div id="term-gate" class="term-body">
+          <p class="term-line">Checking your session…</p>
+        </div>
+
+        <div id="term-app" class="term-body" hidden>
+          <div class="term-stats" id="term-stats" aria-live="polite"></div>
+
+          <div class="term-tools">
+            <label for="term-filter" class="sr-only">Search users</label>
+            <input id="term-filter" type="search" placeholder="search username or email" autocomplete="off">
+            <div class="term-chips" role="group" aria-label="Show">
+              <button type="button" data-view="all" aria-pressed="true">all</button>
+              <button type="button" data-view="pending" aria-pressed="false">no ai</button>
+              <button type="button" data-view="ai" aria-pressed="false">ai</button>
+              <button type="button" data-view="admin" aria-pressed="false">admins</button>
+              <button type="button" data-view="disabled" aria-pressed="false">suspended</button>
+            </div>
+            <button type="button" id="term-reload" class="term-btn">reload</button>
+          </div>
+
+          <div class="term-table-wrap">
+            <table class="term-table">
+              <caption class="sr-only">Accounts</caption>
+              <thead>
+                <tr>
+                  <th scope="col">user</th>
+                  <th scope="col">role</th>
+                  <th scope="col">ai access</th>
+                  <th scope="col">status</th>
+                  <th scope="col">created</th>
+                  <th scope="col">last sign-in</th>
+                  <th scope="col" title="AI requests today (UTC)">ai today</th>
+                  <th scope="col"><span class="sr-only">actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="term-rows"></tbody>
+            </table>
+          </div>
+
+          <div class="term-console">
+            <div id="term-log" class="term-log" aria-live="polite"></div>
+            <form id="term-form" class="term-prompt">
+              <label for="term-input"><span aria-hidden="true">admin@bqe:~$</span><span class="sr-only">Command</span></label>
+              <input id="term-input" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="type help">
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="footer-placeholder"></div>
+  <script src="/assets/js/components.js"></script>
+  <script src="/assets/js/navigation.js"></script>
+  <script src="/assets/js/session.js"></script>
+  <script src="/assets/js/admin.js"></script>
+</body>
+</html>

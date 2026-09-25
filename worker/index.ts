@@ -2,12 +2,14 @@
 // reach this code; only the paths in wrangler.toml's run_worker_first do,
 // plus the cron triggers.
 
+import { handleAdminUsers } from "./admin";
 import { handleAuth } from "./auth";
 import { handleContact } from "./contact";
 import type { Env } from "./env";
 import { json } from "./http";
 import { handleMarket } from "./market";
 import { handleAnalysis, handleChat, handleNews, newsTick } from "./news";
+import { handleConversations } from "./news/conversations";
 import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
 import { ingest } from "./news/store";
@@ -44,10 +46,15 @@ export default {
       if (m) return handleMarket(request, ctx, m[1]);
 
       if (path === "/api/chat") return handleChat(request, env);
+      m = path.match(/^\/api\/chats(?:\/([^/]+))?$/);
+      if (m) return handleConversations(request, env, m[1] ?? null);
       if (path === "/api/company/analysis") return handleAnalysis(request, env);
 
       m = path.match(/^\/api\/news(?:\/([a-z]+))?$/);
       if (m) return handleNews(request, env, m[1] ?? "");
+
+      m = path.match(/^\/api\/admin\/users(?:\/(\d+)(?:\/([a-z]+))?)?$/);
+      if (m) return handleAdminUsers(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
 
       m = path.match(/^\/api\/admin\/run\/(stack|news|calendar|briefing)$/);
       if (m) {

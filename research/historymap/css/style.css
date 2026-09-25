@@ -469,3 +469,13 @@ html, body {
   #year-label { font-size: .9rem; width: 100%; text-align: center; margin: 2px 0 0; order: 3; }
   #era-title { font-size: 1rem; }
 }
+
+/* Konto-Chip (session.js) rechts oben; die Sidebar liegt darüber. */
+.hm-account {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 999;
+  color: var(--text-dim);
+  background: var(--panel);
+}

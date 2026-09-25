@@ -1,6 +1,7 @@
 // What the page shows and how: the view state (page, region, time zone,
 // calendar settings), the last /api/news answer, and the region names.
-// The viewer's choices are remembered in localStorage; the page works without it.
+// The viewer's choices are remembered in localStorage (the page works without
+// it) and, for a signed-in user, in their account (BQE.prefs, section "news").
 
 export const PAGES = [
   ['general', 'General'],
@@ -41,26 +42,38 @@ const PREFS_KEY = 'bqe:market-news';
 
 export function loadPrefs() {
   try {
-    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-    if (Array.isArray(p.regions)) setRegions(p.regions);
-    else if (typeof p.region === 'string') setRegions([p.region]); // saved before regions combined
-    if (TZ_ID[p.tz]) state.tz = p.tz;
-    if (p.hlSort === 'top' || p.hlSort === 'new') state.hlSort = p.hlSort;
-    if (p.cal) {
-      if (p.cal.view === 'month' || p.cal.view === 'week') state.cal.view = p.cal.view;
-      if (Array.isArray(p.cal.cats)) state.cal.cats = p.cal.cats.filter((c) => typeof c === 'string');
-      if ([1, 2, 3].includes(p.cal.minImp)) state.cal.minImp = p.cal.minImp;
-    }
+    applyPrefs(JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'));
   } catch { /* private mode, blocked storage: defaults */ }
 }
 
-export function savePrefs() {
+/** Take saved settings (from this browser or the account); anything invalid is ignored. */
+export function applyPrefs(p) {
+  if (!p || typeof p !== 'object') return;
+  if (Array.isArray(p.regions)) setRegions(p.regions);
+  else if (typeof p.region === 'string') setRegions([p.region]); // saved before regions combined
+  if (TZ_ID[p.tz]) state.tz = p.tz;
+  if (p.hlSort === 'top' || p.hlSort === 'new') state.hlSort = p.hlSort;
+  if (p.cal) {
+    if (p.cal.view === 'month' || p.cal.view === 'week') state.cal.view = p.cal.view;
+    if (Array.isArray(p.cal.cats)) state.cal.cats = p.cal.cats.filter((c) => typeof c === 'string');
+    if ([1, 2, 3].includes(p.cal.minImp)) state.cal.minImp = p.cal.minImp;
+  }
+}
+
+/** The settings worth remembering. */
+export function currentPrefs() {
+  return {
+    regions: state.regions, tz: state.tz, hlSort: state.hlSort,
+    cal: { view: state.cal.view, cats: state.cal.cats, minImp: state.cal.minImp },
+  };
+}
+
+/** Remember the settings here and, when signed in, in the account. */
+export function savePrefs({ account = true } = {}) {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({
-      regions: state.regions, tz: state.tz, hlSort: state.hlSort,
-      cal: { view: state.cal.view, cats: state.cal.cats, minImp: state.cal.minImp },
-    }));
+    localStorage.setItem(PREFS_KEY, JSON.stringify(currentPrefs()));
   } catch { /* not stored: fine */ }
+  if (account && window.BQE && window.BQE.prefs) window.BQE.prefs.save('news', currentPrefs());
 }
 
 /** Pick regions; picking every region is the same as picking none (all). */

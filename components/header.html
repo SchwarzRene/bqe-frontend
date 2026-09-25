@@ -93,11 +93,40 @@
         </div>
         <p id="login-error" class="login-error" role="alert"></p>
         <button type="submit" class="login-submit">Sign in</button>
+        <p class="login-switch">No account yet? <button type="button" id="show-signup" class="login-link">Create one</button></p>
+      </form>
+
+      <!-- Sign-up: a new account can save its work right away; the AI
+           features wait until an admin grants access. -->
+      <form id="signup-form" class="login-form" hidden>
+        <div class="login-form-group">
+          <label for="signup-username">Username</label>
+          <input type="text" id="signup-username" name="username" autocomplete="username"
+                 minlength="3" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,31}"
+                 title="3–32 characters: letters, digits and . _ -" required />
+        </div>
+        <div class="login-form-group">
+          <label for="signup-email">Email (optional)</label>
+          <input type="email" id="signup-email" name="email" autocomplete="email" maxlength="200" />
+        </div>
+        <div class="login-form-group">
+          <label for="signup-password">Password (at least 8 characters)</label>
+          <input type="password" id="signup-password" name="password" autocomplete="new-password" minlength="8" required />
+        </div>
+        <div class="login-form-group">
+          <label for="signup-confirm">Repeat the password</label>
+          <input type="password" id="signup-confirm" name="confirm" autocomplete="new-password" minlength="8" required />
+        </div>
+        <p id="signup-error" class="login-error" role="alert"></p>
+        <button type="submit" class="login-submit">Create account</button>
+        <p class="login-switch">Already have one? <button type="button" id="show-login" class="login-link">Sign in</button></p>
       </form>
 
       <!-- Shown instead of the form once signed in (navigation.js). -->
       <div id="account-panel" class="login-form" hidden>
         <p class="login-account">Signed in as <strong id="account-name"></strong>. Your work in the research apps is saved to this account.</p>
+        <p id="account-ai" class="login-account login-ai"></p>
+        <a id="admin-link" href="/pages/admin.html" class="login-submit login-admin" hidden>Open admin terminal</a>
         <form id="password-form" class="login-form">
           <div class="login-form-group">
             <label for="current-password">Current password</label>

@@ -5,11 +5,14 @@
  * /api/state/:app). Guests can use everything, but nothing is stored
  * anywhere: their work lives in the open tab and is gone on reload.
  *
- *   BQE.user                   Promise<{username} | null>
- *   BQE.login(name, password)  -> {username}, throws Error with a message
+ *   BQE.user                   Promise<{username, role, ai} | null>
+ *                              (ai: may use the AI features; an admin grants it)
+ *   BQE.login(name, password)  -> the user, throws Error with a message
+ *   BQE.signup({username, password, email})  -> the new user, signed in
  *   BQE.logout()
  *   BQE.changePassword(current, next)
  *   BQE.store(app)             -> Store (see below)
+ *   BQE.prefs.sync(section, local, apply)   display settings that follow the account
  *   BQE.mountAccountChip(el, {note})   status + sign-in/out for app pages
  *
  * A plain script, not a module, so every page can load it the same way.
@@ -39,10 +42,17 @@
 
   BQE.login = async (username, password) => {
     const { user } = await call("POST", "/api/auth/login", { username, password });
+    prefsDoc = null;
+    BQE.user = Promise.resolve(user);
+    return user;
+  };
+  BQE.signup = async ({ username, password, email = "" }) => {
+    const { user } = await call("POST", "/api/auth/signup", { username, password, email });
     BQE.user = Promise.resolve(user);
     return user;
   };
   BQE.logout = async () => {
+    prefsDoc = null;
     await call("POST", "/api/auth/logout").catch(() => {});
     BQE.user = Promise.resolve(null);
   };
@@ -112,6 +122,57 @@
     return store;
   };
 
+  /**
+   * Display preferences (theme, regions, language …), saved to the account
+   * so they follow the user to any device. Each app keeps its own copy in
+   * localStorage as well, so a guest keeps them too and the page can apply
+   * them before the account has answered.
+   *
+   *   BQE.prefs.sync("journal", {theme}, (saved) => apply(saved))
+   *       signed in: the account's settings win and are passed to apply();
+   *       an account without any yet takes this browser's `local` ones.
+   *   BQE.prefs.save("journal", {theme})   debounced; a no-op for a guest
+   */
+  let prefsDoc = null;
+  const prefsTimers = {};
+  const prefsPending = {};
+  const loadPrefs = () => (prefsDoc = prefsDoc || BQE.user.then((user) =>
+    user ? call("GET", "/api/state/prefs").then((r) => r.data || {}, () => null) : null));
+
+  function flushPrefs(keepalive = false) {
+    const body = Object.assign({}, prefsPending);
+    for (const k of Object.keys(prefsPending)) { delete prefsPending[k]; clearTimeout(prefsTimers[k]); }
+    if (!Object.keys(body).length) return;
+    fetch("/api/state/prefs", {
+      method: "PATCH",
+      keepalive,
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  }
+
+  BQE.prefs = {
+    async save(section, value) {
+      if (!(await BQE.user)) return;
+      prefsPending[section] = value;
+      clearTimeout(prefsTimers[section]);
+      prefsTimers[section] = setTimeout(() => flushPrefs(), 600);
+    },
+    async sync(section, local, apply) {
+      const doc = await loadPrefs();
+      if (!doc) return; // guest, or the account could not be read: keep this browser's
+      const saved = doc[section];
+      if (saved && typeof saved === "object") {
+        try { apply(saved); } catch (error) { console.warn("prefs", section, error); }
+      } else if (local && Object.keys(local).length) {
+        BQE.prefs.save(section, local);
+      }
+    },
+  };
+  // A setting changed just before the tab closes is still saved.
+  window.addEventListener("pagehide", () => flushPrefs(true));
+
   // ── Account chip for app pages (which do not carry the site header) ──────
 
   const CHIP_CSS = `
@@ -133,7 +194,9 @@
       background:#21262d;color:inherit;cursor:pointer}
     dialog.bqe-login button[type=submit]{background:#d4a017;border-color:#d4a017;color:#111}
     dialog.bqe-login .err{color:#f87171;min-height:1.3em;margin:8px 0 0;font-size:13px}
-    dialog.bqe-login .note{font-size:12px;opacity:.7;margin:10px 0 0}`;
+    dialog.bqe-login .note{font-size:12px;opacity:.7;margin:10px 0 0}
+    dialog.bqe-login .switch{font-size:12px;opacity:.85;margin:6px 0 0}
+    dialog.bqe-login .switch button{padding:0;border:0;background:none;color:#d4a017;text-decoration:underline}`;
 
   function injectCss() {
     if (document.getElementById("bqe-chip-css")) return;
@@ -156,7 +219,14 @@
         <input id="bqe-u" name="username" autocomplete="username" required>
         <label for="bqe-p">Password</label>
         <input id="bqe-p" name="password" type="password" autocomplete="current-password" required>
+        <div class="extra" hidden>
+          <label for="bqe-c">Repeat the password</label>
+          <input id="bqe-c" name="confirm" type="password" autocomplete="new-password">
+          <label for="bqe-e">Email (optional)</label>
+          <input id="bqe-e" name="email" type="email" autocomplete="email">
+        </div>
         <p class="err" role="alert"></p>
+        <p class="switch">No account yet? <button type="button">Create one</button></p>
         ${note ? `<p class="note"></p>` : ""}
         <div class="row"><button type="button" value="cancel">Cancel</button><button type="submit">Sign in</button></div>
       </form>`;
@@ -165,13 +235,30 @@
     const form = dialog.querySelector("form");
     const err = dialog.querySelector(".err");
     const done = (user) => { dialog.close(); dialog.remove(); resolve(user); };
+    // One form for both: "Create one" adds the email and repeat fields.
+    let signingUp = false;
+    const toggle = () => {
+      signingUp = !signingUp;
+      dialog.querySelector("h2").textContent = signingUp ? "Create an account" : "Sign in";
+      dialog.querySelector("[type=submit]").textContent = signingUp ? "Create account" : "Sign in";
+      dialog.querySelector(".extra").hidden = !signingUp;
+      dialog.querySelector(".switch").innerHTML = signingUp
+        ? 'Already have one? <button type="button">Sign in</button>'
+        : 'No account yet? <button type="button">Create one</button>';
+      form.password.autocomplete = signingUp ? "new-password" : "current-password";
+      form.confirm.required = signingUp;
+      err.textContent = "";
+    };
+    dialog.querySelector(".switch").addEventListener("click", (e) => { if (e.target.closest("button")) toggle(); });
     dialog.querySelector('[value="cancel"]').addEventListener("click", () => done(null));
     dialog.addEventListener("cancel", () => done(null));
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       err.textContent = "";
       try {
-        done(await BQE.login(form.username.value, form.password.value));
+        if (!signingUp) return done(await BQE.login(form.username.value, form.password.value));
+        if (form.password.value !== form.confirm.value) throw new Error("The passwords don't match.");
+        done(await BQE.signup({ username: form.username.value, password: form.password.value, email: form.email.value }));
       } catch (error) {
         err.textContent = error.message;
       }

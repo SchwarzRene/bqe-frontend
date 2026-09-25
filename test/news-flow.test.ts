@@ -2,13 +2,13 @@
 // repository's migrations applied (a small D1 shim over node:sqlite), and
 // with the feeds and the Gemini API stubbed.
 
-import { readdirSync, readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { d1 } from "./d1";
 import { buildBriefing, latestBriefing } from "../worker/news/briefing";
 import { CALENDAR, type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
 import type { Config } from "../worker/news/feeds";
 import { handleChat, handleNews, newsTick } from "../worker/news/index";
+import { handleConversations } from "../worker/news/conversations";
 import { handleAnalysis, priceStats } from "../worker/news/analyst";
 import { toProfile } from "../worker/profile";
 import { rankCalendar } from "../worker/news/rank";
@@ -22,42 +22,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-
-function d1() {
-  const db = new DatabaseSync(":memory:");
-  for (const f of readdirSync("migrations").sort()) db.exec(readFileSync(`migrations/${f}`, "utf8"));
-  const statement = (sql: string, args: unknown[] = []) => ({
-    sql,
-    args,
-    bind: (...a: unknown[]) => statement(sql, a),
-    async first<T>() {
-      return (db.prepare(sql).get(...(args as any[])) as T) ?? null;
-    },
-    async all<T>() {
-      return { results: db.prepare(sql).all(...(args as any[])) as T[] };
-    },
-    async run() {
-      const r = db.prepare(sql).run(...(args as any[]));
-      return { meta: { changes: Number(r.changes) } };
-    },
-  });
-  return {
-    raw: db,
-    prepare: (sql: string) => statement(sql),
-    async batch(list: ReturnType<typeof statement>[]) {
-      db.exec("BEGIN");
-      try {
-        const out = [];
-        for (const s of list) out.push(await s.run());
-        db.exec("COMMIT");
-        return out;
-      } catch (err) {
-        db.exec("ROLLBACK");
-        throw err;
-      }
-    },
-  };
-}
 
 const cfg: Config = {
   feeds: [
@@ -404,6 +368,18 @@ describe("Market News flow", () => {
     expect(body.answer).toBe("Nvidia is up 10% over five days.");
     expect(body.sources).toEqual([{ label: "Wire", url: "https://wire.example/nvda", id: expect.any(String) }]);
     expect(body.remaining).toBe(0);
+
+    // The question and the answer are saved to the account.
+    expect(body.conversationId).toMatch(/^[0-9a-f]{32}$/);
+    const saved: any = await (await handleConversations(new Request(`https://site/api/chats/${body.conversationId}`, {
+      headers: { Cookie: "bqe_session=tok" },
+    }), env, body.conversationId)).json();
+    expect(saved.title).toBe("How is Nvidia doing?");
+    expect(saved.messages.map((m: any) => [m.role, m.text])).toEqual([
+      ["user", "How is Nvidia doing?"],
+      ["assistant", "Nvidia is up 10% over five days."],
+    ]);
+    expect(saved.messages[1].sources).toEqual([{ label: "Wire", url: "https://wire.example/nvda" }]);
 
     const again = await ask();
     expect(again.status).toBe(429);

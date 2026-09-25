@@ -1,7 +1,8 @@
 // Zweisprachigkeit (Deutsch/Englisch): UI-Texte, Formatierung, Übersetzungshilfen.
 // LANG wird in localStorage gemerkt und per Knopf in der Zeitleiste umgeschaltet.
 
-let LANG = localStorage.getItem('hm-lang') || 'de';
+let LANG = 'de';
+try { LANG = localStorage.getItem('hm-lang') || 'de'; } catch (_) { /* kein Speicher: Deutsch */ }
 
 const UI = {
   de: {

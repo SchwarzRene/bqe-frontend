@@ -40,13 +40,21 @@ function highlightNav(active) {
   $$(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === active));
 }
 
-// The theme is a display preference, not journal data, so it may stay in
-// this browser for guests too.
+// The theme is a display preference, not journal data, so it stays in this
+// browser for guests too; a signed-in user's also follows their account.
 function applyStoredTheme() {
+  let theme = null;
   try {
-    const theme = localStorage.getItem(THEME_KEY);
+    theme = localStorage.getItem(THEME_KEY);
     if (theme) document.documentElement.dataset.theme = theme;
   } catch { /* storage unavailable — fall back to the OS theme */ }
+  window.BQE?.prefs?.sync("journal", theme ? { theme } : {}, (saved) => {
+    if (saved.theme !== "dark" && saved.theme !== "light") return;
+    try { localStorage.setItem(THEME_KEY, saved.theme); } catch { /* ignore */ }
+    if (document.documentElement.dataset.theme === saved.theme) return;
+    document.documentElement.dataset.theme = saved.theme;
+    route();
+  });
 }
 
 function toggleTheme() {
@@ -55,6 +63,7 @@ function toggleTheme() {
   const next = current === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
+  window.BQE?.prefs?.save("journal", { theme: next });
   // Charts read colors at creation time, so re-render to pick up the new theme.
   route();
 }
