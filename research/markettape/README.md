@@ -64,7 +64,7 @@ assets/images/market-news/        the page's pictures: page banners, commodity g
 | `POST /api/company/analysis` | signed in | Writes the note: one Gemini call from a year of prices (returns, volatility, drawdown, averages, volume), the fundamentals, the week's headlines about the company and upcoming events. Counts against the chat's daily limit; stored 6 h per ticker and shared by everyone. |
 | `POST /api/admin/run/{news,calendar,briefing}` | `ADMIN_TOKEN` | Runs a job now: fetch, calendar, or a forced briefing. |
 
-**Which requests can cause a model call.** Only `POST /api/chat`, `POST /api/company/analysis` and `POST /api/news/refresh`, both of which answer `401` to anyone not signed in before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's only model calls are the scheduled briefing and the daily calendar ranking.
+**Which requests can cause a model call.** Only `POST /api/chat`, `POST /api/company/analysis` and `POST /api/news/refresh`, which answer `401` to anyone not signed in and `403` to an account without AI access (granted by an admin in the admin terminal) before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's only model calls are the scheduled briefing and the daily calendar ranking.
 
 **One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything, and `newsTick()` gives each run exactly one job, in New York time: the calendar at 05:00 (economic calendar, meetings, fallbacks, plus the daily clean-up: 7-day retention, old contact messages and sessions) and 05:30 (earnings, dated events, rules); the calendar ranking at 05:45; the briefing at the briefing times; the calendar's results at a quarter past each hour on weekdays; and the headline fetch in every other run. Right after a deploy, the first runs build the calendar (two runs), then fetch, then write the first briefing as soon as there are headlines, instead of waiting for their times.
 
@@ -281,7 +281,7 @@ Streaming (server-sent events) can come later; the first version returns the who
 **Limits and security**
 
 - The API key lives only in the Worker as a secret; the browser never sees it
-- AI features are for signed-in users only (the site's accounts, `worker/auth.ts`): the chat and a fresh briefing on Refresh. Guests read the scheduled briefing, the calendar and the headlines; Ask AI shows a lock and opens the sign-in dialog
+- AI features are for signed-in users an admin has granted AI access (the site's accounts, `worker/auth.ts`; new accounts have none): the chat, the AI analyst and a fresh briefing on Refresh. A signed-in user without it sees Ask AI locked with a note that an admin has to grant access. Guests read the scheduled briefing, the calendar and the headlines; Ask AI shows a lock and opens the sign-in dialog
 - The Worker enforces it: `POST /api/chat` and `POST /api/news/refresh` check the session with `currentUser()` and answer `401` without one, before any model call
 - Rate limit per user, 50 questions a day by default (`NEWS_CHAT_DAILY_LIMIT`), and, on the paid tier, a budget alert on the Google Cloud billing account
 
@@ -386,7 +386,7 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 | Paywalled links | Show source name so the reader knows before clicking |
 | Copyright | Store and show only headline, source, link, time; summaries in own words; no article bodies |
 | Feed terms of use | Personal, non-commercial use; check each publisher's RSS terms before making the page public |
-| Chat costs grow with use | Signed-in users only, checked on the Worker; per-user daily limit; Gemini free-tier limits or a billing budget alert; context caching |
+| Chat costs grow with use | Users with AI access only, checked on the Worker; per-user daily limit; Gemini free-tier limits or a billing budget alert; context caching |
 | Instructions hidden in headlines (prompt injection) | Headlines passed as data; system prompt tells the model to ignore instructions inside them; chat has read-only tools |
 | Chat gives advice or overstates | Answer rules: no trade recommendations, say when the news doesn't answer, always show sources |
 | Russian state media | Not used as sources: several are under EU broadcast bans. Russia coverage comes from independent outlets, BBC and the Bank of Russia; check the EU sanctions list before adding any Russian outlet |

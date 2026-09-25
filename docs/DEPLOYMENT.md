@@ -42,7 +42,7 @@ drop feeds from `worker/news/sources.json` or move to Workers Paid.
 
 Gemini's free tier covers Market News, which calls it for two things only:
 the briefing, about 4 requests a day, and the chat, per question, for
-signed-in users only, with a daily limit per user (`NEWS_CHAT_DAILY_LIMIT`).
+signed-in users an admin has granted AI access only, with a daily limit per user (`NEWS_CHAT_DAILY_LIMIT`).
 The calendar makes no model calls.
 
 ## The files that make it work
@@ -112,7 +112,9 @@ reads it as `env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
 **Then change the `ceo` password.** The account comes from
 `migrations/0002_users.sql` with the password you chose, and that file is
 public. Sign in on the site → click `ceo` in the header → **Change
-password**.
+password**. `ceo` is the admin: the account panel links to the admin
+terminal (`/pages/admin.html`), where new sign-ups get their AI access —
+they have none until you grant it.
 
 **4. Fill the data.** Market News fills itself: the first 15-minute run
 after a deploy fetches headlines and builds the calendar and the first

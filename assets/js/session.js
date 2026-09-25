@@ -5,8 +5,10 @@
  * /api/state/:app). Guests can use everything, but nothing is stored
  * anywhere: their work lives in the open tab and is gone on reload.
  *
- *   BQE.user                   Promise<{username} | null>
- *   BQE.login(name, password)  -> {username}, throws Error with a message
+ *   BQE.user                   Promise<{username, role, ai} | null>
+ *                              (ai: may use the AI features; an admin grants it)
+ *   BQE.login(name, password)  -> the user, throws Error with a message
+ *   BQE.signup({username, password, email})  -> the new user, signed in
  *   BQE.logout()
  *   BQE.changePassword(current, next)
  *   BQE.store(app)             -> Store (see below)
@@ -39,6 +41,11 @@
 
   BQE.login = async (username, password) => {
     const { user } = await call("POST", "/api/auth/login", { username, password });
+    BQE.user = Promise.resolve(user);
+    return user;
+  };
+  BQE.signup = async ({ username, password, email = "" }) => {
+    const { user } = await call("POST", "/api/auth/signup", { username, password, email });
     BQE.user = Promise.resolve(user);
     return user;
   };
@@ -133,7 +140,9 @@
       background:#21262d;color:inherit;cursor:pointer}
     dialog.bqe-login button[type=submit]{background:#d4a017;border-color:#d4a017;color:#111}
     dialog.bqe-login .err{color:#f87171;min-height:1.3em;margin:8px 0 0;font-size:13px}
-    dialog.bqe-login .note{font-size:12px;opacity:.7;margin:10px 0 0}`;
+    dialog.bqe-login .note{font-size:12px;opacity:.7;margin:10px 0 0}
+    dialog.bqe-login .switch{font-size:12px;opacity:.85;margin:6px 0 0}
+    dialog.bqe-login .switch button{padding:0;border:0;background:none;color:#d4a017;text-decoration:underline}`;
 
   function injectCss() {
     if (document.getElementById("bqe-chip-css")) return;
@@ -156,7 +165,14 @@
         <input id="bqe-u" name="username" autocomplete="username" required>
         <label for="bqe-p">Password</label>
         <input id="bqe-p" name="password" type="password" autocomplete="current-password" required>
+        <div class="extra" hidden>
+          <label for="bqe-c">Repeat the password</label>
+          <input id="bqe-c" name="confirm" type="password" autocomplete="new-password">
+          <label for="bqe-e">Email (optional)</label>
+          <input id="bqe-e" name="email" type="email" autocomplete="email">
+        </div>
         <p class="err" role="alert"></p>
+        <p class="switch">No account yet? <button type="button">Create one</button></p>
         ${note ? `<p class="note"></p>` : ""}
         <div class="row"><button type="button" value="cancel">Cancel</button><button type="submit">Sign in</button></div>
       </form>`;
@@ -165,13 +181,30 @@
     const form = dialog.querySelector("form");
     const err = dialog.querySelector(".err");
     const done = (user) => { dialog.close(); dialog.remove(); resolve(user); };
+    // One form for both: "Create one" adds the email and repeat fields.
+    let signingUp = false;
+    const toggle = () => {
+      signingUp = !signingUp;
+      dialog.querySelector("h2").textContent = signingUp ? "Create an account" : "Sign in";
+      dialog.querySelector("[type=submit]").textContent = signingUp ? "Create account" : "Sign in";
+      dialog.querySelector(".extra").hidden = !signingUp;
+      dialog.querySelector(".switch").innerHTML = signingUp
+        ? 'Already have one? <button type="button">Sign in</button>'
+        : 'No account yet? <button type="button">Create one</button>';
+      form.password.autocomplete = signingUp ? "new-password" : "current-password";
+      form.confirm.required = signingUp;
+      err.textContent = "";
+    };
+    dialog.querySelector(".switch").addEventListener("click", (e) => { if (e.target.closest("button")) toggle(); });
     dialog.querySelector('[value="cancel"]').addEventListener("click", () => done(null));
     dialog.addEventListener("cancel", () => done(null));
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       err.textContent = "";
       try {
-        done(await BQE.login(form.username.value, form.password.value));
+        if (!signingUp) return done(await BQE.login(form.username.value, form.password.value));
+        if (form.password.value !== form.confirm.value) throw new Error("The passwords don't match.");
+        done(await BQE.signup({ username: form.username.value, password: form.password.value, email: form.email.value }));
       } catch (error) {
         err.textContent = error.message;
       }

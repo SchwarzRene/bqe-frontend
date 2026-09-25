@@ -8,7 +8,7 @@
 // Everything is drawn as inline SVG; nothing is loaded before the window opens.
 
 import { ago, esc, hlImp, safeUrl } from './format.js';
-import { session, signIn } from './chat.js';
+import { hasAi, session, signIn } from './chat.js';
 import { briefing, byHeadlineImportance, items } from './state.js';
 
 const RANGES = {
@@ -79,7 +79,7 @@ async function load(c) {
 /** The AI note: the stored one on open, a new one when asked. Signed-in users only. */
 async function loadNote(write) {
   const c = az.company;
-  if (!session.user) { az.noteState = 'idle'; render(); return; }
+  if (!hasAi()) { az.noteState = 'idle'; render(); return; }
   az.noteState = write ? 'writing' : 'checking';
   az.noteError = '';
   render();
@@ -94,6 +94,7 @@ async function loadNote(write) {
     if (az.company !== c) return;
     az.noteState = 'error';
     az.noteError = err.status === 401 ? 'Your session has ended. Sign in again for the AI analysis.' : err.message;
+    if (err.status === 403 && session.user) session.user.ai = false;
   }
   render();
 }
@@ -380,6 +381,10 @@ function note() {
     return `<section class="az-card az-ai">${head}</div>
       <p>An analyst's note on this company, written by AI from the prices, figures, analyst consensus and the week's headlines: what is driving it, what to expect, catalysts, risks and what to watch.</p>
       <button type="button" class="btn primary" data-az-signin>Sign in to read it</button></section>`;
+  }
+  if (!hasAi()) {
+    return `<section class="az-card az-ai">${head}</div>
+      <p>An analyst's note on this company, written by AI. AI features are not enabled for your account yet — an administrator has to grant access.</p></section>`;
   }
   if (az.noteState === 'checking') return `<section class="az-card az-ai">${head}</div><p class="meta">Looking for today’s note…</p></section>`;
   if (az.noteState === 'writing') {

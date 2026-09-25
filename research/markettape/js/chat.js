@@ -1,6 +1,6 @@
 // Ask AI and the sign-in it needs. AI features (the chat, and a fresh
-// briefing on Refresh) are for signed-in users; the Worker refuses both
-// without a session before any model call. Everyone can read the scheduled
+// briefing on Refresh) are for signed-in users an admin has granted AI
+// access (user.ai); the Worker refuses both otherwise, before any model call. Everyone can read the scheduled
 // briefing, the calendar and the headlines.
 
 import { esc, safeUrl } from './format.js';
@@ -25,6 +25,10 @@ const askBtn = $('ask');
 const accountEl = $('account');
 const refreshBtn = $('refresh');
 const BQE = window.BQE;
+const NO_AI = 'AI features are not enabled for your account yet. An administrator has to grant access — until then you can read the briefing, the calendar and the headlines as usual.';
+
+/** May the signed-in user use the AI features? */
+export const hasAi = () => !!(session.user && session.user.ai);
 
 export function renderSuggest() {
   const page = PAGES.find((p) => p[0] === state.page)[1];
@@ -36,6 +40,11 @@ export function renderSuggest() {
 }
 
 function renderLog() {
+  inputEl.disabled = !hasAi();
+  if (!hasAi()) {
+    logEl.innerHTML = `<div class="msg bot err"><p>${esc(NO_AI)}</p></div>`;
+    return;
+  }
   logEl.innerHTML = chat.messages.length ? chat.messages.map((m) => {
     if (m.role === 'user') return `<div class="msg user">${esc(m.text)}</div>`;
     if (m.pending) return '<div class="msg bot pending">Reading today’s headlines…</div>';
@@ -58,6 +67,7 @@ async function answer() {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) { setUser(null); throw new Error('Your session has ended. Sign in again to keep asking.'); }
+  if (res.status === 403 && data.code === 'ai_access') { setUser({ ...session.user, ai: false }); throw new Error(NO_AI); }
   if (typeof data.remaining === 'number') chat.remaining = data.remaining;
   if (!res.ok) throw new Error(data.error || 'The answer could not be loaded (status ' + res.status + ').');
   return { text: data.answer, sources: data.sources || [] };
@@ -115,15 +125,18 @@ function setChat(open) {
 
 export function setUser(user) {
   session.user = user;
-  document.body.classList.toggle('guest', !user);
-  askBtn.title = user ? '' : 'Sign in to ask AI';
-  askBtn.setAttribute('aria-label', user ? 'Ask AI' : 'Ask AI (sign in required)');
-  refreshBtn.title = user ? 'Fetch headlines and build a fresh briefing' : 'Reload the latest briefing. Signed-in users can build a fresh one.';
+  const ai = hasAi();
+  // "guest" draws the lock on Ask AI: shown to anyone who can't use it.
+  document.body.classList.toggle('guest', !ai);
+  askBtn.title = ai ? '' : user ? 'AI access has not been granted to your account yet' : 'Sign in to ask AI';
+  askBtn.setAttribute('aria-label', ai ? 'Ask AI' : user ? 'Ask AI (AI access required)' : 'Ask AI (sign in required)');
+  refreshBtn.title = ai ? 'Fetch headlines and build a fresh briefing' : 'Reload the latest briefing. Users with AI access can build a fresh one.';
   accountEl.classList.toggle('is-user', !!user);
   accountEl.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="who"></span><button type="button"></button>';
   accountEl.querySelector('.who').textContent = user ? user.username : 'Guest';
   accountEl.querySelector('button').textContent = user ? 'Sign out' : 'Sign in';
   if (!user && chat.open) setChat(false);
+  if (chat.open) renderLog();
 }
 
 export async function signIn(note) {
@@ -137,7 +150,7 @@ export function initChat() {
   accountEl.addEventListener('click', async (e) => {
     if (!e.target.closest('button')) return;
     if (session.user) { await BQE.logout(); setUser(null); chat.messages = []; chat.remaining = null; }
-    else await signIn('Signing in unlocks Ask AI and fresh briefings.');
+    else await signIn('Signing in saves your work. Ask AI and fresh briefings need AI access, which an admin grants.');
   });
   askBtn.addEventListener('click', async () => {
     if (!session.user && !(await signIn('Ask AI is for signed-in users.'))) return;

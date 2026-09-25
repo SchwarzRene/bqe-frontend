@@ -218,16 +218,39 @@ async function wireAccount(loginBtn, loginModal, loginForm) {
   const panel = document.getElementById('account-panel');
   const title = document.getElementById('login-title');
   const error = document.getElementById('login-error');
+  const signupForm = document.getElementById('signup-form');
+  const signupError = document.getElementById('signup-error');
+
+  // Signed out, the modal shows either the sign-in or the sign-up form.
+  function showForm(which) {
+    loginForm.hidden = which !== 'login';
+    signupForm.hidden = which !== 'signup';
+    title.textContent = which === 'signup' ? 'Create an account' : 'Login';
+    error.textContent = '';
+    signupError.textContent = '';
+    (which === 'signup' ? signupForm : loginForm).querySelector('input').focus();
+  }
+  document.getElementById('show-signup').addEventListener('click', () => showForm('signup'));
+  document.getElementById('show-login').addEventListener('click', () => showForm('login'));
 
   function show(user) {
     loginForm.hidden = !!user;
+    signupForm.hidden = true;
     panel.hidden = !user;
     title.textContent = user ? 'Account' : 'Login';
     loginBtn.textContent = user ? user.username : 'Login';
     loginBtn.setAttribute('aria-label', user ? `Account: ${user.username}` : 'Open login');
     const navLoginBtn = document.getElementById('nav-login-btn');
     if (navLoginBtn) navLoginBtn.textContent = user ? `Account (${user.username})` : 'Login';
-    if (user) document.getElementById('account-name').textContent = user.username;
+    if (user) {
+      document.getElementById('account-name').textContent = user.username;
+      const ai = document.getElementById('account-ai');
+      ai.textContent = user.ai
+        ? 'AI features: enabled.'
+        : 'AI features: not enabled yet. An administrator has to grant access to your account.';
+      ai.classList.toggle('is-on', !!user.ai);
+      document.getElementById('admin-link').hidden = user.role !== 'admin';
+    }
   }
   show(await BQE.user);
 
@@ -242,6 +265,30 @@ async function wireAccount(loginBtn, loginModal, loginForm) {
       show(user);
     } catch (err) {
       error.textContent = err.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  signupForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    signupError.textContent = '';
+    if (signupForm.password.value !== signupForm.confirm.value) {
+      signupError.textContent = "The passwords don't match.";
+      return;
+    }
+    const button = signupForm.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      const user = await BQE.signup({
+        username: signupForm.username.value,
+        password: signupForm.password.value,
+        email: signupForm.email.value,
+      });
+      signupForm.reset();
+      show(user);
+    } catch (err) {
+      signupError.textContent = err.message;
     } finally {
       button.disabled = false;
     }
@@ -266,6 +313,7 @@ async function wireAccount(loginBtn, loginModal, loginForm) {
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await BQE.logout();
     show(null);
+    showForm('login');
   });
 }
 

@@ -94,7 +94,8 @@ handful of things `build.sh` leaves out.
 │   ├── impressum.html      Austrian Impressum
 │   ├── privacy.html        Privacy policy
 │   ├── license.html        Licences of third-party material
-│   └── credits.html        Media sources
+│   ├── credits.html        Media sources
+│   └── admin.html          Admin terminal: accounts and AI access (admins only)
 │
 ├── components/             HTML fragments injected at runtime
 │   ├── header.html         Logo, login button, primary navigation
@@ -111,7 +112,8 @@ handful of things `build.sh` leaves out.
 │   │   ├── formula-network.js Start page formula band animation (canvas)
 │   │   ├── research-hero.js  Research intro band animation (canvas)
 │   │   ├── research-graph.js Research project graph, list view and search
-│   │   ├── session.js      Sign-in and per-user saving, shared by site and apps
+│   │   ├── session.js      Sign-in, sign-up and per-user saving, shared by site and apps
+│   │   ├── admin.js        The admin terminal (pages/admin.html)
 │   │   └── form.js         Contact form validation (WCAG error handling)
 │   ├── images/             Page imagery, each as .webp + .jpg/.png fallback
 │   ├── captions/de.vtt     Captions for assets/video.mp4
@@ -408,10 +410,12 @@ slow upstream degrades to stored data rather than an error.
 | `POST /api/contact` | `worker/contact.ts` | Stores a contact form submission in D1 (validated, rate-limited, honeypot). |
 | `GET /research/stack/data/*.json` | `worker/stack.ts` | Prices from D1; the committed file until D1 has them. |
 | `GET /api/news` | `worker/news/index.ts` | Market News: the latest briefing, 24 h of headlines, this week's calendar. |
-| `POST /api/news/refresh` | `worker/news/index.ts` | Fetch now and write a fresh briefing. Signed in; one per 15 min. |
-| `POST /api/chat` | `worker/news/chat.ts` | Market News chat (Gemini). Signed in; daily limit per user. |
+| `POST /api/news/refresh` | `worker/news/index.ts` | Fetch now and write a fresh briefing. AI access; one per 15 min. |
+| `POST /api/chat` | `worker/news/chat.ts` | Market News chat (Gemini). AI access; daily limit per user. |
+| `GET/POST /api/company/analysis` | `worker/news/analyst.ts` | Market News AI analyst note. AI access; same daily limit. |
 | `POST /api/admin/run/{stack,news,calendar,briefing}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
-| `POST /api/auth/{login,logout,password}`, `GET /api/auth/me` | `worker/auth.ts` | Sign-in with an HttpOnly session cookie. |
+| `POST /api/auth/{signup,login,logout,password}`, `GET /api/auth/me` | `worker/auth.ts` | Sign-up and sign-in with an HttpOnly session cookie. |
+| `GET /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password` | `worker/admin.ts` | The admin terminal: list accounts, grant/revoke AI access, suspend, change role, reset a password, delete. Signed-in admins only. |
 | `GET/PUT /api/state/{stack,journal,news}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
 | `GET /api/market/{quote,candles}` | `worker/market.ts` | Yahoo quotes and candles for the Trading Journal, cached at the edge. |
 
@@ -423,10 +427,33 @@ lives in the open tab and is gone on reload. A signed-in user's work in
 Stack (marked charts, drawings, theories) and in the Trading Journal is
 saved to their account and follows them to any device.
 
-There is no sign-up. The one account, `ceo`, is created by
-`migrations/0002_users.sql`. Its starting password is weak and its hash is
-in this public repository: change it after the first sign-in (Login →
-Change password), which also signs out every other session.
+Anyone can create an account (Login → *Create one*): a username (3–32
+letters, digits, `. _ -`), a password of at least 8 characters and,
+optionally, an email address. Sign-ups are limited to 5 per visitor per
+day.
+
+**AI access is off by default.** A new account can save its work, but the
+AI features — Market News's Ask AI chat, the AI analyst note and a fresh
+briefing on Refresh — answer `403` until an admin grants access. Admins
+always have it. The check is on the Worker (`aiDenied` in
+`worker/auth.ts`), before any model call.
+
+**The admin terminal** is `/pages/admin.html`, linked from the account
+panel for admins. It lists every account (email, role, AI access, status,
+created, last sign-in, open sessions, AI requests today) and has a switch
+per user for AI access, plus suspend (which also signs them out), make
+admin / demote, reset password (shows a temporary one to pass on) and
+delete. The same actions work as commands at its prompt — `grant alice
+bob`, `revoke alice`, `grant-all`, `suspend`, `promote`, `reset`, `list
+noai`, `whois`; `help` lists them. An admin cannot suspend, demote or
+delete their own account.
+
+The first admin is `ceo`, created by `migrations/0002_users.sql` and made
+admin by `migrations/0004_accounts.sql`. Its starting password is weak and
+its hash is in this public repository: change it after the first sign-in
+(Login → Change password), which also signs out every other session. To
+make another account admin from the command line:
+`npx wrangler d1 execute bqe --remote --command "UPDATE users SET role = 'admin' WHERE username = 'NAME'"`.
 
 An app opts in with `/assets/js/session.js`: `BQE.store("<app>")` loads and
 saves its document (a no-op for guests), and `BQE.mountAccountChip(el)`

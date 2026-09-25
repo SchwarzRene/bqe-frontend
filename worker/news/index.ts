@@ -1,9 +1,11 @@
 // Market News on the Worker.
 //
 //   GET  /api/news          everything the page shows, one JSON document (public)
-//   POST /api/news/refresh  fetch now and build a new briefing (signed in; max 1 per 15 min)
-//   POST /api/chat          see chat.ts (signed in; daily limit per user)
-//   /api/company/analysis   see analyst.ts (signed in; the same daily limit)
+//   POST /api/news/refresh  fetch now and build a new briefing (AI access; max 1 per 15 min)
+//   POST /api/chat          see chat.ts (AI access; daily limit per user)
+//   /api/company/analysis   see analyst.ts (AI access; the same daily limit)
+//
+// "AI access" is a signed-in user an admin has granted it to (see admin.ts).
 //
 // and one cron, every 15 minutes (see newsTick):
 //   fetch + dedupe         every run not doing one of the jobs below; a third
@@ -13,7 +15,7 @@
 //   calendar results       hourly on weekdays, yesterday to tomorrow (no model calls)
 //   calendar ranking       05:45 New York time: Gemini ranks the events of busy days
 
-import { currentUser, pruneAuth } from "../auth";
+import { aiDenied, currentUser, pruneAuth } from "../auth";
 import { pruneContact } from "../contact";
 import type { Env } from "../env";
 import { crossSite, isoNow, json } from "../http";
@@ -151,6 +153,8 @@ async function refresh(request: Request, env: Env): Promise<Response> {
   // Before anything else: a guest never costs a fetch or a model call.
   const user = await currentUser(request, env);
   if (!user) return json({ error: "Sign in to build a fresh briefing." }, 401);
+  const denied = aiDenied(user);
+  if (denied) return denied;
   if (!env.GEMINI_API_KEY) return json({ error: "GEMINI_API_KEY is not set." }, 503);
   if (!(await claim(env, "news:refresh", REFRESH_EVERY_MS))) {
     return json({ error: "A fresh briefing was built less than 15 minutes ago." }, 429);

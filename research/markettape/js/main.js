@@ -4,7 +4,7 @@
 
 import { addDays, esc, longDate, todayKey, time, tzLabel } from './format.js';
 import { CATS, renderCalendarPage } from './calendar.js';
-import { chat, initChat, renderSuggest, session, setUser } from './chat.js';
+import { chat, hasAi, initChat, renderSuggest, session, setUser } from './chat.js';
 import { globeLabel, mapKeys, renderMap } from './map.js';
 import { analysisOpen, closeAnalysis } from './analysis.js';
 import { companiesCard, handleCompanies, handleCompanySubmit, initCompanies, loadCharts } from './companies.js';
@@ -170,12 +170,12 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 
-// A guest's Refresh re-reads the stored briefing. A signed-in user's asks
+// A guest's Refresh re-reads the stored briefing. A user with AI access asks
 // the Worker to fetch and write a new one (at most one per 15 minutes).
 const refreshBtn = $('refresh');
 refreshBtn.addEventListener('click', async () => {
   data.notice = '';
-  if (session.user) {
+  if (hasAi()) {
     refreshBtn.disabled = true;
     data.notice = 'Fetching headlines and writing a fresh briefing…';
     render();

@@ -1,10 +1,10 @@
 // POST /api/chat — questions about today, answered by Gemini from what the
 // app has collected: the latest briefing, the last 24 h of headlines and the
 // calendar are in the system prompt; older headlines, event results and
-// prices are tools. Signed-in users only, with a daily limit per user. The
+// prices are tools. Signed-in users with AI access only, with a daily limit per user. The
 // conversation lives in the browser tab; nothing of it is stored here.
 
-import { currentUser } from "../auth";
+import { aiDenied, currentUser } from "../auth";
 import type { Env } from "../env";
 import { crossSite, json, readJson, utcDay } from "../http";
 import { latestBriefing, type Briefing } from "./briefing";
@@ -25,6 +25,8 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
   // Checked before anything else: a guest never costs a model call.
   const user = await currentUser(request, env);
   if (!user) return json({ error: "Sign in to use Ask AI." }, 401);
+  const denied = aiDenied(user);
+  if (denied) return denied;
 
   const body = await readJson(request, 64 * 1024);
   const messages = cleanMessages(body?.messages);
