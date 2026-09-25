@@ -4,6 +4,8 @@
     { "id": "cnbc-markets", "name": "CNBC", "type": "rss", "url": "https://www.cnbc.com/id/10000664/device/rss/rss.html", "category": "markets", "region": "us", "weight": 20 },
     { "id": "marketwatch", "name": "MarketWatch", "type": "rss", "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories", "category": "markets", "region": "us", "weight": 20 },
     { "id": "marketwatch-bulletins", "name": "MarketWatch", "type": "rss", "url": "https://feeds.content.dowjones.io/public/rss/mw_bulletins", "category": "markets", "region": "us", "weight": 24 },
+    { "id": "forbes-business", "name": "Forbes", "type": "rss", "url": "https://www.forbes.com/business/feed/", "category": "company", "region": "us", "weight": 16 },
+    { "id": "forbes-money", "name": "Forbes", "type": "rss", "url": "https://www.forbes.com/money/feed/", "category": "markets", "region": "us", "weight": 16 },
     { "id": "bbc-world", "name": "BBC", "type": "rss", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "category": "world", "region": "global", "weight": 18 },
     { "id": "fed-press", "name": "Federal Reserve", "type": "rss", "url": "https://www.federalreserve.gov/feeds/press_all.xml", "category": "policy", "region": "us", "weight": 30 },
     { "id": "fed-speeches", "name": "Federal Reserve", "type": "rss", "url": "https://www.federalreserve.gov/feeds/speeches.xml", "category": "policy", "region": "us", "weight": 24 },

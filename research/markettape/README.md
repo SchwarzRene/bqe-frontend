@@ -108,6 +108,7 @@ All sources are free and return headline, link and time; none return full articl
 | CNBC US Top News | Top US business and market news | RSS: `cnbc.com/id/100003114/device/rss/rss.html` | Fast, broad; CNBC has ~40 section feeds |
 | CNBC Markets / Finance | Market moves, Wall Street | RSS: `cnbc.com/id/10000664/device/rss/rss.html` | Overlaps with Top News; dedupe |
 | MarketWatch Top Stories | Markets, economy | RSS: `feeds.content.dowjones.io/public/rss/mw_topstories` | Also a breaking-bulletins feed (`mw_bulletins`) |
+| Forbes Business / Money | US companies, markets, personal finance | RSS: `forbes.com/business/feed/`, `forbes.com/money/feed/` | Much contributor opinion; weighted below the wire-style feeds |
 | BBC World | Major world news | RSS: `feeds.bbci.co.uk/news/world/rss.xml` | Non-market events that move markets |
 | Federal Reserve | Statements, speeches, testimony | Fed RSS feeds | Press releases and speeches |
 | ECB | Euro-area policy | ECB press RSS | Decisions, speeches, press conferences |
