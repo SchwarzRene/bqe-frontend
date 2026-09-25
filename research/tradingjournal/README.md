@@ -31,7 +31,7 @@ css/style.css       the app's own styles
 js/store.js         data and rules — ported from the Python backend, pure, unit-tested
 js/api.js           the calls the views make: store.js + market data + saving
 js/main.js          router, theme, account chip, save status
-js/charts.js        candle charts (lightweight-charts v4 from jsDelivr)
+js/charts.js        candle charts (lightweight-charts v4, vendored in /assets/vendor/)
 js/drawing.js       chart drawing tools
 js/views/*.js       dashboard, trades, trade detail, journal, symbols
 ```

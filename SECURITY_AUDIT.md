@@ -19,6 +19,35 @@ At its current size the site works. It is **not ready for "100M users"**: it run
 4. **SCL-01 / SEC-04**: Put Turnstile (or similar) on sign-up. Add a total storage limit per account and a global limit on new accounts.
 5. **PRV-01**: Bring the privacy policy in line with what the site actually does: Cloudflare hosting, Google Gemini, no 2FA, account data retention.
 
+## Remediation status (2026-09-25)
+Every finding below has a fix in the code, with a regression test in `test/security.test.ts`. The table says which ones still need action from the site owner.
+
+| ID | Fix | Still needed from the owner |
+|---|---|---|
+| SEC-01 | `migrations/0006_security.sql` disables the seeded `ceo` hash if it was never changed. `scripts/set-password.mjs` sets a password without committing it. | If `ceo` still had the seeded hash, set a new password after deploying (docs/DEPLOYMENT.md). |
+| SEC-02 | Failures are counted per visitor **and** per account. A success clears only that account's failures. | — |
+| SEC-03 | `build.sh` is an allowlist and refuses to publish hidden files. A CI step checks that a canary `.dev.vars` never reaches `_site/`. | — |
+| SCL-01 | Accounts are capped at 4 MB, with a site-wide limit of 30 sign-ups per hour. Turnstile is checked when configured. | Create a Turnstile widget and set `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET`. |
+| SEC-04 | Attempts are inserted before they are counted, so parallel requests can't slip past. IPv6 is counted per /64. The `AUTH_LIMITER` rate-limit binding is added. | — |
+| SEC-05 | The analysis takes the company name from Yahoo or the watchlist, never from the client. | — |
+| SEC-06 | Leaflet and Lightweight Charts are vendored from npm into `assets/vendor/`. A CSP (`script-src 'self'` + Turnstile) is on every page, and the inline scripts and handlers were moved to files. Headless Chromium over every page shows no violations. | — |
+| PRV-01 | The privacy policy now names Cloudflare and Google Gemini, explains the transfer basis, drops the 2FA/AES/EU-storage claims, and lists the actual retention periods. Users can export (`GET /api/auth/export`) and delete (`POST /api/auth/delete`) their own account. | Have the new policy text legally reviewed. For EU-only storage, recreate D1 with `--jurisdiction=eu`. |
+| PRV-02 | The visitor hash is an HMAC keyed by `IP_HASH_SECRET`. | `npx wrangler secret put IP_HASH_SECRET`. |
+| PRV-03 | Unanswered messages are deleted after 180 days. The admin terminal gained `messages` / `read` / `answered`. | — |
+| SEC-07 | New passwords need 12+ characters and are checked against Have I Been Pwned (k-anonymity, fails open). Iterations are configurable via `PBKDF2_ITERATIONS`, and old hashes are upgraded at sign-in. | On Workers Paid, set `PBKDF2_ITERATIONS = "600000"`. |
+| SCL-02 | Custom ranges are rounded to whole bars and clamped. Unknown tickers are cached as 404 for 10 minutes. The `MARKET_LIMITER` binding is added. | — |
+| REL-01 | docs/DEPLOYMENT.md now has a Time Travel restore, an export drill and monitoring. | Move to Workers Paid before growth, and run the restore drill once. |
+| REL-02 | An `admin_audit` table is written in the same batch as every admin change, shown by the terminal's `audit` command, and kept for a year. | — |
+| SEC-08 | A taken email gets the same answer as a taken name/email race. | — |
+| SEC-09 | Password change and account deletion count wrong passwords toward the account lockout. | — |
+| PRF-01 | The Yahoo cookie and crumb are reused for 30 minutes per instance and dropped on 401/403. | — |
+| SEC-10 | `readText` refuses a large Content-Length up front and cuts the stream off at the limit. | — |
+| SEC-11 | Chat history is rebuilt from the saved conversation. Only the new question comes from the client. | — |
+
+**Trade-off to know about:** because of the per-account lockout, someone guessing at an account can keep its owner out for up to an hour. An admin can lift the lockout with `DELETE FROM login_attempts WHERE account = '<name>'`.
+
+**Not addressed (by design):** the "100M users" architecture in §7 (sharding user data, a session cache, a licensed market-data feed) is a roadmap item, not a patch.
+
 ## 2. System model
 ```mermaid
 flowchart LR

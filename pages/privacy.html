@@ -63,8 +63,7 @@
             <li>Type of enquiry (subscription, careers, technical support, general enquiry)</li>
             <li>The content of your message or enquiry</li>
             <li>Timestamp of the form submission</li>
-            <li>Your Internet Protocol address (IP address) for anti-spam verification and security</li>
-            <li>Where applicable, information about your browser and operating system</li>
+            <li>A keyed hash of your Internet Protocol address (IP address) that changes every day, for anti-spam limits; the address itself is not stored, and the hash is erased after 24 hours</li>
           </ul>
           <p>
             This data is used to process your enquiry, to respond to you and, where applicable, to manage your application. The collection is necessary in order to be able to process your enquiry.
@@ -156,6 +155,21 @@
           <p>
             This data is protected under the GDPR as "special categories" and we have no legitimate reason to collect it.
           </p>
+
+          <h3>2.7 Website accounts and the research apps</h3>
+          <p>
+            You can use the research apps (Stack, Trading Journal, Market News, History Map) as a guest; nothing is then stored on our servers. If you create an account, we store:
+          </p>
+          <ul>
+            <li>Your username, your email address if you give one, and your password as a salted PBKDF2 hash (never the password itself)</li>
+            <li>When the account was created and when you last signed in, and your active sign-in sessions (a random token in a cookie; we keep only its hash)</li>
+            <li>The work you save in the apps (for example Trading Journal entries, Stack charts, display settings)</li>
+            <li>If an administrator has enabled the AI features for you: your Ask AI conversations and how many AI requests you made per day</li>
+            <li>For protection against password guessing and mass sign-ups: failed sign-in and sign-up attempts, with the daily-changing IP hash described in 2.1 and the username tried, erased after 24 hours</li>
+          </ul>
+          <p>
+            Legal basis: contract (Art. 6(1)(b) GDPR) for the account and your saved work; legitimate interest (Art. 6(1)(f) GDPR) for the security measures. You can download everything stored for your account and delete the account yourself at any time (Account → "Download my data" / "Delete account").
+          </p>
         </div>
       </section>
 
@@ -228,11 +242,24 @@
             <strong>Opt-out:</strong> you can unsubscribe from optional marketing emails at any time; transactional emails (invoices etc.) cannot be unsubscribed from.
           </p>
 
-          <h4>Hosting provider (GitHub Pages)</h4>
+          <h4>Hosting provider (Cloudflare, Inc.)</h4>
           <p>
-            <strong>Service:</strong> website hosting and content delivery<br>
-            <strong>Data shared:</strong> page views, IP addresses (automatically through HTTP requests)<br>
-            <strong>Important:</strong> GitHub Pages does NOT store any personal data of subscribers. Only anonymised access logs are collected.
+            <strong>Service:</strong> website hosting, content delivery, the website's database (Cloudflare D1), protection against attacks and, where enabled, the anti-bot check on sign-up (Cloudflare Turnstile)<br>
+            <strong>Data processed:</strong> everything described in sections 2.1, 2.2 and 2.7, as our processor; IP addresses and request data in the course of delivering every request<br>
+            <strong>Legal basis:</strong> data processing agreement under Art. 28 GDPR
+          </p>
+
+          <h4>Google (Gemini API) — only for the AI features</h4>
+          <p>
+            <strong>Service:</strong> the language model behind Market News's Ask AI chat, the AI company analysis and the daily briefings<br>
+            <strong>Data shared:</strong> the questions you type into Ask AI and the earlier messages of that conversation, together with public market news and prices; no username, email address or IP address is sent. The daily briefings are written from public headlines only.<br>
+            <strong>Who is affected:</strong> only signed-in users an administrator has granted AI access, and only when they use an AI feature<br>
+            <strong>Please note:</strong> do not enter personal data into the chat. Depending on the service tier in use, Google may use the content of requests to improve its services.
+          </p>
+
+          <h4>Have I Been Pwned (password check)</h4>
+          <p>
+            When you choose a new password, the first five characters of its SHA-1 hash — not the password, and nothing that identifies you — are sent to the Have I Been Pwned service, to warn you if the password is known from a data breach.
           </p>
 
           <h3>4.2 Who we do NOT share data with</h3>
@@ -246,7 +273,7 @@
 
           <h3>4.3 International data transfers</h3>
           <p>
-            All personal data is primarily processed and stored in the European Union (Austria). Data servers are located in EU data centres with GDPR compliance. If we ever have to transfer data to a third country, we use mechanisms approved by the GDPR (standard contractual clauses).
+            Cloudflare and Google are companies based in the United States. Cloudflare delivers the website from data centres around the world, usually the one nearest to you; requests to the AI features are processed by Google. Transfers to the United States are based on the EU–US Data Privacy Framework (both companies are certified) and, in addition, on the EU standard contractual clauses in the providers' data processing terms (Art. 45 and 46 GDPR).
           </p>
         </div>
       </section>
@@ -259,15 +286,15 @@
           <p>We implement comprehensive security measures in line with industry standards:</p>
           <ul>
             <li>HTTPS/SSL encryption: data transfers take place over TLS 1.2+</li>
-            <li>Data encryption at rest: sensitive data is encrypted with AES-256</li>
-            <li>Access controls: only authorised personnel have access; access is logged</li>
-            <li>Two-factor authentication (2FA): available and recommended for all subscriptions</li>
-            <li>Rate limiting: protection against brute-force attacks by limiting login attempts</li>
+            <li>Data encryption at rest: the database is encrypted at rest by our hosting provider; passwords are stored only as salted PBKDF2 hashes and sign-in sessions only as hashes</li>
+            <li>Access controls: only authorised administrators have access; administrator actions on accounts and messages are logged</li>
+            <li>Rate limiting: sign-in attempts are limited per visitor and per account, and new passwords are checked against known data breaches</li>
+            <li>Content Security Policy: our pages only run scripts served by this website</li>
           </ul>
 
           <h3>5.2 Your personal responsibility</h3>
           <p>
-            Use a strong password, enable 2FA and never share your access credentials with third parties. Report suspicious activity immediately to <a href="mailto:security@blackquantempire.at">security@blackquantempire.at</a>.
+            Use a strong password that you do not use anywhere else, and never share your access credentials with third parties. Report suspicious activity immediately to <a href="mailto:security@blackquantempire.at">security@blackquantempire.at</a>.
           </p>
 
           <h3>5.3 Security limits and liability</h3>
@@ -293,7 +320,7 @@
 
           <h3>6.3 Right to erasure (Article 17 GDPR)</h3>
           <p>
-            You can request the erasure of your data (“right to be forgotten”), except where we imperatively need it for the performance of the contract or on account of legal requirements (e.g. the 7-year retention obligation for tax data).
+            You can request the erasure of your data (“right to be forgotten”), except where we imperatively need it for the performance of the contract or on account of legal requirements (e.g. the 7-year retention obligation for tax data). A website account can be deleted by its owner at any time under Account → "Delete account", which erases the account and everything saved to it immediately.
           </p>
 
           <h3>6.4 Right to restriction of processing (Article 18 GDPR)</h3>
@@ -303,7 +330,7 @@
 
           <h3>6.5 Right to data portability (Article 20 GDPR)</h3>
           <p>
-            You can request the data you have provided in a structured, portable format (e.g. CSV, JSON) in order to transfer it to another service provider.
+            You can request the data you have provided in a structured, portable format (e.g. CSV, JSON) in order to transfer it to another service provider. For a website account you can download it yourself as JSON under Account → "Download my data".
           </p>
 
           <h3>6.6 Right to object (Article 21 GDPR)</h3>
@@ -331,16 +358,19 @@
 
           <h3>7.1 Retention periods by data type</h3>
           <ul>
-            <li>Contact form submissions: 30 days after being answered</li>
+            <li>Contact form submissions: 30 days after being answered, and in any case no longer than 180 days after they were sent</li>
+            <li>Website accounts and the work saved to them: until you delete the account, or we delete it (for example after a breach of our terms); Ask AI conversations until you delete them, at most the latest 50 per account</li>
+            <li>Failed sign-in and sign-up attempts, and the daily IP hash of contact messages: 24 hours</li>
+            <li>Log of administrator actions: 1 year</li>
             <li>Application data: 6 months after the application</li>
             <li>Subscription data: for the duration of the membership, then for a further 30 days</li>
             <li>Invoices and transaction data: 7 years (Austrian tax requirement)</li>
-            <li>Website server logs: 30 days (security)</li>
+            <li>Technical logs at our hosting provider: up to 30 days (security)</li>
           </ul>
 
           <h3>7.2 Automatic erasure</h3>
           <p>
-            After these periods have expired, the data is deleted from the database, removed from backups (after 90 days) or fully anonymised.
+            After these periods have expired, the data is deleted from the database automatically by a daily job. The database's point-in-time recovery history, which lets us undo a technical failure, keeps a deleted record for up to 30 more days.
           </p>
         </div>
       </section>
@@ -436,8 +466,8 @@
       <section>
         <div class="container">
           <p style="color: var(--color-gray-400); font-size: var(--text-sm); margin-top: var(--space-6);">
-            <strong>Last updated:</strong> 8 May 2026<br>
-            <strong>Effective from:</strong> 8 May 2026<br>
+            <strong>Last updated:</strong> 25 September 2026<br>
+            <strong>Effective from:</strong> 25 September 2026<br>
             <strong>Next scheduled review:</strong> May 2027
           </p>
         </div>
