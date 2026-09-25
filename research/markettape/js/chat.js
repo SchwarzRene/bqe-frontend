@@ -79,11 +79,38 @@ async function send(question) {
   renderLog(); renderSuggest();
 }
 
+// On a phone the panel covers the screen. It follows the visible part of the
+// viewport (window.visualViewport), so the input stays above the on-screen
+// keyboard and the panel does not slide under the browser's bars.
+const phone = window.matchMedia('(max-width: 640px)');
+const touch = window.matchMedia('(pointer: coarse)');
+
+function fitChat() {
+  const vv = window.visualViewport;
+  if (!chat.open || !vv || !phone.matches) {
+    chatEl.style.top = '';
+    chatEl.style.height = '';
+    return;
+  }
+  chatEl.style.top = vv.offsetTop + 'px';
+  chatEl.style.height = vv.height + 'px';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', fitChat);
+  window.visualViewport.addEventListener('scroll', fitChat);
+}
+phone.addEventListener('change', fitChat);
+
 function setChat(open) {
   chat.open = open;
   chatEl.hidden = !open;
   askBtn.setAttribute('aria-expanded', String(open));
-  if (open) { renderSuggest(); renderLog(); inputEl.focus(); } else { askBtn.focus(); }
+  // The page behind does not scroll while the chat covers it.
+  document.body.classList.toggle('chat-open', open);
+  fitChat();
+  // On touch screens the keyboard would hide the suggestions: no autofocus there.
+  if (open) { renderSuggest(); renderLog(); if (!touch.matches) inputEl.focus(); } else { askBtn.focus(); }
 }
 
 export function setUser(user) {

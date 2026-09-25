@@ -9,8 +9,8 @@
 // list is kept in the browser, and on the account when signed in
 // (/api/state/news), so it follows the user to other devices.
 
-import { esc } from './format.js';
-import { briefing, data } from './state.js';
+import { ago, esc, hlImp, safeUrl } from './format.js';
+import { briefing, byHeadlineImportance, data, items } from './state.js';
 
 const LIST_KEY = 'bqe:market-news:companies';
 const RANGES = {
@@ -206,7 +206,27 @@ function chart(symbol, w, h, big) {
   </svg>`;
 }
 
-function featured(c) {
+/**
+ * Headlines about a company: those today's briefing based its line on, then
+ * any other from the last 24 hours that carries its ticker or names it.
+ * Most important first.
+ */
+function headlinesAbout(c) {
+  const entry = ((briefing() && briefing().companies) || []).find((x) => x.ticker === c.symbol);
+  const cited = new Set(entry ? entry.ids : []);
+  // The company's name without "Inc", "Group" …; short or generic names only by ticker.
+  const word = String(c.name || '').replace(/\b(inc|corp|corporation|group|holdings?|plc|ag|se|sa|nv|co|ltd|limited|company)\b\.?/gi, '').trim();
+  const nameRe = word.length >= 3 && word.toUpperCase() !== c.symbol ? new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i') : null;
+  // The bare ticker only when it is long enough not to be an ordinary word (SAP, NVDA; not ON or A).
+  const base = c.symbol.split('.')[0];
+  const tickerRe = base.length >= 3 ? new RegExp(`\\b${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`) : null;
+  return items()
+    .filter((i) => cited.has(i.id) || (i.tickers || []).includes(c.symbol) || (nameRe && nameRe.test(i.title)) || (tickerRe && tickerRe.test(i.title)))
+    .sort((a, b) => (cited.has(b.id) - cited.has(a.id)) || byHeadlineImportance(a, b))
+    .slice(0, 3);
+}
+
+function featured(c, news) {
   const q = quotes.get(c.symbol);
   const ch = change(c.symbol);
   const bars = candles.get(c.symbol + '|' + companies.range);
@@ -218,6 +238,11 @@ function featured(c) {
     </div>
     ${chart(c.symbol, 320, 110, true)}
     ${Array.isArray(bars) && bars.length > 1 ? `<div class="co-axis"><span>${esc(t(bars[0].time))}</span><span>${esc(t(bars[bars.length - 1].time))}</span></div>` : ''}
+    ${news ? `<p class="co-line"><span class="co-news" aria-hidden="true"></span><span><b>In today’s news:</b> ${esc(news)}</span></p>` : ''}
+    ${(() => {
+      const heads = headlinesAbout(c);
+      return heads.length ? `<div class="co-heads${news ? '' : ' alone'}">${news ? '' : '<div class="eyebrow">Headlines</div>'}${heads.map((i) => `<a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener"><span class="t">${esc(i.title)}</span><span class="m">${hlImp(i)}${esc(i.source)} · ${esc(ago(i.publishedAt))} ↗</span></a>`).join('')}</div>` : '';
+    })()}
   </div>`;
 }
 
@@ -235,7 +260,7 @@ export function companiesCard() {
       ${chart(c.symbol, 96, 30, false)}
       <div class="co-q">${q ? (q.error ? '<span class="meta">–</span>' : `<span>${esc(fmtPrice(q.price, q.currency))}</span>`) : '<span class="meta">…</span>'}
         ${ch != null ? `<span class="${ch >= 0 ? 'pos' : 'neg'}">${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</span>` : ''}</div>
-      ${companies.editing ? `<button type="button" class="co-del" data-co-remove="${esc(c.symbol)}" aria-label="Remove ${esc(c.symbol)}">✕</button>` : news ? `<span class="co-news" title="${esc(news)}" aria-label="In the news: ${esc(news)}"></span>` : '<span></span>'}
+      ${companies.editing ? `<button type="button" class="co-del" data-co-remove="${esc(c.symbol)}" aria-label="Remove ${esc(c.symbol)}">✕</button>` : news ? '<span class="co-news" aria-label="In today’s news"></span>' : '<span></span>'}
     </div>`;
   }).join('');
   return `
@@ -246,7 +271,7 @@ export function companiesCard() {
         <button type="button" class="btn small" data-co-edit aria-pressed="${companies.editing}">${companies.editing ? 'Done' : 'Edit'}</button>
       </div>
     </div>
-    ${sel ? featured(sel) : ''}
+    ${sel ? featured(sel, lines.get(sel.symbol)) : ''}
     <div class="co-list">${rows || '<p class="empty">No companies yet. Add one below.</p>'}</div>
     ${companies.editing ? `<form class="co-add" data-co-add>
         <label class="sr-only" for="co-input">Ticker to add</label>
@@ -255,7 +280,7 @@ export function companiesCard() {
       </form>
       ${companies.error ? `<p class="co-err">${esc(companies.error)}</p>` : ''}
       <p class="note">${store && store.signedIn ? 'Saved to your account.' : 'Saved in this browser. Sign in to keep the list on every device.'}${companies.list ? ' <button type="button" class="linkish" data-co-reset>Reset to the default list</button>' : ''}</p>`
-      : `<p class="note">Prices from Yahoo, delayed. A dot marks a company in today’s news; hover it for the line.</p>`}`;
+      : `<p class="note">Prices from Yahoo, delayed. A dot marks a company in today’s news: tap it to read the line under the chart.</p>`}`;
 }
 
 /** Clicks, keys and the add form inside the card. True when handled. */
