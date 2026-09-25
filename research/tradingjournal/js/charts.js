@@ -36,6 +36,8 @@ function createChart(container, extraOptions = {}) {
     rightPriceScale: { borderColor: cssVar("--border") },
     timeScale: { borderColor: cssVar("--border"), timeVisible: true, secondsVisible: false },
     crosshair: { mode: LWC.CrosshairMode.Normal },
+    // A vertical swipe over a chart scrolls the page instead of panning the chart.
+    handleScroll: { vertTouchDrag: false },
     ...extraOptions,
   });
   active.add(chart);
