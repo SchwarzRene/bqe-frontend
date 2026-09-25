@@ -24,8 +24,8 @@ let overlayCount = 0;
  *
  * `marks` are fixed points the user can't edit or erase — a trade's entry and
  * exit — each drawn as a vertical line at its time. Crossing the price line the
- * chart already draws at its price, it marks the exact spot with a cross.
- * `{ t: epoch seconds, p: price, color, label, dashed }`.
+ * chart already draws at its price, it marks the exact spot with a cross; the
+ * price itself is on that line's axis label. `{ t: epoch seconds, p: price, color, dashed }`.
  */
 export async function attachDrawings({ toolbar, container, chart, series, data, intervalSeconds, digits, scope, marks = [] }) {
   const state = { tool: "cursor", color: COLORS[0], drawings: [], draft: null, version: 0, marks };
@@ -286,7 +286,7 @@ function markShape(mark, mapper, height) {
   const dot = y == null ? "" : `<circle cx="${x}" cy="${y}" r="3" fill="${color}"/>`;
   return `<g class="trade-mark" pointer-events="none">
     <line x1="${x}" x2="${x}" y1="0" y2="${height}" stroke="${color}" stroke-width="1"${dash}/>
-    ${dot}<text x="${x + 5}" y="14" fill="${color}" class="draw-label">${esc(mark.label)}</text></g>`;
+    ${dot}</g>`;
 }
 
 function project(point, mapper) {
