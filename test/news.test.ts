@@ -361,6 +361,12 @@ describe("Gemini overload", () => {
     expect((await generate(env, "gemini-3.5-flash-lite", {}, "t")).candidates[0].content.parts[0].text).toBe("from 3.6");
     expect(calls).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]);
 
+    // Another main model at its limit falls back to 3.5 Flash-Lite first.
+    calls.length = 0;
+    vi.stubGlobal("fetch", async (url: string) => (calls.push(url.split("/models/")[1].split(":")[0]), url.includes("gemini-3.5-flash-lite") ? ok("from 3.5") : overloaded()));
+    expect((await generate(env, "gemini-3.6-flash", {}, "t")).candidates[0].content.parts[0].text).toBe("from 3.5");
+    expect(calls).toEqual(["gemini-3.6-flash", "gemini-3.6-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]);
+
     vi.stubGlobal("fetch", async () => overloaded());
     await expect(generate({ ...env, GEMINI_FALLBACK_MODEL: "off" }, "gemini-3.7-flash", {}, "t")).rejects.toMatchObject({ status: 503 });
   });
