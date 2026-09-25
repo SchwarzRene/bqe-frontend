@@ -5,14 +5,16 @@ Market News collects headlines from free sources, has a model pick and summarize
 It answers two questions: "what matters in markets and the world right now?" and "what's new on the companies and commodities I follow?"
 
 Live at **/research/markettape/**: Market News replaces Market Tape and keeps its URL,
-so existing links still work. `index.html` in this folder is a clickable mockup of the
-three pages with sample content, styled with the site palette like the research
-write-ups. The write-up of this spec is `research/markettape.html`.
+so existing links still work. `index.html` in this folder is the page; the jobs and
+endpoints behind it are in `worker/news/` (see [How it is built](#how-it-is-built)).
+The write-up is `research/markettape.html`. The AI is Google's Gemini, through the
+`GEMINI_API_KEY` secret the Fed and earnings job already used.
 
-Spec as of 24 September 2026.
+Spec as of 24 September 2026; built 25 September 2026.
 
 ## Contents
 
+- [How it is built](#how-it-is-built)
 - [Goal and scope](#goal-and-scope)
 - [Sources](#sources)
 - [Pipeline](#pipeline)
@@ -23,8 +25,46 @@ Spec as of 24 September 2026.
 - [Calendar](#calendar)
 - [Schedule, cost and storage](#schedule-cost-and-storage)
 - [Risks and open questions](#risks-and-open-questions)
-- [The calendar job (formerly Market Tape)](#the-calendar-job-formerly-market-tape)
+- [The Fed and earnings job (formerly Market Tape)](#the-fed-and-earnings-job-formerly-market-tape)
 - [References](#references)
+
+## How it is built
+
+```
+worker/news/sources.json   feeds, watchlist, commodities, blocked publishers, promo patterns
+worker/news/feeds.ts       fetch RSS/Atom + Yahoo search, parse, normalize, classify
+worker/news/store.ts       filter, dedupe, pre-score, store in D1; source health; reads; pruning
+worker/news/gemini.ts      the Gemini client: strict-JSON, search-grounded and tool calls
+worker/news/briefing.ts    the briefing: prompt, response schema, validation, retry, storage
+worker/news/calendar.ts    the calendar: daily grounded search, result lines, Market Tape merge
+worker/news/chat.ts        POST /api/chat: context, tools, sources, daily limit
+worker/news/index.ts       GET /api/news, POST /api/news/refresh, and the 15-minute cron
+worker/news/time.ts        New York / local-time helpers, briefing slots
+migrations/0003_news.sql   news_items, news_item_tickers, news_briefings, news_events, news_chat_usage
+research/markettape/index.html   the page
+```
+
+**Endpoints**
+
+| Path | Who | What |
+| --- | --- | --- |
+| `GET /api/news` | everyone | The latest briefing, the last 24 h of headlines, this week's calendar (with the headlines grouped under each event), the watchlist, and which sources have been silent for a day. Cached 60 s. |
+| `POST /api/news/refresh` | signed in | Fetches now and writes a fresh briefing. At most one per 15 minutes for everyone together; `429` otherwise. |
+| `POST /api/chat` | signed in | See [AI chat](#ai-chat). `401` for guests before anything else runs. |
+| `POST /api/admin/run/{news,calendar,briefing}` | `ADMIN_TOKEN` | Runs a job now: fetch, calendar + results, or a forced briefing. |
+
+**One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything and `newsTick()` decides per run what is due, in New York time: the fetch (every run on weekdays, on the hour at weekends), the briefing and the event results at the briefing times, the calendar and the 7-day pruning at 05:00. Right after a deploy, the first run builds the calendar and the first briefing instead of waiting for their times; each is tried at most every 3 hours / 1 hour while it keeps failing.
+
+**Settings** (`[vars]` in `wrangler.toml`): `GEMINI_MODEL` (briefing and calendar), `GEMINI_CHAT_MODEL` (optional, the chat), `NEWS_CHAT_SEARCH` (`on` = Google Search grounding in the chat), `NEWS_CHAT_DAILY_LIMIT` (default 50). The watchlist, the commodity list and the feeds are in `worker/news/sources.json`.
+
+**Where it differs from the spec below, and why**
+
+- The latest briefing is one row in D1's `documents` table (`news:briefing`), not KV: it is still one read per page load, and it needs no KV namespace to be created before a deploy.
+- The calendar outside the Fed and US watchlist earnings is found by four search-grounded Gemini calls a day (US data, Europe, Asia and Russia, commodities), not by scraping each agency's release calendar. The agencies publish them in a dozen different formats, and the Fed and earnings job already works this way. The prompts name the same sources the table in [Calendar](#calendar) lists.
+- Eurostat has no headline feed in `sources.json`: its release list is dataset updates, not news. Its releases reach the page through the calendar and through Euronews and the ECB.
+- The feed URLs could not be checked from the environment this was built in. Any that are wrong show up in the Worker's log (`news: no items for 24 h from …`) and under the page's headlines; fix them in `sources.json`.
+
+**CPU.** The fetch parses ~20 feeds and 19 Yahoo answers per run. On the free plan's 10 ms CPU per invocation that is tight; if the log shows `exceededCpu` for the news cron, drop feeds from `sources.json` or move to Workers Paid. A run that fails writes nothing and the next one, 15 minutes later, catches up.
 
 ## Goal and scope
 
@@ -84,7 +124,7 @@ flowchart LR
   B --> C[Dedupe]
   C --> D[Filter + pre-score]
   D --> E[AI briefing]
-  E --> F[Store in KV / D1]
+  E --> F[Store in D1]
   F --> G[Page reads JSON]
 ```
 
@@ -161,7 +201,7 @@ Ranked down: opinion pieces, listicles, single-stock tips, celebrity business ne
 
 **Model choice**
 
-Gemini, through the same `GEMINI_API_KEY` and `GEMINI_MODEL` the calendar job already uses (`gemini-3.7-flash` today). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k, and the briefing needs no search grounding, so it does not use up the grounded-request limit the calendar job relies on.
+Gemini, through the same `GEMINI_API_KEY` and `GEMINI_MODEL` the Fed and earnings job already uses (`gemini-3.7-flash` today), with Gemini's structured output (a response schema). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k. The briefing needs no search grounding, so it does not use up the grounded-request limit that the calendar (4 calls a day, plus one results call per briefing) and the Fed and earnings job (up to 8 per run) rely on.
 
 ## AI chat
 
@@ -178,7 +218,7 @@ The Worker builds the context for each question; the model has no other knowledg
 | Calendar | This week's events with times and one-line results | Always in the system prompt |
 | Current view | Page, region filter and time zone the user is looking at | Sent with each question |
 | Older headlines | Up to 7 days in D1 | Tool: `search_headlines(query, days, region)` |
-| Event results | EPS vs. estimate, Fed rate and vote, from the calendar job | Tool: `get_event_result(event_id)` |
+| Event results | EPS vs. estimate, Fed rate and vote, data figures, from the calendar | Tool: `get_event_result(event_id)` |
 | Prices | Latest move for a ticker or futures contract, from the existing Yahoo data | Tool: `get_price(symbol)` |
 | The wider web (optional) | Anything not in the app's data | Google Search grounding (`tools: [{ google_search: {} }]`), off by default |
 
@@ -221,7 +261,7 @@ Streaming (server-sent events) can come later; the first version returns the who
 - Model: Gemini, with the existing `GEMINI_API_KEY` secret (Worker → Settings → Variables and Secrets). The model comes from `GEMINI_MODEL` in `wrangler.toml`; a separate `GEMINI_CHAT_MODEL` can point the chat at a larger model later.
 - A question is ~10k input and ~500 output tokens. The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it goes first in the prompt, where Gemini's context caching can reuse it on models that support it.
 - On the free tier this costs nothing but is rate-limited per minute and per day, and Google may use prompts to improve its products — the headlines are public, but the questions are the user's own words. The paid tier lifts both; check current [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) and [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
-- Google Search grounding, if turned on for the chat, counts against its own grounded-request limit, which the calendar job also uses.
+- Google Search grounding, if turned on for the chat, counts against its own grounded-request limit, which the calendar and the Fed and earnings job also use.
 
 **Limits and security**
 
@@ -246,7 +286,7 @@ Times are shown in Vienna time (CET/CEST) with a toggle to New York time. The re
 
 ## Calendar
 
-The calendar shows what's on now, later today and this week, so headlines can be read against scheduled events. The US part is the former Market Tape job's event data.
+The calendar shows what's on now, later today and this week, so headlines can be read against scheduled events. Fed events and US watchlist earnings come from the former Market Tape job.
 
 **Event types**
 
@@ -268,7 +308,7 @@ The calendar shows what's on now, later today and this week, so headlines can be
 - **On now:** events currently live (press conference, earnings call), with stream link
 - **Next up:** the next 3 events with countdown
 - **This week:** a 5-day view, one row per day
-- After an event, it shows the result in one line (e.g. "CPI 2.9% vs 3.0% exp."), taken from the calendar job's results
+- After an event, it shows the result in one line (e.g. "CPI 2.9% vs 3.0% exp."), looked up after the event (Fed and US earnings: by the Fed and earnings job)
 
 **Tie-in with the briefing**
 
@@ -276,7 +316,7 @@ The calendar shows what's on now, later today and this week, so headlines can be
 - Headlines matching an event (e.g. mentioning "CPI" on CPI day) are grouped under it
 - Importance is ranked up for news about events happening today
 
-Calendar events are stored in D1 and refreshed daily at 05:00 ET; results are written by the calendar job.
+Calendar events are stored in D1 and refreshed daily at 05:00 ET by search-grounded Gemini calls (see [How it is built](#how-it-is-built)); Fed and US earnings rows and their results come from the Fed and earnings job. Result lines for everything else are looked up with each briefing.
 
 ## Schedule, cost and storage
 
@@ -303,7 +343,7 @@ The fetch jobs, storage and Worker fit in Cloudflare's free tier at this volume.
 **Storage**
 
 - D1 (SQLite): headline items (7-day retention, indexed by time, category, region and ticker) and calendar events
-- KV: the latest briefing as one JSON blob, so a page loads with a single read
+- D1 `documents`: the latest briefing as one JSON blob, so a page loads with a single read
 - Previous briefings kept 7 days for the "new vs. continuing" comparison
 
 ## Risks and open questions
@@ -326,7 +366,7 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 **Open questions**
 
 - [ ] Private page for me only, or shared with others? Public use needs a closer look at feed terms.
-- [ ] Which companies go on the watchlist, and is it the same list as the calendar job (`MARKETTAPE_TICKERS`)?
+- [ ] Which companies go on the watchlist? Market News reads it from `worker/news/sources.json`; the Fed and earnings job still reads `MARKETTAPE_TICKERS`. One list for both?
 - [x] European coverage: yes (ECB, Eurostat, Euronews, European tickers and earnings).
 - [x] Asia and Russia coverage: yes (BBC Asia, Nikkei Asia, SCMP, The Moscow Times, Meduza, Bank of Russia).
 - [x] Commodities: yes, as a separate page (energy, metals, agriculture).
@@ -337,9 +377,9 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 - [ ] Chat model: the same Flash model as the briefing, or a larger one? Google Search grounding on or off?
 - [ ] Later: push alert for importance-3 stories?
 
-## The calendar job (formerly Market Tape)
+## The Fed and earnings job (formerly Market Tape)
 
-The Worker job that used to power the Market Tape board still runs. It finds the Fed calendar and watchlist earnings dates, their streams and their reported numbers with Gemini and Google Search, and serves them at `data/schedule.json` and `data/results.json`. The mockup does not read them yet; they are the source for the US Fed and earnings rows of On now, Next up and This week.
+The Worker job that used to power the Market Tape board still runs, on its own two crons. It finds the Fed calendar and watchlist earnings dates, their streams and their reported numbers with Gemini and Google Search, and serves them at `data/schedule.json` and `data/results.json`. `worker/news/calendar.ts` merges them into the calendar: they are the Fed and US earnings rows of On now, Next up and This week, with their webcasts and results.
 
 ### How the data gets here
 

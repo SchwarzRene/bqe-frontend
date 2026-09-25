@@ -17,8 +17,8 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_MODEL = "gemini-3.7-flash";
 const DEFAULT_WATCHLIST = ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL"];
 const MAX_RESULTS = 6;
-// A first rundown built on demand (see serveTapeFile) is tried at most this
-// often, so visitors cannot run up the Gemini quota while it keeps failing.
+// A first rundown built right after a deploy (see bootstrapTape) is tried at
+// most this often, so a failing key or model cannot run up the Gemini quota.
 const BOOTSTRAP_EVERY_MS = 30 * 60_000;
 
 // How long after its start an event still counts as "on air", per kind.
@@ -50,28 +50,31 @@ export interface TapeEvent {
 // serving
 // --------------------------------------------------------------------------
 
-export async function serveTapeFile(request: Request, env: Env, ctx: ExecutionContext, file: string): Promise<Response> {
+// A visitor's request never makes a model call: the documents are served from
+// D1 (or the committed file), and only the crons and bootstrapTape write them.
+export async function serveTapeFile(request: Request, env: Env, file: string): Promise<Response> {
   const key = FILES[file];
   if (key) {
     try {
       const row = await readDoc(env, key);
       if (row) return jsonText(row, 200, { "Cache-Control": "public, max-age=300" });
-
-      // No rundown yet — a fresh deploy, before the first scheduled run.
-      // Build it now, while this visitor waits (about a minute), instead of
-      // showing an empty board until 12:10 or 22:10 UTC.
-      if (file === "schedule.json" && (await claimBootstrap(env, env.GEMINI_MODEL || DEFAULT_MODEL))) {
-        const run = refreshTape(env, new Date(), { results: false });
-        ctx.waitUntil(run); // finish even if the visitor leaves
-        console.log("markettape: first rundown on demand:", await run);
-        const fresh = await readDoc(env, key);
-        if (fresh) return jsonText(fresh, 200, { "Cache-Control": "public, max-age=300" });
-      }
     } catch (err) {
       console.warn("markettape: D1 read failed, serving the committed file", err);
     }
   }
   return env.ASSETS.fetch(request);
+}
+
+/**
+ * No rundown yet — a fresh deploy, before the first 12:10 or 22:10 UTC run:
+ * build one now. Called by the Market News cron every 15 minutes; tried at
+ * most every BOOTSTRAP_EVERY_MS with the same model while it keeps failing.
+ */
+export async function bootstrapTape(env: Env): Promise<string | null> {
+  if (!env.GEMINI_API_KEY) return null;
+  if (await readDoc(env, FILES["schedule.json"])) return null;
+  if (!(await claimBootstrap(env, env.GEMINI_MODEL || DEFAULT_MODEL))) return null;
+  return refreshTape(env, new Date(), { results: false });
 }
 
 async function readDoc(env: Env, key: string): Promise<string | null> {
@@ -129,8 +132,8 @@ export async function refreshTape(env: Env, now = new Date(), { results: withRes
   );
   const stamp = isoNow();
   await putDocument(env, FILES["schedule.json"], JSON.stringify({ updated: stamp, watchlist: tickers, events }));
-  // The on-demand first run skips the numbers, to answer sooner; the next
-  // scheduled run fills them in.
+  // The first run after a deploy skips the numbers; the next scheduled run
+  // fills them in.
   if (!withResults) return `${events.length} events (results on the next scheduled run)`;
 
   // Only events that have already started can have numbers attached.

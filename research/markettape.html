@@ -129,8 +129,8 @@
 <div class="wrap">
 
 <div class="ok" style="margin-top:34px;">
-  <strong>Clickable mockup:</strong> <a href="/research/markettape/">open Market News →</a>
-  &nbsp;·&nbsp; the page runs on sample content; this document is the spec it is built to.
+  <strong>Market News is live:</strong> <a href="/research/markettape/">open Market News →</a>
+  &nbsp;·&nbsp; this document is the spec it is built to, and <a href="#built">how it is built</a>.
 </div>
 
 <section style="margin-top:26px;">
@@ -154,7 +154,7 @@
     question.
   </div>
 
-  <p class="muted">Spec as of 24 September 2026.</p>
+  <p class="muted">Spec as of 24 September 2026; built 25 September 2026.</p>
 </section>
 
 <nav class="toc">
@@ -170,6 +170,7 @@
     <li><a href="#calendar">Calendar</a></li>
     <li><a href="#schedule">Schedule, cost and storage</a></li>
     <li><a href="#risks">Risks and open questions</a></li>
+    <li><a href="#built">How it is built</a></li>
     <li><a href="#refs">References</a></li>
   </ol>
 </nav>
@@ -313,7 +314,7 @@ company, and the commodity groups.</p>
 </ul>
 
 <h3>Model choice</h3>
-<p>Gemini, through the same <code>GEMINI_API_KEY</code> and <code>GEMINI_MODEL</code> the calendar job already uses (<code>gemini-3.7-flash</code> today). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k, and the briefing needs no search grounding, so it does not use up the grounded-request limit the calendar job relies on.</p>
+<p>Gemini, through the same <code>GEMINI_API_KEY</code> and <code>GEMINI_MODEL</code> the Fed and earnings job already uses (<code>gemini-3.7-flash</code> today), with Gemini's structured output (a response schema). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k, and the briefing needs no search grounding, so it does not use up the grounded-request limit the calendar job relies on.</p>
 
 <h2 id="chat"><span class="num">6</span> AI chat</h2>
 <p class="lead">Ask about today, get an answer with the headlines it came from.</p>
@@ -362,16 +363,16 @@ beyond this and, optionally, web search.</p>
   <span class="k">"sources"</span>: [{ <span class="k">"label"</span>: <span class="s">"Yahoo"</span>, <span class="k">"url"</span>: <span class="s">"https://…"</span>, <span class="k">"id"</span>: <span class="s">"a91f…"</span> }]
 }</pre>
 <p>Streaming (server-sent events) can come later; the first version returns the whole answer at
-once. The conversation lives in the browser tab only and is not stored. In the mockup,
-<code>CHAT_ENDPOINT</code> is empty and the panel answers the suggested questions with sample
-answers.</p>
+once. The conversation lives in the browser tab only and is not stored. Every answer ends with a
+<code>SOURCES:</code> line of headline ids, which the Worker strips from the text and turns into
+the source links.</p>
 
 <h3>Model and cost</h3>
 <ul>
   <li>Model: Gemini, with the existing <code>GEMINI_API_KEY</code> secret (Worker → Settings → Variables and Secrets). The model comes from <code>GEMINI_MODEL</code> in <code>wrangler.toml</code>; a separate <code>GEMINI_CHAT_MODEL</code> can point the chat at a larger model later.</li>
   <li>A question is ~10k input and ~500 output tokens. The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it goes first in the prompt, where Gemini's context caching can reuse it on models that support it.</li>
   <li>On the free tier this costs nothing but is rate-limited per minute and per day, and Google may use prompts to improve its products — the headlines are public, but the questions are the user's own words. The paid tier lifts both; check current <a href="https://ai.google.dev/gemini-api/docs/pricing">Gemini API pricing</a> and <a href="https://ai.google.dev/gemini-api/docs/rate-limits">rate limits</a>.</li>
-  <li>Google Search grounding, if turned on for the chat, counts against its own grounded-request limit, which the calendar job also uses.</li>
+  <li>Google Search grounding, if turned on for the chat, counts against its own grounded-request limit, which the calendar and the Fed and earnings job also use.</li>
 </ul>
 
 <h3>Limits and security</h3>
@@ -398,9 +399,11 @@ accent, like the research write-ups.</p>
 
 <h2 id="calendar"><span class="num">8</span> Calendar</h2>
 <p class="lead">What's on now, later today and this week, so headlines can be read against scheduled events.</p>
-<p>The US part is what Market Tape used to show: the scheduled Worker job
-(<code>worker/markettape.ts</code>) finds Fed events and watchlist earnings dates, their streams and
-their reported numbers, and stores them in D1.</p>
+<p>Fed events and US watchlist earnings are what Market Tape used to show: that Worker job
+(<code>worker/markettape.ts</code>) finds them, their streams and their reported numbers twice a day.
+Everything else in the table is found once a day with four search-grounded Gemini calls — US data,
+Europe, Asia and Russia, commodities — rather than by scraping a dozen agencies' release calendars
+in a dozen formats; the prompts name the same sources the table lists.</p>
 
 <h3>Event types</h3>
 <table>
@@ -431,7 +434,8 @@ their reported numbers, and stores them in D1.</p>
   <li>Headlines matching an event (e.g. mentioning "CPI" on CPI day) are grouped under it</li>
   <li>Importance is ranked up for news about events happening today</li>
 </ul>
-<p>Calendar events are stored in D1 and refreshed daily at 05:00 ET.</p>
+<p>Calendar events are stored in D1 and refreshed daily at 05:00 ET. A result line for each event
+that has happened is looked up with the next briefing.</p>
 
 <h2 id="schedule"><span class="num">9</span> Schedule, cost and storage</h2>
 <p class="lead">Fetch headlines often, run the briefing model only at fixed times.</p>
@@ -459,7 +463,7 @@ Cloudflare's free tier at this volume.</p>
 <h3>Storage</h3>
 <ul>
   <li><strong>D1 (SQLite):</strong> headline items (7-day retention, indexed by time, category, region and ticker) and calendar events</li>
-  <li><strong>KV:</strong> the latest briefing as one JSON blob, so a page loads with a single read</li>
+  <li><strong>D1 <code>documents</code>:</strong> the latest briefing as one JSON blob, so a page loads with a single read (a row rather than KV: nothing extra to create before a deploy)</li>
   <li>Previous briefings kept 7 days for the "new vs. continuing" comparison</li>
 </ul>
 
@@ -482,7 +486,7 @@ Cloudflare's free tier at this volume.</p>
 <h3>Open questions</h3>
 <div class="vlog">
   <div class="ventry"><h4><span class="vtag">open</span>Private or shared?</h4><div class="row">Public use needs a closer look at feed terms.</div></div>
-  <div class="ventry"><h4><span class="vtag">open</span>Watchlist</h4><div class="row">Which companies go on it — the same list the calendar job uses (<code>MARKETTAPE_TICKERS</code>)?</div></div>
+  <div class="ventry"><h4><span class="vtag">open</span>Watchlist</h4><div class="row">Which companies go on it? Market News reads it from <code>worker/news/sources.json</code>; the Fed and earnings job still reads <code>MARKETTAPE_TICKERS</code>. One list for both?</div></div>
   <div class="ventry"><h4><span class="vtag">open</span>Briefing language</h4><div class="row">English or German?</div></div>
   <div class="ventry"><h4><span class="vtag">open</span>Update rhythm</h4><div class="row">Are fixed briefings a day enough, or near-live updates?</div></div>
   <div class="ventry"><h4><span class="vtag">open</span>Chat model</h4><div class="row">Gemini: provider decided. Same Flash model as the briefing, or a larger one for the chat? Google Search grounding on or off?</div></div>
@@ -490,7 +494,36 @@ Cloudflare's free tier at this volume.</p>
   <div class="ventry win"><h4><span class="vtag">decided</span>Coverage</h4><div class="row">Europe (ECB, Eurostat, Euronews, European tickers and earnings), Asia and Russia (BBC Asia, Nikkei Asia, SCMP, The Moscow Times, Meduza, Bank of Russia), and commodities as a separate page. Chat about current events: yes.</div></div>
 </div>
 
-<h2 id="refs"><span class="num">11</span> References</h2>
+<h2 id="built"><span class="num">11</span> How it is built</h2>
+<p class="lead">One Worker module, one cron, five tables.</p>
+<div class="fm">
+  <div><span class="f">worker/news/sources.json</span> <span class="d">— feeds, watchlist, commodities, blocked publishers, promo patterns</span></div>
+  <div><span class="f">worker/news/feeds.ts</span> <span class="d">— fetch RSS/Atom and Yahoo search, parse (no DOMParser in Workers), normalize, classify</span></div>
+  <div><span class="f">worker/news/store.ts</span> <span class="d">— filter, dedupe, pre-score, store; source health; pruning</span></div>
+  <div><span class="f">worker/news/gemini.ts</span> <span class="d">— strict-JSON, search-grounded and function-calling Gemini calls</span></div>
+  <div><span class="f">worker/news/briefing.ts</span> <span class="d">— prompt, response schema, validation against the input ids, retry once</span></div>
+  <div><span class="f">worker/news/calendar.ts</span> <span class="d">— daily grounded search, result lines, merge with the Fed and earnings job</span></div>
+  <div><span class="f">worker/news/chat.ts</span> <span class="d">— POST /api/chat: context, tools, sources, daily limit</span></div>
+  <div><span class="f">worker/news/index.ts</span> <span class="d">— GET /api/news, POST /api/news/refresh, the 15-minute cron</span></div>
+  <div><span class="f">migrations/0003_news.sql</span> <span class="d">— news_items, news_item_tickers, news_briefings, news_events, news_chat_usage</span></div>
+</div>
+<table>
+  <tr><th>Path</th><th>Who</th><th>What</th></tr>
+  <tr><td><code>GET /api/news</code></td><td>everyone</td><td>The latest briefing, 24 h of headlines, this week's calendar with headlines grouped under each event, silent sources. Cached 60 s.</td></tr>
+  <tr><td><code>POST /api/news/refresh</code></td><td>signed in</td><td>Fetch now and write a fresh briefing; one per 15 minutes for everyone together.</td></tr>
+  <tr><td><code>POST /api/chat</code></td><td>signed in</td><td>The chat; <code>401</code> for guests before any model call, <code>429</code> past the daily limit.</td></tr>
+</table>
+<p>The free plan allows five cron triggers per account, so one trigger, every 15 minutes, runs
+everything: <code>newsTick()</code> works out in New York time whether this run fetches (every run on
+weekdays, on the hour at weekends), writes a briefing and looks up results (02:30, 08:00, 12:30,
+16:30 on weekdays, Sat 10:00), or rebuilds the calendar and prunes (05:00). After a deploy, the first
+run builds the calendar and the first briefing straight away.</p>
+<div class="warn"><strong>Not checked from here:</strong> the feed URLs. The environment this was
+built in could not reach the publishers. A wrong URL shows up in the Worker's log
+(<code>news: no items for 24 h from …</code>) and under the page's headlines; fix it in
+<code>sources.json</code>.</div>
+
+<h2 id="refs"><span class="num">12</span> References</h2>
 <ul>
   <li><a href="https://rss.feedspot.com/cnbc_rss_feeds/">CNBC RSS feed list (Feedspot)</a></li>
   <li><a href="https://feedbagel.com/feeds?page=4">MarketWatch and CNBC feed URLs (Feedbagel)</a></li>

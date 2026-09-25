@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { describeGeminiError, serveTapeFile } from "../worker/markettape";
+import { bootstrapTape, describeGeminiError, serveTapeFile } from "../worker/markettape";
 
 /** Just enough of D1 for the documents table. */
 function fakeDb() {
@@ -42,15 +42,22 @@ function setup(key = "test-key") {
     GEMINI_API_KEY: key,
     ASSETS: { fetch: async () => new Response("not found", { status: 404 }) },
   };
-  const ctx: any = { waitUntil: () => {} };
   const request = new Request("https://site/research/markettape/data/schedule.json");
-  return { env, ctx, request };
+  return { env, request };
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("Market Tape first rundown on demand", () => {
-  it("builds the schedule during the first request and serves it", async () => {
+describe("Market Tape first rundown", () => {
+  it("a visitor's request never calls the model, even with nothing stored", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const { env, request } = setup();
+    expect((await serveTapeFile(request, env, "schedule.json")).status).toBe(404);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("the cron builds the first schedule, and it is served from D1", async () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", async (url: string, init: any) => {
       calls.push(url);
@@ -59,41 +66,37 @@ describe("Market Tape first rundown on demand", () => {
         ? gemini('```json\n[{"id":"fomc","title":"FOMC rate decision","date":"2026-10-28","timeET":"14:00","streamKind":"video","streamUrl":"https://www.federalreserve.gov/live"}]\n```')
         : gemini('[{"id":"nvda-q3","title":"Q3 results","ticker":"NVDA","date":"2026-11-18","timeET":"17:00"}]');
     });
-    const { env, ctx, request } = setup();
-    const res = await serveTapeFile(request, env, ctx, "schedule.json");
-    expect(res.status).toBe(200);
-    const body = await res.json<any>();
-    expect(body.events.map((e: any) => e.id)).toEqual(["fomc", "nvda-q3"]);
+    const { env, request } = setup();
+    expect(await bootstrapTape(env)).toBe("2 events (results on the next scheduled run)");
     expect(calls).toHaveLength(2); // fed + earnings, no results pass
     expect(calls[0]).toContain("gemini-3.7-flash:generateContent");
 
-    // Served from D1 now, with no further model calls.
-    await serveTapeFile(request, env, ctx, "schedule.json");
+    const body = await (await serveTapeFile(request, env, "schedule.json")).json<any>();
+    expect(body.events.map((e: any) => e.id)).toEqual(["fomc", "nvda-q3"]);
+    // Once there is a schedule, the cron leaves it to the scheduled runs.
+    expect(await bootstrapTape(env)).toBeNull();
     expect(calls).toHaveLength(2);
   });
 
   it("tries at most once per 30 minutes while it keeps failing", async () => {
     const fetch = vi.fn(async () => new Response("model not found", { status: 404 }));
     vi.stubGlobal("fetch", fetch);
-    const { env, ctx, request } = setup();
-    expect((await serveTapeFile(request, env, ctx, "schedule.json")).status).toBe(404);
-    expect((await serveTapeFile(request, env, ctx, "schedule.json")).status).toBe(404);
+    const { env } = setup();
+    await bootstrapTape(env);
+    expect(await bootstrapTape(env)).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(2); // one run (fed + earnings), not two
 
     // Switching the model is the usual fix, so it is tried at once.
     env.GEMINI_MODEL = "another-model";
-    await serveTapeFile(request, env, ctx, "schedule.json");
+    await bootstrapTape(env);
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it("does not bootstrap for results.json, and needs the key", async () => {
+  it("needs the key", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
-    const { env, ctx } = setup(""); // no key configured
-    await serveTapeFile(new Request("https://site/research/markettape/data/results.json"), env, ctx, "results.json");
-    expect(fetch).not.toHaveBeenCalled();
-    const res = await serveTapeFile(new Request("https://site/research/markettape/data/schedule.json"), env, ctx, "schedule.json");
-    expect(res.status).toBe(404);
+    const { env } = setup(""); // no key configured
+    expect(await bootstrapTape(env)).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

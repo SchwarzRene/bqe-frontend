@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Market News — a daily briefing on markets, stocks and commodities: ranked top stories, an on-now calendar and a chat that answers from the collected headlines.">
+<meta name="description" content="Market News — a daily briefing on markets, stocks and commodities: AI-ranked top stories from free headlines, an on-now event calendar and a chat that answers from the collected headlines.">
 <title>Market News</title>
 <link rel="icon" href="/assets/images/logo.png" type="image/png">
 <style>
@@ -62,7 +62,6 @@ body { background: transparent; }
 .dateline { display: flex; gap: 12px; align-items: center; font-family: var(--mono); font-size: 13px; color: var(--muted); flex-wrap: wrap; }
 .dateline a { color: var(--muted); text-decoration: none; }
 .dateline a:hover { color: var(--accent); }
-.sample { padding: 2px 10px; border: 1px solid rgba(240,180,41,.35); background: rgba(240,180,41,.08); color: var(--accent); border-radius: 999px; font-family: var(--sans); font-weight: 600; font-size: 12px; }
 .brand { font-weight: 700; font-size: clamp(36px, 6vw, 52px); line-height: 1.05; letter-spacing: -0.02em; margin-top: 8px; color: var(--accent); }
 .tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .updated { font-size: 14px; color: var(--muted); font-family: var(--mono); }
@@ -221,6 +220,16 @@ body dialog.bqe-login .err { color: var(--red); }
 .chat-form button { min-height: 48px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--accent); color: var(--on-accent); cursor: pointer; font-weight: 700; }
 .chat-form button:hover { background: var(--accent-light); }
 .chat-note { padding: 0 24px 16px; font-size: 12px; color: var(--muted); }
+/* Live data */
+.notice { padding: 12px 16px; border-left: 4px solid var(--accent); border-radius: 0 8px 8px 0; background: rgba(240,180,41,.06); color: var(--fg); font-size: 15px; }
+.notice.error { border-left-color: var(--red); background: rgba(248,113,113,.07); }
+.evlink { font-size: 13px; font-weight: 600; margin-left: 4px; }
+details.evheads, details.more { margin-top: 4px; }
+details.evheads summary, details.more summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; padding: 6px 0; }
+details.evheads .hl { padding: 8px 0 8px 10px; border-top: 0; border-left: 2px solid var(--rule); }
+details.evheads .hl a { font-size: 14px; }
+.msg.bot.err { color: var(--red); }
+.btn:disabled { opacity: .6; cursor: progress; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 </style>
 </head>
@@ -230,7 +239,7 @@ body dialog.bqe-login .err { color: var(--red); }
   <div class="top">
     <header class="masthead">
       <div>
-        <div class="dateline"><a href="/research/">← Research</a><span>Thursday 24 September 2026</span><span class="sample">Sample content</span></div>
+        <div class="dateline"><a href="/research/">← Research</a><span id="today"></span></div>
         <div class="brand">Market News</div>
       </div>
       <div class="tools">
@@ -259,7 +268,7 @@ body dialog.bqe-login .err { color: var(--red); }
 
   <main id="page" aria-live="polite"></main>
 
-  <footer><span>Headlines link to the original publishers. Summaries are written by AI from headlines only and may miss context. All content on this page is sample data.</span><a href="/research/markettape.html">How this is built ↗</a></footer>
+  <footer><span>Headlines link to the original publishers. Summaries are written by AI (Gemini) from headlines only and may miss context. Not investment advice.</span><a href="/research/markettape.html">How this is built ↗</a></footer>
 </div>
 
 <aside class="chat" id="chat" role="dialog" aria-modal="false" aria-labelledby="chat-h" hidden>
@@ -279,7 +288,7 @@ body dialog.bqe-login .err { color: var(--red); }
     <textarea id="chat-input" rows="1" placeholder="Ask about markets, news or events…"></textarea>
     <button type="submit">Send</button>
   </form>
-  <p class="chat-note">Answers come from the collected headlines and may miss context. Not investment advice.</p>
+  <p class="chat-note" id="chat-note"></p>
 </aside>
 
 <script src="/assets/js/session.js"></script>
@@ -292,204 +301,146 @@ body dialog.bqe-login .err { color: var(--red); }
   const PAGES = [['general', 'General'], ['stocks', 'Stocks'], ['commodities', 'Commodities']];
   const REGIONS = [['all', 'All'], ['us', 'US'], ['eu', 'Europe'], ['asia', 'Asia'], ['ru', 'Russia']];
   const TZS = [['vie', 'Vienna'], ['ny', 'New York']];
+  const TZ_ID = { vie: 'Europe/Vienna', ny: 'America/New_York' };
   const R_NAME = { us: 'US', eu: 'Europe', asia: 'Asia', ru: 'Russia', global: 'Global' };
+  // The API speaks the spec's region names; the filter uses short codes.
+  const CODE = { us: 'us', europe: 'eu', asia: 'asia', russia: 'ru', global: 'global' };
+  const OVERVIEW_KEY = { all: 'all', us: 'us', eu: 'europe', asia: 'asia', ru: 'russia' };
+  const DOTS = { 3: '●●●', 2: '●●○', 1: '●○○' };
+  const LEVEL = { 3: 'High', 2: 'Medium', 1: 'Low' };
+  const KIND = {
+    fed: 'Fed', 'us-data': 'Data', earnings: 'Earnings', 'eu-central-bank': 'Central bank', 'eu-data': 'Data',
+    'asia-central-bank': 'Central bank', 'asia-data': 'Data', russia: 'Russia', commodities: 'Commodities'
+  };
+  const GROUP_WORDS = {
+    Agriculture: /\b(soy|soybeans?|corn|wheat|coffee|grains?|crop|harvest|usda|wasde)\b/i,
+    Energy: /\b(oil|crude|brent|wti|opec|gas|lng|eia|energy)\b/i,
+    Metals: /\b(gold|silver|copper|metals?|aluminium|aluminum)\b/i
+  };
+
+  let D = null; // the last /api/news answer
+  let loadError = '';
+  let notice = '';
+  let byId = new Map();
 
   // ---------- Helpers ----------
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const keep = (r) => state.region === 'all' || r === state.region || r === 'global';
-  // Sample times are stored in Vienna time; New York is 6 hours behind.
-  const t = (v) => {
-    if (state.tz === 'vie' || !/^\d\d:\d\d$/.test(v)) return v;
-    const [h, m] = v.split(':').map(Number);
-    const nh = (h - 6 + 24) % 24;
-    return String(nh).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-  };
+  const safeUrl = (u) => (/^https?:\/\//.test(u || '') ? u : '#');
+  const keep = (code) => state.region === 'all' || code === state.region || code === 'global';
   const tzLabel = () => (state.tz === 'vie' ? 'Vienna' : 'New York');
-  const DOTS = { 3: '●●●', 2: '●●○', 1: '●○○' };
-  const LEVEL = { 3: 'High', 2: 'Medium', 1: 'Low' };
-
-  // ---------- Sample data ----------
-  const DATA = {
-    general: {
-      title: 'The day so far',
-      onNow: [{ title: 'ECB President speech on the economic outlook', region: 'eu', time: '15:00', until: '15:45', url: 'https://www.ecb.europa.eu' }],
-      next: [
-        { time: '16:00', countdown: 'in 50 min', title: 'Fed Governor remarks on bank regulation', kind: 'Fed', region: 'us' },
-        { time: '16:30', countdown: 'in 1 h 20 min', title: 'EIA natural gas storage', kind: 'Commodities', region: 'global' },
-        { time: '19:00', countdown: 'in 3 h 50 min', title: 'US 7-year Treasury auction', kind: 'Markets', region: 'us' },
-        { time: '22:15', countdown: 'in 7 h 05 min', title: 'Costco Q4 results', kind: 'Earnings', region: 'us' },
-        { time: '01:30', countdown: 'in 10 h 20 min', title: 'Tokyo CPI, September', kind: 'Data', region: 'asia' }
-      ],
-      overview: {
-        all: 'Rates set the tone: stronger US growth lifted yields and cooled hopes for a quick Fed cut, with Friday’s PCE data next. The ECB President speaks as officials look divided on October. In Asia the PBoC stayed on hold, and Russia’s central bank is signalling caution.',
-        us: 'An upward revision to US growth pushed Treasury yields higher and made a quick Fed cut look less likely. Friday’s PCE inflation data is the next big test.',
-        eu: 'Europe waits on the ECB President’s speech after officials sounded split on October. German business sentiment slipped again.',
-        asia: 'The PBoC left lending rates unchanged as the debate over property support continues. Tokyo inflation data is due early Friday.',
-        ru: 'Russia’s central bank signalled it is in no hurry to cut rates further. The EU is discussing its next sanctions package.'
-      },
-      themes: ['Rates', 'ECB path', 'China policy', 'Russia sanctions'],
-      stories: [
-        { title: 'US growth revised higher; Treasury yields climb ahead of Friday’s inflation data', why: 'Stronger growth makes a quick Fed cut less likely and pushes rates and the dollar up.', imp: 3, isNew: true, region: 'us', topic: 'Macro', sources: ['MarketWatch', 'CNBC'] },
-        { title: 'ECB officials split on October; euro firms', why: 'Sets expectations for the next ECB meeting and the path of euro-area rates.', imp: 3, isNew: false, region: 'eu', topic: 'Policy', sources: ['Euronews', 'ECB'] },
-        { title: 'Bank of Russia signals caution on further rate cuts', why: 'Keeps ruble rates high; relevant for European banks with Russian exposure.', imp: 2, isNew: true, region: 'ru', topic: 'Policy', sources: ['The Moscow Times', 'Bank of Russia'] },
-        { title: 'German business sentiment weakens for a second month', why: 'Adds to the case for further ECB easing.', imp: 2, isNew: false, region: 'eu', topic: 'Macro', sources: ['Euronews', 'MarketWatch'] },
-        { title: 'PBoC holds lending rates; debate over property support continues', why: 'China’s growth path drives global demand for goods and raw materials.', imp: 1, isNew: false, region: 'asia', topic: 'Policy', sources: ['South China Morning Post', 'BBC'] },
-        { title: 'EU weighs next sanctions package on Russia', why: 'Could hit Russian energy exports and European firms still active in Russia.', imp: 1, isNew: false, region: 'ru', topic: 'World', sources: ['Euronews', 'Meduza'] }
-      ],
-      elsewhere: [
-        { page: 'stocks', title: 'Chipmakers rebound from New York to Tokyo', region: 'global' },
-        { page: 'stocks', title: 'Costco reports after the US close', region: 'us' },
-        { page: 'commodities', title: 'Chinese buyers return for US soybeans', region: 'asia' },
-        { page: 'commodities', title: 'Oil slips as supply talk returns', region: 'global' },
-        { page: 'commodities', title: 'Russian seaborne oil exports rise', region: 'ru' }
-      ],
-      weekTitle: 'This week',
-      week: [
-        { label: 'Mon 21', events: [{ time: '03:15', title: 'PBoC loan prime rate', region: 'asia', result: 'unchanged' }, { time: '16:00', title: 'Fed regional president speaks', region: 'us' }] },
-        { label: 'Tue 22', events: [{ time: '10:00', title: 'German ifo business climate', region: 'eu', result: 'weaker' }, { time: '16:00', title: 'US consumer confidence', region: 'us', result: 'in line' }] },
-        { label: 'Wed 23', events: [{ time: '10:00', title: 'Euro-area flash PMIs', region: 'eu', result: 'mixed' }, { time: '18:00', title: 'Russia weekly CPI', region: 'ru' }] },
-        { label: 'Thu 24', today: true, events: [{ time: '14:30', title: 'US GDP, Q2 third estimate', region: 'us', result: 'revised up' }, { time: '15:00', title: 'ECB President speech', region: 'eu', result: 'live' }, { time: '16:00', title: 'Fed Governor remarks', region: 'us' }] },
-        { label: 'Fri 25', events: [{ time: '01:30', title: 'Tokyo CPI, September', region: 'asia' }, { time: '14:30', title: 'US PCE inflation, August', region: 'us' }] }
-      ],
-      headTitle: 'Headlines',
-      cats: [
-        { name: 'World', items: [
-          { title: 'Leaders gather in New York as UN General Assembly week continues', source: 'BBC', ago: '2 h ago', region: 'global' },
-          { title: 'Storms disrupt rail traffic across central Europe', source: 'Euronews', ago: '3 h ago', region: 'eu' },
-          { title: 'Japan and South Korea leaders meet on trade and security', source: 'BBC Asia', ago: '4 h ago', region: 'asia' },
-          { title: 'EU weighs next sanctions package on Russia', source: 'Euronews', ago: '6 h ago', region: 'ru' }] },
-        { name: 'Economy', items: [
-          { title: 'US GDP growth revised up in third estimate', source: 'CNBC', ago: '40 min ago', region: 'us' },
-          { title: 'German business sentiment slips again', source: 'Euronews', ago: '2 d ago', region: 'eu' },
-          { title: 'Ruble weakens against the dollar', source: 'The Moscow Times', ago: '5 h ago', region: 'ru' }] },
-        { name: 'Central banks', items: [
-          { title: 'ECB publishes President’s speech on the outlook', source: 'ECB', ago: '10 min ago', region: 'eu' },
-          { title: 'Fed Governor to speak on bank capital rules', source: 'Federal Reserve', ago: '4 h ago', region: 'us' },
-          { title: 'Bank of Russia governor comments on inflation', source: 'Bank of Russia', ago: '7 h ago', region: 'ru' },
-          { title: 'PBoC keeps loan prime rates unchanged', source: 'South China Morning Post', ago: '3 d ago', region: 'asia' }] }
-      ]
-    },
-
-    stocks: {
-      title: 'Stocks today',
-      overview: {
-        all: 'Chipmakers are bouncing back on both sides of the Atlantic and in Tokyo after a two-day slide. Higher bond yields weigh on rate-sensitive sectors, while Vienna-listed banks gain as bets on fast ECB cuts fade. Costco reports after the US close.',
-        us: 'Chip stocks lead a rebound while higher Treasury yields weigh on real estate and utilities. Costco’s results tonight are the first read on consumer spending before Friday’s PCE data.',
-        eu: 'European chipmakers follow the US rebound, and banks, including Erste in Vienna, rise as markets price a slower pace of ECB cuts.',
-        asia: 'The Nikkei and Taiwan shares rise with the chip rebound, led by TSMC.',
-        ru: 'Russian stocks slip as the ruble weakens and the central bank signals caution.'
-      },
-      themes: ['Chips', 'Banks', 'Rising yields', 'Consumer'],
-      stories: [
-        { title: 'Chipmakers rebound from New York to Tokyo after a two-day slide', why: 'Nvidia, ASML and TSMC on your watchlist are moving together with the sector.', imp: 3, isNew: true, region: 'global', topic: 'Chips', sources: ['Yahoo', 'Nikkei Asia'] },
-        { title: 'Costco reports after the US close', why: 'First read on US consumer spending before Friday’s PCE inflation data.', imp: 2, isNew: true, region: 'us', topic: 'Earnings', sources: ['CNBC', 'Yahoo'] },
-        { title: 'Vienna banks rally as bets on fast ECB cuts fade', why: 'Erste on your watchlist benefits from higher rates for longer.', imp: 2, isNew: true, region: 'eu', topic: 'Banks', sources: ['Euronews', 'Yahoo'] },
-        { title: 'TSMC leads Taiwan shares higher', why: 'Asia’s largest chipmaker sets the tone for the regional tech rebound.', imp: 2, isNew: true, region: 'asia', topic: 'Chips', sources: ['Nikkei Asia'] },
-        { title: 'Rate-sensitive sectors lag as yields rise', why: 'Real estate and utilities tend to fall when bond yields climb.', imp: 1, isNew: false, region: 'us', topic: 'Markets', sources: ['MarketWatch'] },
-        { title: 'Russian stocks slip as the ruble weakens', why: 'Reflects tighter policy and sanctions pressure on Russian companies.', imp: 1, isNew: false, region: 'ru', topic: 'Markets', sources: ['The Moscow Times'] }
-      ],
-      companies: [
-        { ticker: 'NVDA', region: 'us', line: 'Recovering with the chip sector after two down days; no company-specific news.' },
-        { ticker: 'ASML', region: 'eu', line: 'Higher with European chipmakers, tracking the rebound in US semiconductors.' },
-        { ticker: 'EBS', region: 'eu', line: 'Among Vienna’s top gainers as banks price in a slower pace of ECB cuts.' },
-        { ticker: '2330.TW', region: 'asia', line: 'TSMC leads Asian chip stocks higher with the global rebound.' }
-      ],
-      quiet: 'SAP, AAPL: nothing notable today',
-      weekTitle: 'Earnings calendar',
-      week: [
-        { label: 'Thu 24', today: true, events: [{ time: '22:15', title: 'Costco Q4 results', region: 'us' }] },
-        { label: 'Fri 25', events: [] },
-        { label: 'Mon 28', events: [] },
-        { label: 'Tue 29', events: [{ time: '22:15', title: 'Nike Q1 results', region: 'us' }] },
-        { label: 'Later', events: [{ time: '—', title: 'SAP Q3 results, October (date to be confirmed)', region: 'eu' }] }
-      ],
-      headTitle: 'Stock headlines',
-      cats: [
-        { name: 'Markets', items: [
-          { title: 'Stocks mixed as Treasury yields rise after GDP revision', source: 'MarketWatch', ago: '40 min ago', region: 'us' },
-          { title: 'European stocks edge higher, led by chipmakers', source: 'Euronews', ago: '1 h ago', region: 'eu' },
-          { title: 'Nikkei rises as chip stocks rebound', source: 'Nikkei Asia', ago: '8 h ago', region: 'asia' },
-          { title: 'Moscow Exchange index slips', source: 'The Moscow Times', ago: '5 h ago', region: 'ru' }] },
-        { name: 'Companies', items: [
-          { title: 'Nvidia shares recover part of this week’s losses', source: 'Yahoo', ago: '1 h ago', region: 'us' },
-          { title: 'ASML gains as chip sector rebounds', source: 'Yahoo', ago: '2 h ago', region: 'eu' },
-          { title: 'Erste Group among top gainers on the Vienna exchange', source: 'Yahoo', ago: '3 h ago', region: 'eu' },
-          { title: 'TSMC leads Taiwan shares higher', source: 'Nikkei Asia', ago: '9 h ago', region: 'asia' }] },
-        { name: 'Earnings', items: [
-          { title: 'What to watch in Costco’s results tonight', source: 'CNBC', ago: '3 h ago', region: 'us' },
-          { title: 'Nike reports next week as turnaround is tested', source: 'Yahoo', ago: '1 d ago', region: 'us' }] }
-      ]
-    },
-
-    commodities: {
-      title: 'Commodities today',
-      overview: {
-        all: 'Soybeans firm as Chinese buyers return for US cargoes. Oil drifts lower on renewed supply talk despite a bigger US stock draw, and gold holds near its highs even as yields rise.',
-        us: 'The US harvest is running ahead of average and export sales for soybeans are strong. US crude stocks fell more than expected.',
-        eu: 'European gas prices are steady and wheat is calm as Black Sea export flows hold up.',
-        asia: 'Chinese demand is the story: soybean purchases are back and copper firms on hopes of more support for China’s economy.',
-        ru: 'Russian seaborne oil exports rose, according to tanker tracking, as the EU discusses further sanctions.'
-      },
-      themes: ['Soybeans', 'China demand', 'Oil supply', 'Gold'],
-      groups: [
-        { name: 'Agriculture', next: ['Mon', '22:00', 'USDA crop progress'],
-          summary: 'Soybeans lead on renewed Chinese buying; grains steady as the US harvest runs ahead of average.',
-          rows: [['Soybeans', 'Firmer on Chinese purchases of US cargoes'], ['Corn', 'Steady; harvest pace ahead of average'], ['Wheat', 'Calm as Black Sea exports hold up'], ['Coffee', 'No notable news today']],
-          items: [
-            { title: 'Chinese buyers book US soybean cargoes', source: 'Yahoo', ago: '2 h ago', region: 'asia' },
-            { title: 'US harvest pace ahead of average, crop report shows', source: 'MarketWatch', ago: '1 d ago', region: 'us' },
-            { title: 'Wheat steady as Black Sea export flows hold up', source: 'Euronews', ago: '4 h ago', region: 'eu' }] },
-        { name: 'Energy', next: ['Thu', '16:30', 'EIA natural gas storage'],
-          summary: 'Oil drifts lower on supply talk despite a bigger-than-expected US stock draw; European gas is steady.',
-          rows: [['Crude oil', 'Lower on renewed OPEC+ supply talk'], ['US gas', 'Storage data due today'], ['EU gas', 'Steady; storage well filled']],
-          items: [
-            { title: 'Oil slips as OPEC+ supply talk returns', source: 'CNBC', ago: '2 h ago', region: 'global' },
-            { title: 'US crude stocks fall more than expected', source: 'MarketWatch', ago: '1 d ago', region: 'us' },
-            { title: 'Russian seaborne oil exports rise, tanker data show', source: 'The Moscow Times', ago: '5 h ago', region: 'ru' }] },
-        { name: 'Metals', next: ['Sun', '03:30', 'China industrial profits'],
-          summary: 'Gold holds near its highs even as yields rise; copper firms on hopes of more support for China’s economy.',
-          rows: [['Gold', 'Near highs despite rising yields'], ['Silver', 'Follows gold, no separate news'], ['Copper', 'Firmer on China property support hopes']],
-          items: [
-            { title: 'Gold steadies as Treasury yields climb', source: 'Yahoo', ago: '1 h ago', region: 'global' },
-            { title: 'Copper gains on China property support hopes', source: 'Nikkei Asia', ago: '6 h ago', region: 'asia' }] }
-      ],
-      weekTitle: 'Commodity calendar',
-      week: [
-        { label: 'Mon 21', events: [{ time: '22:00', title: 'USDA crop progress', region: 'us', result: 'harvest ahead of pace' }] },
-        { label: 'Tue 22', events: [] },
-        { label: 'Wed 23', events: [{ time: '16:30', title: 'EIA crude inventories', region: 'us', result: 'bigger draw' }] },
-        { label: 'Thu 24', today: true, events: [{ time: '14:30', title: 'USDA weekly export sales', region: 'us', result: 'soybeans strong' }, { time: '16:30', title: 'EIA natural gas storage', region: 'us' }] },
-        { label: 'Sun 27', events: [{ time: '03:30', title: 'China industrial profits', region: 'asia' }] }
-      ],
-      headTitle: 'Commodity headlines',
-      cats: [
-        { name: 'Latest', items: [
-          { title: 'Gold steadies as Treasury yields climb', source: 'Yahoo', ago: '1 h ago', region: 'global' },
-          { title: 'Oil slips as OPEC+ supply talk returns', source: 'CNBC', ago: '2 h ago', region: 'global' },
-          { title: 'Chinese buyers book US soybean cargoes', source: 'Yahoo', ago: '2 h ago', region: 'asia' },
-          { title: 'Wheat steady as Black Sea export flows hold up', source: 'Euronews', ago: '4 h ago', region: 'eu' }] },
-        { name: 'Earlier', items: [
-          { title: 'Russian seaborne oil exports rise, tanker data show', source: 'The Moscow Times', ago: '5 h ago', region: 'ru' },
-          { title: 'Copper gains on China property support hopes', source: 'Nikkei Asia', ago: '6 h ago', region: 'asia' },
-          { title: 'US crude stocks fall more than expected', source: 'MarketWatch', ago: '1 d ago', region: 'us' },
-          { title: 'US harvest pace ahead of average, crop report shows', source: 'MarketWatch', ago: '1 d ago', region: 'us' }] }
-      ]
-    }
+  const fmt = (opts) => new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: TZ_ID[state.tz] }, opts));
+  const time = (iso) => fmt({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+  const dayKey = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ_ID[state.tz] }).format(new Date(ms));
+  const dayLabel = (ms) => fmt({ weekday: 'short', day: 'numeric' }).format(new Date(ms)).replace(',', '');
+  const longDate = (ms) => fmt({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(ms)).replace(',', '');
+  function ago(iso) {
+    const min = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+    if (min < 60) return min + ' min ago';
+    if (min < 48 * 60) return Math.round(min / 60) + ' h ago';
+    return Math.round(min / 1440) + ' d ago';
+  }
+  function countdown(ms) {
+    const min = Math.max(0, Math.round(ms / 60000));
+    if (min < 60) return 'in ' + min + ' min';
+    if (min < 24 * 60) return 'in ' + Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') + ' min';
+    return 'in ' + Math.round(min / 1440) + ' d';
+  }
+  const itemSources = (ids) => {
+    const out = [];
+    ids.forEach((id) => {
+      const i = byId.get(id);
+      if (!i) return;
+      [{ source: i.source, url: i.url }].concat(i.alsoIn || []).forEach((s) => {
+        if (!out.some((o) => o.label === s.source)) out.push({ label: s.source, url: s.url });
+      });
+    });
+    return out.slice(0, 5);
   };
+
+  // ---------- View models from the API ----------
+  const briefing = () => (D && D.briefing) || null;
+  const items = () => (D ? D.items : []);
+  const events = () => (D ? D.events : []);
+
+  function stories(page) {
+    const b = briefing();
+    if (!b) return [];
+    return b.pages[page].topStories.map((s) => ({
+      title: s.summary, why: s.why, imp: s.importance, isNew: s.status === 'new',
+      region: CODE[s.region] || 'global', topic: s.topic, sources: itemSources(s.ids)
+    }));
+  }
+
+  // This week, Monday to Sunday, in the viewer's time zone; later events in "Later".
+  function week(filter) {
+    const now = Date.now();
+    const todayKey = dayKey(now);
+    const wd = new Date(todayKey + 'T12:00:00Z').getUTCDay();
+    const monday = Date.parse(todayKey + 'T12:00:00Z') - ((wd + 6) % 7) * 86400000;
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const ms = monday + i * 86400000;
+      days.push({ key: new Date(ms).toISOString().slice(0, 10), label: dayLabel(ms), today: new Date(ms).toISOString().slice(0, 10) === todayKey, weekend: i >= 5, events: [] });
+    }
+    const later = { key: 'later', label: 'Later', events: [] };
+    events().filter(filter).forEach((e) => {
+      const k = dayKey(Date.parse(e.start));
+      const d = days.find((x) => x.key === k);
+      if (d) d.events.push(e);
+      else if (k > days[6].key) later.events.push(e);
+    });
+    days.concat(later).forEach((d) => d.events.sort((x, y) => x.start.localeCompare(y.start)));
+    const list = days.filter((d) => !d.weekend || d.events.length);
+    if (later.events.length) list.push(later);
+    return list;
+  }
+
+  function headlineCats(page) {
+    const all = items().slice().sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+    const earn = /\b(earnings|results|quarter(ly)?|revenue|profit|guidance|eps|outlook)\b/i;
+    if (page === 'general') {
+      return [
+        { name: 'World', items: all.filter((i) => i.category === 'world') },
+        { name: 'Economy', items: all.filter((i) => i.category === 'markets') },
+        { name: 'Central banks', items: all.filter((i) => i.category === 'policy') }
+      ];
+    }
+    if (page === 'stocks') {
+      return [
+        { name: 'Markets', items: all.filter((i) => i.category === 'markets' && !earn.test(i.title)) },
+        { name: 'Companies', items: all.filter((i) => i.category === 'company' && !earn.test(i.title)) },
+        { name: 'Earnings', items: all.filter((i) => (i.category === 'company' || i.category === 'markets') && earn.test(i.title)) }
+      ];
+    }
+    const c = all.filter((i) => i.category === 'commodities');
+    const cut = Date.now() - 6 * 3600000;
+    return [
+      { name: 'Latest', items: c.filter((i) => Date.parse(i.publishedAt) >= cut) },
+      { name: 'Earlier', items: c.filter((i) => Date.parse(i.publishedAt) < cut) }
+    ];
+  }
 
   // ---------- Render pieces ----------
-  const overview = (d) => `
+  const hl = (i) => `<div class="hl"><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener">${esc(i.title)}</a><span>${esc(i.source)}${(i.alsoIn || []).length ? ' +' + i.alsoIn.length : ''}, ${esc(ago(i.publishedAt))}, ${R_NAME[CODE[i.region]] || 'Global'}</span></div>`;
+
+  function overview(page, title) {
+    const b = briefing();
+    const text = b ? b.pages[page].overview[OVERVIEW_KEY[state.region]] || b.pages[page].overview.all : '';
+    const meta = b ? `${esc(b.label)}, ${time(b.generatedAt)} ${tzLabel()}` : '';
+    const themes = b ? b.pages[page].themes : [];
+    return `
     <section class="stack overview" aria-labelledby="ov-h" style="gap:16px">
       <div class="sec-head">
-        <h1 class="sec-title" id="ov-h">${esc(d.title)}</h1>
-        <span class="meta">Pre-market briefing, ${t('14:00')} ${tzLabel()}</span>
+        <h1 class="sec-title" id="ov-h">${esc(title)}</h1>
+        <span class="meta">${meta}</span>
       </div>
-      <p>${esc(d.overview[state.region])}</p>
-      <div class="themes">${d.themes.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
+      <p>${b ? esc(text) : 'The first briefing is being prepared. It is written with the first headline fetch after a deploy, then at 02:30, 08:00, 12:30 and 16:30 New York time.'}</p>
+      ${themes.length ? `<div class="themes">${themes.map((x) => `<span>${esc(x)}</span>`).join('')}</div>` : ''}
     </section>`;
+  }
 
-  const stories = (list) => {
-    const s = list.filter((x) => keep(x.region)).slice(0, 5);
+  function storyList(page) {
+    const s = stories(page).filter((x) => keep(x.region)).slice(0, 5);
     const body = s.length ? s.map((x, i) => `
       <article class="story">
         <div class="rank" aria-hidden="true">${i + 1}</div>
@@ -502,131 +453,168 @@ body dialog.bqe-login .err { color: var(--red); }
             <span class="tag">${esc(x.topic)}</span>
           </div>
           <h3>${esc(x.title)}</h3>
-          <p class="why"><strong>Why it matters:</strong> ${esc(x.why)}</p>
-          <div class="src"><span>Sources:</span>${x.sources.map((src) => `<a href="#headlines">${esc(src)}</a>`).join('')}</div>
+          ${x.why ? `<p class="why"><strong>Why it matters:</strong> ${esc(x.why)}</p>` : ''}
+          <div class="src"><span>Sources:</span>${x.sources.map((src) => `<a href="${esc(safeUrl(src.url))}" target="_blank" rel="noopener">${esc(src.label)}</a>`).join('')}</div>
         </div>
-      </article>`).join('') : '<p class="empty">No top stories for this region.</p>';
+      </article>`).join('') : `<p class="empty">${briefing() ? 'No top stories for this region.' : 'Top stories appear with the first briefing.'}</p>`;
     return `<section aria-labelledby="ts-h"><h2 class="small-label" id="ts-h" style="margin-bottom:8px">Top stories</h2>${body}</section>`;
-  };
+  }
 
-  const week = (title, days) => `
+  function eventRow(e) {
+    const now = Date.now();
+    const live = Date.parse(e.start) <= now && now < Date.parse(e.end);
+    const heads = (e.itemIds || []).map((id) => byId.get(id)).filter(Boolean);
+    return `<div class="ev"><span class="tm">${time(e.start)}</span><span>
+      <span class="nm">${esc(e.title)}</span><span class="r">, ${R_NAME[CODE[e.region]] || 'Global'}</span>${e.result ? `<span class="res">: ${esc(e.result)}</span>` : live ? '<span class="res">: live</span>' : ''}
+      ${e.streamUrl && Date.parse(e.end) > now ? ` <a class="evlink" href="${esc(safeUrl(e.streamUrl))}" target="_blank" rel="noopener">${live ? 'Watch live' : 'Stream'}</a>` : ''}
+      ${heads.length ? `<details class="evheads"><summary>${heads.length} headline${heads.length > 1 ? 's' : ''}</summary>${heads.map(hl).join('')}</details>` : ''}
+    </span></div>`;
+  }
+
+  function weekSection(title, filter) {
+    const days = week((e) => keep(CODE[e.region] || 'global') && filter(e));
+    return `
     <section aria-labelledby="wk-h" id="week">
       <h2 class="side-title" id="wk-h">${esc(title)}</h2>
-      ${days.map((d) => {
-        const ev = d.events.filter((e) => keep(e.region));
-        return `<div class="day">
+      ${days.map((d) => `<div class="day">
           <div class="d">${esc(d.label)}${d.today ? ' <span class="today">Today</span>' : ''}</div>
-          ${ev.length ? ev.map((e) => `<div class="ev"><span class="tm">${t(e.time)}</span><span><span class="nm">${esc(e.title)}</span><span class="r">, ${R_NAME[e.region]}</span>${e.result ? `<span class="res">: ${esc(e.result)}</span>` : ''}</span></div>`).join('') : '<span class="meta">No events for this region</span>'}
-        </div>`;
-      }).join('')}
+          ${d.events.length ? d.events.map(eventRow).join('') : '<span class="meta">No events for this region</span>'}
+        </div>`).join('')}
     </section>`;
+  }
 
-  const headlines = (title, cats, cols) => {
+  function headlines(title, page, cols) {
+    const cats = headlineCats(page);
     let n = 0;
     const colsHtml = cats.map((c) => {
-      const items = c.items.filter((h) => keep(h.region));
-      n += items.length;
-      return `<div class="hcol"><h3>${esc(c.name)}</h3>${items.length ? items.map((h) => `
-        <div class="hl"><a href="#headlines">${esc(h.title)}</a><span>${esc(h.source)}, ${esc(h.ago)}, ${R_NAME[h.region]}</span></div>`).join('') : '<p class="empty">Nothing for this region</p>'}</div>`;
+      const list = c.items.filter((h) => keep(CODE[h.region] || 'global'));
+      n += list.length;
+      const first = list.slice(0, 8), rest = list.slice(8);
+      return `<div class="hcol"><h3>${esc(c.name)}</h3>${list.length ? first.map(hl).join('') +
+        (rest.length ? `<details class="more"><summary>Show ${rest.length} more</summary>${rest.map(hl).join('')}</details>` : '') : '<p class="empty">Nothing for this region</p>'}</div>`;
     }).join('');
     return `<section class="headlines" id="headlines" aria-labelledby="hl-h">
       <div class="sec-head"><h2 class="sec-title" id="hl-h">${esc(title)}</h2><span class="meta">${n} headlines from the last 24 hours, newest first</span></div>
       <div class="hgrid c${cols}">${colsHtml}</div>
     </section>`;
-  };
+  }
+
+  function strip() {
+    const now = Date.now();
+    const evs = events().filter((e) => keep(CODE[e.region] || 'global'));
+    const onNow = evs.filter((e) => Date.parse(e.start) <= now && now < Date.parse(e.end)).sort((a, b) => b.importance - a.importance).slice(0, 2);
+    const next = evs.filter((e) => Date.parse(e.start) > now).slice(0, 3);
+    return `
+      <div class="live">
+        <div class="small-label"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="#F87171"/></svg>On now</div>
+        ${onNow.length ? onNow.map((e) => `
+          <div class="title">${esc(e.title)}</div>
+          <div class="sub">${R_NAME[CODE[e.region]] || 'Global'}, started ${time(e.start)}, until about ${time(e.end)}</div>
+          ${e.streamUrl ? `<a href="${esc(safeUrl(e.streamUrl))}" target="_blank" rel="noopener">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
+            Watch live
+          </a>` : ''}`).join('') : '<div class="none">Nothing live right now for this region.</div>'}
+      </div>
+      <div class="panel" style="display:flex;flex-direction:column;gap:16px;padding:24px 28px">
+        <div class="sec-head"><span class="small-label">Next up</span><a href="#week" style="font-size:14px;font-weight:600">Full week</a></div>
+        ${next.length ? `<div class="next">${next.map((e) => `
+          <div><div class="row"><span>${time(e.start)}</span><span class="cd">${countdown(Date.parse(e.start) - now)}</span></div>
+          <div class="t">${esc(e.title)}</div><div class="meta" style="font-size:13px">${esc(KIND[e.type] || 'Event')}, ${R_NAME[CODE[e.region]] || 'Global'}</div></div>`).join('')}</div>` : '<p class="meta">No more events scheduled for this region.</p>'}
+      </div>`;
+  }
 
   // ---------- Pages ----------
   function renderGeneral() {
-    const d = DATA.general;
-    const now = d.onNow.filter((e) => keep(e.region));
-    const next = d.next.filter((e) => keep(e.region)).slice(0, 3);
-    const elsewhere = d.elsewhere.filter((x) => keep(x.region)).slice(0, 4);
+    const b = briefing();
+    const elsewhere = b ? [
+      ...b.pages.stocks.topStories.slice(0, 3).map((s) => ({ page: 'stocks', title: s.summary, region: CODE[s.region] || 'global' })),
+      ...b.pages.commodities.topStories.slice(0, 3).map((s) => ({ page: 'commodities', title: s.summary, region: CODE[s.region] || 'global' }))
+    ].filter((x) => keep(x.region)).slice(0, 4) : [];
     return `
       <div class="stack" style="gap:40px">
-        <section class="strip" aria-label="Calendar">
-          <div class="live">
-            <div class="small-label"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="5" fill="#F87171"/></svg>On now</div>
-            ${now.length ? now.map((e) => `
-              <div class="title">${esc(e.title)}</div>
-              <div class="sub">${R_NAME[e.region]}, started ${t(e.time)}, until about ${t(e.until)}</div>
-              <a href="${esc(e.url)}" target="_blank" rel="noopener">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>
-                Watch live
-              </a>`).join('') : '<div class="none">Nothing live right now for this region.</div>'}
-          </div>
-          <div class="panel" style="display:flex;flex-direction:column;gap:16px;padding:24px 28px">
-            <div class="sec-head"><span class="small-label">Next up</span><a href="#week" style="font-size:14px;font-weight:500">Full week</a></div>
-            ${next.length ? `<div class="next">${next.map((e) => `
-              <div><div class="row"><span>${t(e.time)}</span><span class="cd">${esc(e.countdown)}</span></div>
-              <div class="t">${esc(e.title)}</div><div class="meta" style="font-size:13px">${esc(e.kind)}, ${R_NAME[e.region]}</div></div>`).join('')}</div>` : '<p class="meta">No more events today for this region.</p>'}
-          </div>
-        </section>
+        <section class="strip" id="strip" aria-label="Calendar">${strip()}</section>
         <div class="cols">
-          <div class="stack">${overview(d)}${stories(d.stories)}</div>
+          <div class="stack">${overview('general', 'The day so far')}${storyList('general')}</div>
           <aside class="stack">
             <section class="panel elsewhere" aria-labelledby="el-h">
               <h2 class="side-title" id="el-h">Elsewhere today</h2>
               ${elsewhere.length ? elsewhere.map((x) => `<div class="item"><span class="small-label" style="font-size:12px">${x.page === 'stocks' ? 'Stocks' : 'Commodities'}</span><a href="#${x.page}">${esc(x.title)}</a></div>`).join('') : '<p class="empty">Nothing for this region.</p>'}
             </section>
-            ${week(d.weekTitle, d.week)}
+            ${weekSection('This week', (e) => e.type !== 'earnings' && e.type !== 'commodities')}
           </aside>
         </div>
-        ${headlines(d.headTitle, d.cats, 3)}
+        ${headlines('Headlines', 'general', 3)}
       </div>`;
   }
 
   function renderStocks() {
-    const d = DATA.stocks;
-    const shown = d.companies.filter((c) => keep(c.region));
-    const hidden = d.companies.filter((c) => !keep(c.region)).map((c) => c.ticker);
-    const note = (hidden.length ? hidden.join(', ') + ' hidden by the region filter. ' : '') + d.quiet + '.';
+    const b = briefing();
+    const companies = b ? b.companies : [];
+    const regionOf = (t) => CODE[((D.watchlist || []).find((w) => w.symbol === t) || {}).region] || 'us';
+    const shown = companies.filter((c) => c.line && keep(regionOf(c.ticker)));
+    const hidden = companies.filter((c) => c.line && !keep(regionOf(c.ticker))).map((c) => c.ticker);
+    const quiet = companies.filter((c) => !c.line).map((c) => c.ticker);
+    const note = !D.yahooOk ? 'Company news from Yahoo is unavailable right now; these lines come from the other feeds.'
+      : (hidden.length ? hidden.join(', ') + ' hidden by the region filter. ' : '') + (quiet.length ? quiet.join(', ') + ': nothing notable today.' : '');
     return `
       <div class="stack" style="gap:40px">
         <div class="cols">
-          <div class="stack">${overview(d)}${stories(d.stories)}</div>
+          <div class="stack">${overview('stocks', 'Stocks today')}${storyList('stocks')}</div>
           <aside class="stack">
             <section class="panel" aria-labelledby="co-h">
               <h2 class="side-title" id="co-h">My companies</h2>
-              ${shown.length ? shown.map((c) => `<div class="line-row"><span class="k">${esc(c.ticker)}</span><span>${esc(c.line)}</span></div>`).join('') : '<p class="empty">No watchlist companies in this region.</p>'}
-              <div class="note">${esc(note)}</div>
+              ${shown.length ? shown.map((c) => `<div class="line-row"><span class="k">${esc(c.ticker)}</span><span>${esc(c.line)}</span></div>`).join('') : `<p class="empty">${b ? 'No watchlist news in this region.' : 'Company lines appear with the first briefing.'}</p>`}
+              ${note ? `<div class="note">${esc(note)}</div>` : ''}
             </section>
-            ${week(d.weekTitle, d.week)}
+            ${weekSection('Earnings calendar', (e) => e.type === 'earnings')}
           </aside>
         </div>
-        ${headlines(d.headTitle, d.cats, 3)}
+        ${headlines('Stock headlines', 'stocks', 3)}
       </div>`;
   }
 
   function renderCommodities() {
-    const d = DATA.commodities;
+    const b = briefing();
+    const now = Date.now();
+    const groups = b ? b.commodityGroups : ['Agriculture', 'Energy', 'Metals'].map((name) => ({ name, summary: '', ids: [], rows: [], nextEventId: null }));
+    const commodityItems = items().filter((i) => i.category === 'commodities');
     return `
       <div class="stack" style="gap:40px">
-        ${overview(d)}
+        ${overview('commodities', 'Commodities today')}
         <section class="groups" aria-label="Commodity groups">
-          ${d.groups.map((g) => {
-            const items = g.items.filter((h) => keep(h.region));
+          ${groups.map((g) => {
+            const own = g.ids.map((id) => byId.get(id)).filter(Boolean);
+            const more = commodityItems.filter((i) => GROUP_WORDS[g.name].test(i.title) && !g.ids.includes(i.id));
+            const list = own.concat(more).filter((h) => keep(CODE[h.region] || 'global')).slice(0, 4);
+            const next = events().find((e) => e.id === g.nextEventId && Date.parse(e.start) > now) ||
+              events().find((e) => e.type === 'commodities' && Date.parse(e.start) > now && GROUP_WORDS[g.name].test(e.title));
             return `<div class="panel group">
               <h2>${esc(g.name)}</h2>
-              <p class="sum">${esc(g.summary)}</p>
-              <div>${g.rows.map((r) => `<div class="line-row" style="grid-template-columns:110px minmax(0,1fr)"><span class="k">${esc(r[0])}</span><span>${esc(r[1])}</span></div>`).join('')}</div>
+              <p class="sum">${esc(g.summary || (b ? 'No notable news today.' : 'The summary appears with the first briefing.'))}</p>
+              ${g.rows.length ? `<div>${g.rows.map((r) => `<div class="line-row" style="grid-template-columns:110px minmax(0,1fr)"><span class="k">${esc(r.name)}</span><span>${esc(r.line || 'No notable news today')}</span></div>`).join('')}</div>` : ''}
               <div>
                 <div class="small-label" style="font-size:12px;padding-bottom:4px">Headlines</div>
-                ${items.length ? items.map((h) => `<div class="hl"><a href="#headlines">${esc(h.title)}</a><span>${esc(h.source)}, ${esc(h.ago)}, ${R_NAME[h.region]}</span></div>`).join('') : '<p class="empty">Nothing for this region</p>'}
+                ${list.length ? list.map(hl).join('') : '<p class="empty">Nothing for this region</p>'}
               </div>
-              <div class="nextbox"><span class="small-label">Next</span><b>${esc(g.next[2])}, ${esc(g.next[0])} ${t(g.next[1])}</b></div>
+              ${next ? `<div class="nextbox"><span class="small-label">Next</span><b>${esc(next.title)}, ${esc(dayLabel(Date.parse(next.start)))} ${time(next.start)}</b></div>` : ''}
             </div>`;
           }).join('')}
         </section>
         <div class="cols rev">
-          ${week(d.weekTitle, d.week)}
-          <div>${headlines(d.headTitle, d.cats, 2)}</div>
+          ${weekSection('Commodity calendar', (e) => e.type === 'commodities')}
+          <div>${headlines('Commodity headlines', 'commodities', 2)}</div>
         </div>
       </div>`;
   }
 
   // ---------- Chrome ----------
   function renderChrome() {
-    document.getElementById('updated').textContent = `Updated ${t('15:10')} ${tzLabel()}`;
+    const b = briefing();
+    const parts = [];
+    if (b) parts.push(`Briefing ${time(b.generatedAt)}`);
+    if (D && D.fetchedAt) parts.push(`headlines ${time(D.fetchedAt)}`);
+    document.getElementById('updated').textContent = parts.length ? `${parts.join(' · ')} ${tzLabel()}` : '';
+    document.getElementById('today').textContent = longDate(Date.now());
     document.getElementById('tz').innerHTML = TZS.map(([id, label]) =>
       `<button type="button" data-tz="${id}" aria-pressed="${state.tz === id}">${label}</button>`).join('');
     document.getElementById('regions').innerHTML = REGIONS.map(([id, label]) =>
@@ -637,58 +625,45 @@ body dialog.bqe-login .err { color: var(--red); }
 
   function render() {
     renderChrome();
-    const page = { general: renderGeneral, stocks: renderStocks, commodities: renderCommodities }[state.page];
-    document.getElementById('page').innerHTML = page();
+    const main = document.getElementById('page');
+    const open = [...main.querySelectorAll('details[open]')].map((d) => d.dataset.key || d.querySelector('summary').textContent);
+    let html = '';
+    if (notice) html += `<p class="notice" role="status">${esc(notice)}</p>`;
+    if (!D) {
+      html += loadError ? `<p class="notice error">${esc(loadError)}</p>` : '<p class="meta" style="padding:24px 0">Loading today’s briefing…</p>';
+    } else {
+      html += ({ general: renderGeneral, stocks: renderStocks, commodities: renderCommodities })[state.page]();
+      if (D.stale && D.stale.length) html += `<p class="meta">No headlines for a day from: ${esc(D.stale.join(', '))}.</p>`;
+    }
+    main.innerHTML = html;
+    main.querySelectorAll('details').forEach((d) => { if (open.includes(d.querySelector('summary').textContent)) d.open = true; });
     document.title = `Market News – ${PAGES.find((p) => p[0] === state.page)[1]}`;
     if (chat.open) renderSuggest();
   }
 
-  // ---------- Chat ----------
-  // Set this to your Worker's chat URL (e.g. '/api/chat') to talk to the real model.
-  // Expected contract: POST { messages, page, region, tz } → { answer, sources: [{ label, url }] }.
-  // Left empty, the chat runs in demo mode with sample answers.
-  // The chat is for signed-in users only: the button asks guests to sign in, and
-  // the Worker must answer 401 to a request without a session cookie, since the
-  // button alone keeps no one out.
-  const CHAT_ENDPOINT = '';
+  // ---------- Data ----------
+  async function load() {
+    try {
+      const res = await fetch('/api/news', { cache: 'no-cache' });
+      if (!res.ok) throw new Error('status ' + res.status);
+      D = await res.json();
+      byId = new Map(D.items.map((i) => [i.id, i]));
+      loadError = '';
+    } catch (err) {
+      if (!D) loadError = 'Market News could not be loaded (' + err.message + '). Check the connection and press Refresh.';
+    }
+    render();
+  }
 
+  // ---------- Chat ----------
+  const CHAT_ENDPOINT = '/api/chat';
   const SUGGEST = {
     general: ['What happened today?', 'Did the Fed decide anything this week?', 'What is going on with Russia?'],
-    stocks: ['Why are chip stocks up?', 'How is Erste doing?', 'What should I watch in Costco tonight?'],
-    commodities: ['Why are soybeans up?', 'What is next for oil?', 'Why is gold holding up?']
+    stocks: ['Why are chip stocks moving?', 'Anything new on my companies?', 'Which earnings are coming up?'],
+    commodities: ['What is moving oil?', 'Why are soybeans moving?', 'What is next on the commodity calendar?']
   };
 
-  const DEMO = {
-    'What happened today?': {
-      answer: ['Rates were the main story. US growth for the second quarter was revised up, which pushed Treasury yields higher and made a quick Fed cut look less likely. Friday\u2019s PCE inflation data is the next test.', 'In Europe, attention is on the ECB President\u2019s speech, which is live now, after officials sounded split on an October cut. Chip stocks are rebounding worldwide, and Chinese buyers are back for US soybeans.'],
-      sources: ['MarketWatch', 'CNBC', 'Euronews', 'Yahoo'] },
-    'Did the Fed decide anything this week?': {
-      answer: ['No. There is no FOMC decision this week, so there is no new rate or dot plot. The Fed events are speeches: a regional president spoke on Monday and a Fed Governor speaks today at ' + '16:00' + ' Vienna time on bank regulation.', 'The results of the last decision are in the calendar under This week.'],
-      sources: ['Federal Reserve', 'CNBC'] },
-    'What is going on with Russia?': {
-      answer: ['Two things in today\u2019s headlines: the Bank of Russia signalled it is in no hurry to cut rates further, and the ruble weakened against the dollar. Separately, the EU is discussing its next sanctions package, and tanker data show Russian seaborne oil exports rising.'],
-      sources: ['The Moscow Times', 'Bank of Russia', 'Euronews'] },
-    'Why are chip stocks up?': {
-      answer: ['The headlines describe a rebound after a two-day slide, visible in New York, Europe and Tokyo at the same time. They don\u2019t give a single trigger, so this looks like a sector-wide recovery rather than company news. Nvidia, ASML and TSMC on your watchlist are all moving with it.'],
-      sources: ['Yahoo', 'Nikkei Asia'] },
-    'How is Erste doing?': {
-      answer: ['Erste Group is among the top gainers in Vienna today. The headlines link it to banks rising as markets expect the ECB to cut rates more slowly, which helps bank margins. There is no company-specific news.'],
-      sources: ['Yahoo', 'Euronews'] },
-    'What should I watch in Costco tonight?': {
-      answer: ['Costco reports its fourth-quarter results after the US close, at 22:15 Vienna time. Coverage frames it as an early read on US consumer spending before Friday\u2019s PCE data. The EPS and revenue estimates and the result will show up in the earnings calendar once it reports.'],
-      sources: ['CNBC', 'Yahoo'] },
-    'Why are soybeans up?': {
-      answer: ['Mainly Chinese demand: headlines report Chinese buyers booking US soybean cargoes, and today\u2019s USDA export sales were strong for soybeans. At the same time, the US harvest is running ahead of average, which usually weighs on prices, so the demand news is doing the lifting.'],
-      sources: ['Yahoo', 'USDA', 'MarketWatch'] },
-    'What is next for oil?': {
-      answer: ['Oil is drifting lower on renewed OPEC+ supply talk, even though US crude stocks fell more than expected on Wednesday. Next on the calendar is today\u2019s EIA natural gas storage report; for crude, the next EIA inventory report is next Wednesday.'],
-      sources: ['CNBC', 'MarketWatch', 'EIA'] },
-    'Why is gold holding up?': {
-      answer: ['Gold is steady near its highs even though Treasury yields are rising, which normally pressures it. Today\u2019s headlines note the steadiness but don\u2019t give a clear reason, so I can\u2019t say why from the news collected.'],
-      sources: ['Yahoo'] }
-  };
-
-  const chat = { open: false, messages: [] };
+  const chat = { open: false, messages: [], remaining: null };
   const chatEl = document.getElementById('chat');
   const logEl = document.getElementById('chat-log');
   const inputEl = document.getElementById('chat-input');
@@ -696,56 +671,53 @@ body dialog.bqe-login .err { color: var(--red); }
 
   function renderSuggest() {
     const page = PAGES.find((p) => p[0] === state.page)[1];
-    document.getElementById('chat-context').textContent = `Knows today\u2019s headlines, calendar and results \u00b7 on ${page}, region ${REGIONS.find((r) => r[0] === state.region)[1]}`;
+    document.getElementById('chat-context').textContent = `Knows today’s headlines, calendar and results · on ${page}, region ${REGIONS.find((r) => r[0] === state.region)[1]}`;
     document.getElementById('chat-suggest').innerHTML = chat.messages.length > 6 ? '' :
       SUGGEST[state.page].map((q) => `<button type="button" data-ask="${esc(q)}">${esc(q)}</button>`).join('');
+    document.getElementById('chat-note').textContent = 'Answers come from the collected headlines and may miss context. Not investment advice.' +
+      (chat.remaining != null ? ` ${chat.remaining} question${chat.remaining === 1 ? '' : 's'} left today.` : '');
   }
 
   function renderLog() {
     logEl.innerHTML = chat.messages.length ? chat.messages.map((m) => {
       if (m.role === 'user') return `<div class="msg user">${esc(m.text)}</div>`;
-      if (m.pending) return '<div class="msg bot pending">Reading today\u2019s headlines\u2026</div>';
-      const paras = (Array.isArray(m.text) ? m.text : [m.text]).map((p) => `<p>${esc(p)}</p>`).join('');
-      const srcs = (m.sources || []).map((s) => `<a href="${esc(s.url || '#headlines')}">${esc(s.label || s)}</a>`).join('');
-      return `<div class="msg bot">${paras}${srcs ? `<div class="srcs">${srcs}</div>` : ''}</div>`;
-    }).join('') : '<div class="msg bot"><p>Ask me about today\u2019s news, markets, commodities or upcoming events. I answer from the headlines, calendar and results this app has collected.</p></div>';
+      if (m.pending) return '<div class="msg bot pending">Reading today’s headlines…</div>';
+      const paras = String(m.text).split(/\n{2,}/).map((p) => `<p>${esc(p)}</p>`).join('');
+      const srcs = (m.sources || []).map((s) => `<a href="${esc(safeUrl(s.url))}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join('');
+      return `<div class="msg bot${m.error ? ' err' : ''}">${paras}${srcs ? `<div class="srcs">${srcs}</div>` : ''}</div>`;
+    }).join('') : '<div class="msg bot"><p>Ask me about today’s news, markets, commodities or upcoming events. I answer from the headlines, calendar and results this app has collected.</p></div>';
     logEl.scrollTop = logEl.scrollHeight;
   }
 
-  async function answer(question) {
-    if (CHAT_ENDPOINT) {
-      const res = await fetch(CHAT_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          messages: chat.messages.filter((m) => !m.pending).map((m) => ({ role: m.role, content: Array.isArray(m.text) ? m.text.join('\n\n') : m.text })),
-          page: state.page, region: state.region, tz: state.tz
-        })
-      });
-      if (res.status === 401) { setUser(null); throw new Error('your session has ended, so sign in again to keep asking'); }
-      if (!res.ok) throw new Error('Chat request failed with status ' + res.status);
-      const data = await res.json();
-      return { text: data.answer, sources: data.sources || [] };
-    }
-    await new Promise((r) => setTimeout(r, 700));
-    const d = DEMO[question];
-    if (d) return { text: d.answer, sources: d.sources };
-    return { text: ['Demo mode: this question would go to the model with today\u2019s headlines, calendar and results as context. Try one of the suggested questions to see a sample answer, or set CHAT_ENDPOINT to connect the real model.'], sources: [] };
+  async function answer() {
+    const res = await fetch(CHAT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        messages: chat.messages.filter((m) => !m.pending && !m.error).map((m) => ({ role: m.role, content: m.text })),
+        page: state.page, region: state.region, tz: state.tz
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { setUser(null); throw new Error('Your session has ended. Sign in again to keep asking.'); }
+    if (typeof data.remaining === 'number') chat.remaining = data.remaining;
+    if (!res.ok) throw new Error(data.error || 'The answer could not be loaded (status ' + res.status + ').');
+    return { text: data.answer, sources: data.sources || [] };
   }
 
   async function send(question) {
     const q = question.trim();
-    if (!q) return;
+    if (!q || chat.messages.some((m) => m.pending)) return;
     chat.messages.push({ role: 'user', text: q });
     const pending = { role: 'assistant', pending: true };
     chat.messages.push(pending);
     renderLog(); renderSuggest();
     try {
-      const a = await answer(q);
+      const a = await answer();
       Object.assign(pending, { pending: false, text: a.text, sources: a.sources });
     } catch (err) {
-      Object.assign(pending, { pending: false, text: 'The answer could not be loaded: ' + err.message + (session.user ? '. Check the connection and send the question again.' : '.') });
+      Object.assign(pending, { pending: false, error: true, text: err.message });
     }
     renderLog(); renderSuggest();
   }
@@ -759,9 +731,11 @@ body dialog.bqe-login .err { color: var(--red); }
 
   // ---------- Sign-in ----------
   // AI features (the chat, and a fresh briefing on Refresh) are for signed-in
-  // users. Everyone can read the scheduled briefing, the calendar and the headlines.
+  // users; the Worker refuses both without a session before any model call.
+  // Everyone can read the scheduled briefing, the calendar and the headlines.
   const session = { user: null };
   const accountEl = document.getElementById('account');
+  const refreshBtn = document.getElementById('refresh');
   const BQE = window.BQE;
 
   function setUser(user) {
@@ -769,7 +743,7 @@ body dialog.bqe-login .err { color: var(--red); }
     document.body.classList.toggle('guest', !user);
     askBtn.title = user ? '' : 'Sign in to ask AI';
     askBtn.setAttribute('aria-label', user ? 'Ask AI' : 'Ask AI (sign in required)');
-    document.getElementById('refresh').title = user ? 'Build a fresh briefing' : 'Reload the latest briefing. Signed-in users can build a fresh one.';
+    refreshBtn.title = user ? 'Fetch headlines and build a fresh briefing' : 'Reload the latest briefing. Signed-in users can build a fresh one.';
     accountEl.classList.toggle('is-user', !!user);
     accountEl.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="who"></span><button type="button"></button>';
     accountEl.querySelector('.who').textContent = user ? user.username : 'Guest';
@@ -786,7 +760,7 @@ body dialog.bqe-login .err { color: var(--red); }
 
   accountEl.addEventListener('click', async (e) => {
     if (!e.target.closest('button')) return;
-    if (session.user) { await BQE.logout(); setUser(null); chat.messages = []; }
+    if (session.user) { await BQE.logout(); setUser(null); chat.messages = []; chat.remaining = null; }
     else await signIn('Signing in unlocks Ask AI and fresh briefings.');
   });
 
@@ -829,15 +803,36 @@ body dialog.bqe-login .err { color: var(--red); }
   }
   window.addEventListener('hashchange', route);
 
-  // In the finished app a signed-in Refresh asks the Worker for a new briefing
-  // (max 1 per 15 min); a guest's Refresh only re-reads the stored one.
-  document.getElementById('refresh').addEventListener('click', render);
+  // A guest's Refresh re-reads the stored briefing. A signed-in user's asks
+  // the Worker to fetch and write a new one (at most one per 15 minutes).
+  refreshBtn.addEventListener('click', async () => {
+    notice = '';
+    if (session.user) {
+      refreshBtn.disabled = true;
+      notice = 'Fetching headlines and writing a fresh briefing…';
+      render();
+      try {
+        const res = await fetch('/api/news/refresh', { method: 'POST', credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) setUser(null);
+        notice = res.ok ? '' : (data.error || 'The briefing could not be refreshed.') + ' Showing the latest one.';
+      } catch (err) {
+        notice = 'The briefing could not be refreshed. Showing the latest one.';
+      }
+      refreshBtn.disabled = false;
+    }
+    await load();
+  });
+
+  // Countdowns and "On now" move with the clock; the data is re-read every 5 minutes.
+  setInterval(() => { const s = document.getElementById('strip'); if (s && D) s.innerHTML = strip(); }, 30000);
+  setInterval(load, 5 * 60000);
 
   setUser(null);
   if (BQE) BQE.user.then(setUser);
-
   route();
   render();
+  load();
 })();
 </script>
 </body>

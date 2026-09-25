@@ -57,6 +57,11 @@ crons = [
   # (the reported numbers).
   "10 12 * * 1-5",
   "10 22 * * 1-5",
+  # Market News: every 15 minutes. worker/news/index.ts decides per run what
+  # is due — fetching (every run on weekdays, hourly at weekends), the
+  # briefings at fixed New York times, the calendar at 05:00 New York time.
+  # One trigger instead of one per job: the free plan allows 5 per account.
+  "*/15 * * * *",
 ]
 
 [vars]
@@ -65,8 +70,14 @@ crons = [
 STACK_BATCH = "20"
 # Earnings watchlist for Market Tape, space separated.
 MARKETTAPE_TICKERS = "NVDA AAPL MSFT AMZN GOOGL"
-# Gemini model for Market Tape. Must support Google Search grounding.
+# Gemini model for the calendar job and the Market News briefing. Must
+# support Google Search grounding.
 GEMINI_MODEL = "gemini-3.7-flash"
+# Market News chat. GEMINI_CHAT_MODEL (unset: GEMINI_MODEL) picks a different
+# model for it; NEWS_CHAT_SEARCH = "on" lets it search the web with Google
+# Search grounding instead of only the app's own data.
+NEWS_CHAT_SEARCH = "off"
+NEWS_CHAT_DAILY_LIMIT = "50"
 
 [observability]
 enabled = true
