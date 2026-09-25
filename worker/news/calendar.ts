@@ -1,16 +1,24 @@
 // The event calendar, built without any model calls:
 //
-//   meetings   central bank decisions from calendar.json (set once a year)
-//   rules      releases at a fixed weekday or day of the month (calendar.json)
-//   ics        published release schedules (BLS), fetched daily
-//   nasdaq     US earnings dates: the watchlist plus the largest companies
-//              reporting each day, with the EPS estimate and, once reported,
-//              the actual figure
-//   yahoo      earnings dates for watchlist tickers listed outside the US
+//   meetings        central bank decisions from calendar.json (set once a
+//                   year), with the decided rate from Yahoo as the result
+//   dated           one-off dated events from calendar.json (WASDE, OPEC+ …)
+//   yahoo-economic  Yahoo Finance's economic calendar: data releases, rate
+//                   decisions and central bank speakers across the US, Europe,
+//                   Asia and Russia, with consensus and, once published, actual
+//   rules           releases at a fixed weekday or day of the month
+//   ics             published release schedules (BLS)
+//   nasdaq          US earnings: the watchlist plus the largest companies
+//                   reporting each day, EPS estimate and reported EPS
+//   yahoo           earnings dates for watchlist tickers listed outside the US
 //
-// Rebuilt daily at 05:00 New York time and stored in news_events. A row's
-// `origin` is the source that wrote it, so each source replaces only its own
-// upcoming rows, and a source that fails keeps what it wrote before.
+// Rules and schedules marked `fallback` in calendar.json are used only when
+// the Yahoo economic calendar cannot be reached, so nothing appears twice.
+//
+// Rebuilt daily at 05:00 New York time, and hourly for yesterday to tomorrow
+// so results appear once they are published. A row's `origin` is the source
+// that wrote it: each source replaces only its own upcoming rows in the
+// window, and a source that fails keeps what it wrote before.
 
 import type { Env } from "../env";
 import calendarConfig from "./calendar.json";
@@ -47,11 +55,18 @@ interface Fixed {
   streamUrl?: string;
 }
 
+export interface EconomicConfig {
+  countries: Record<string, { region: Region; name: string }>;
+  include: { match: string; title: string; kind: "rate" | "data" | "speech"; importance: number; countries?: string[] }[];
+}
+
 export interface CalendarConfig {
-  meetings: (Fixed & { date: string })[];
-  weekly: (Fixed & { weekday: number; months?: number[] })[];
-  monthly: (Fixed & { day: number | "last"; weekend: "next-business-day" | "same-day" })[];
-  ics: { id: string; name: string; url: string; type: EventType; region: Region; include: { match: string; title: string; importance: number }[] }[];
+  meetings: (Fixed & { date: string; country?: string })[];
+  dated?: (Fixed & { date: string })[];
+  weekly: (Fixed & { weekday: number; months?: number[]; fallback?: boolean })[];
+  monthly: (Fixed & { day: number | "last"; weekend: "next-business-day" | "same-day"; fallback?: boolean })[];
+  yahooEconomic?: EconomicConfig;
+  ics: { id: string; name: string; url: string; type: EventType; region: Region; fallback?: boolean; include: { match: string; title: string; importance: number }[] }[];
 }
 
 export const CALENDAR = calendarConfig as unknown as CalendarConfig;
@@ -105,19 +120,34 @@ function days(from: string, to: string): string[] {
 
 const weekday = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
 
-export function fixedEvents(from: string, to: string, cal: CalendarConfig = CALENDAR): { meetings: CalendarEvent[]; rules: CalendarEvent[] } {
-  const meetings = cal.meetings
-    .filter((m) => m.date >= from && m.date <= to)
-    .map((m) => event(m, m.date))
-    .filter((e): e is CalendarEvent => !!e);
+export interface FixedEvents {
+  meetings: (CalendarEvent & { country?: string })[];
+  dated: CalendarEvent[];
+  rules: CalendarEvent[];
+  fallbackRules: CalendarEvent[];
+}
+
+export function fixedEvents(from: string, to: string, cal: CalendarConfig = CALENDAR): FixedEvents {
+  const onDate = (list: (Fixed & { date: string; country?: string })[]) => {
+    const out: (CalendarEvent & { country?: string })[] = [];
+    for (const m of list) {
+      if (m.date < from || m.date > to) continue;
+      const e = event(m, m.date);
+      if (e) out.push({ ...e, country: m.country });
+    }
+    return out;
+  };
+  const meetings = onDate(cal.meetings);
+  const dated = onDate(cal.dated ?? []);
 
   const rules: CalendarEvent[] = [];
+  const fallbackRules: CalendarEvent[] = [];
   for (const date of days(from, to)) {
     const month = Number(date.slice(5, 7));
     for (const w of cal.weekly) {
       if (weekday(date) === w.weekday && (!w.months || w.months.includes(month))) {
         const e = event(w, date);
-        if (e) rules.push(e);
+        if (e) (w.fallback ? fallbackRules : rules).push(e);
       }
     }
   }
@@ -133,11 +163,11 @@ export function fixedEvents(from: string, to: string, cal: CalendarConfig = CALE
       }
       if (date >= from && date <= to) {
         const e = event(r, date);
-        if (e) rules.push(e);
+        if (e) (r.fallback ? fallbackRules : rules).push(e);
       }
     }
   }
-  return { meetings, rules };
+  return { meetings, dated, rules, fallbackRules };
 }
 
 // --------------------------------------------------------------------------
@@ -269,20 +299,195 @@ const EXCHANGE_TZ: Record<string, string> = {
   MC: "Europe/Madrid", L: "Europe/London", SW: "Europe/Zurich", T: "Asia/Tokyo", TW: "Asia/Taipei", HK: "Asia/Hong_Kong",
 };
 
+interface YahooSession {
+  cookie: string;
+  crumb: string;
+}
+
+/** Yahoo's calendar endpoints want a session cookie and a "crumb" minted for it. */
+function yahooSession(fetcher: typeof fetch): () => Promise<YahooSession> {
+  let session: Promise<YahooSession> | null = null;
+  return () =>
+    (session ??= (async () => {
+      const first = await fetcher("https://fc.yahoo.com", { headers: { "User-Agent": BROWSER_UA }, redirect: "manual", signal: AbortSignal.timeout(10_000) });
+      const cookie = (first.headers.get("set-cookie") ?? "").split(";")[0];
+      const res = await fetcher("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+        headers: { "User-Agent": BROWSER_UA, Cookie: cookie }, signal: AbortSignal.timeout(10_000),
+      });
+      const crumb = (await res.text()).trim();
+      if (!res.ok || !crumb || crumb.length > 40 || crumb.includes("<")) throw new Error(`no Yahoo crumb (HTTP ${res.status})`);
+      return { cookie, crumb };
+    })());
+}
+
+const ECONOMIC_FIELDS = [
+  "econ_release", "country_code", "startdatetime", "period",
+  "after_release_actual", "consensus_estimate", "prior_release_actual", "originally_reported_actual",
+];
+// The same fields by the labels Yahoo puts on its columns.
+const ECONOMIC_LABELS: Record<string, string[]> = {
+  econ_release: ["event"], country_code: ["country code", "region"], startdatetime: ["event time"], period: ["for", "period"],
+  after_release_actual: ["actual"], consensus_estimate: ["market expectation", "expected"], prior_release_actual: ["prior to this", "last"],
+};
+
+export interface EconomicRow {
+  name: string;
+  country: string;
+  start: number;
+  period: string;
+  actual: number | null;
+  consensus: number | null;
+  prior: number | null;
+}
+
+const num = (v: unknown): number | null => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/** Rows of Yahoo's economic-calendar answer, by column id or label. */
+export function parseEconomic(body: any): EconomicRow[] {
+  const doc = body?.finance?.result?.[0]?.documents?.[0];
+  const columns: any[] = Array.isArray(doc?.columns) ? doc.columns : [];
+  const rows: any[] = Array.isArray(doc?.rows) ? doc.rows : [];
+  const index = (field: string) => {
+    let i = columns.findIndex((c) => c?.id === field);
+    if (i < 0) i = columns.findIndex((c) => (ECONOMIC_LABELS[field] ?? []).includes(String(c?.label ?? "").toLowerCase()));
+    if (i < 0 && columns.length === ECONOMIC_FIELDS.length) i = ECONOMIC_FIELDS.indexOf(field);
+    return i;
+  };
+  const at = Object.fromEntries(ECONOMIC_FIELDS.map((f) => [f, index(f)]));
+  const out: EconomicRow[] = [];
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    const raw = r[at.startdatetime];
+    const n = Number(raw);
+    const start = typeof raw === "number" || /^\d+$/.test(String(raw)) ? (n < 1e12 ? n * 1000 : n) : Date.parse(String(raw));
+    const name = String(r[at.econ_release] ?? "").trim();
+    if (!name || !Number.isFinite(start)) continue;
+    out.push({
+      name,
+      country: String(r[at.country_code] ?? "").trim().toUpperCase(),
+      start,
+      period: at.period >= 0 ? String(r[at.period] ?? "").trim() : "",
+      actual: num(r[at.after_release_actual]),
+      consensus: num(r[at.consensus_estimate]),
+      prior: num(r[at.prior_release_actual]),
+    });
+  }
+  return out;
+}
+
+const fmt = (v: number) => String(Math.round(v * 1000) / 1000);
+
+export interface EconomicEvent extends CalendarEvent {
+  country: string;
+  kind: "rate" | "data" | "speech";
+}
+
 /**
- * Earnings dates for watchlist tickers listed outside the US, from Yahoo's
- * calendarEvents. Yahoo wants a session cookie and a "crumb" for it.
+ * Keep the releases calendar.json asks for, and fold the variants of one
+ * release (CPI m/m, y/y, core …) at the same time into one event whose result
+ * lists their figures.
  */
-async function yahooEarnings(cfg: Config, fromMs: number, toMs: number, fetcher: typeof fetch): Promise<CalendarEvent[]> {
+export function economicEvents(rows: EconomicRow[], econ: EconomicConfig, now: number): EconomicEvent[] {
+  const groups = new Map<string, { rule: EconomicConfig["include"][number]; rows: EconomicRow[] }>();
+  for (const row of rows) {
+    const country = econ.countries[row.country];
+    if (!country) continue;
+    const rule = econ.include.find((r) => (!r.countries || r.countries.includes(row.country)) && new RegExp(r.match, "i").test(row.name));
+    if (!rule) continue;
+    const key = rule.kind === "speech" ? `${row.country}|${row.start}|${row.name}` : `${row.country}|${row.start}|${rule.match}`;
+    const g = groups.get(key) ?? { rule, rows: [] };
+    g.rows.push(row);
+    groups.set(key, g);
+  }
+  const out: EconomicEvent[] = [];
+  for (const { rule, rows: list } of groups.values()) {
+    const first = list[0];
+    const country = econ.countries[first.country];
+    const type: EventType = rule.kind === "data"
+      ? ({ us: "us-data", europe: "eu-data", asia: "asia-data", russia: "russia", global: "us-data" } as const)[country.region]
+      : ({ us: "fed", europe: "eu-central-bank", asia: "asia-central-bank", russia: "russia", global: "fed" } as const)[country.region];
+    const title = rule.kind === "speech"
+      ? `${country.name}: ${first.name}`
+      : `${country.name} ${rule.title}${first.period ? ` (${first.period})` : ""}`;
+    // Yahoo writes 0 for "not published yet"; a 0 after the release is a real 0.
+    const released = first.start <= now;
+    const figures = list
+      .filter((r) => r.actual != null && (r.actual !== 0 || released))
+      .slice(0, 3)
+      .map((r) => `${list.length > 1 ? `${r.name} ` : ""}${fmt(r.actual!)}${r.consensus != null && r.consensus !== 0 ? ` (exp. ${fmt(r.consensus)})` : ""}`);
+    const date = wallClock(first.start, ET).date;
+    out.push({
+      id: `${type}-${date}-${slug(`${first.country} ${rule.kind === "speech" ? first.name : rule.title}`)}`,
+      type,
+      title: title.slice(0, 120),
+      start: iso(first.start),
+      end: iso(first.start + (rule.kind === "speech" ? 45 : DEFAULT_MINUTES[type]) * 60_000),
+      region: country.region,
+      importance: rule.importance,
+      streamUrl: "",
+      result: figures.join("; ").slice(0, 200),
+      tickers: [],
+      country: first.country,
+      kind: rule.kind,
+    });
+  }
+  return out.sort((a, b) => a.start.localeCompare(b.start));
+}
+
+async function yahooEconomic(
+  session: () => Promise<YahooSession>, from: string, to: string, econ: EconomicConfig, now: number, fetcher: typeof fetch,
+): Promise<EconomicEvent[]> {
+  const { cookie, crumb } = await session();
+  const rows: EconomicRow[] = [];
+  for (let offset = 0; offset < 600; offset += 100) {
+    const res = await fetcher(`https://query1.finance.yahoo.com/v1/finance/visualization?lang=en-US&region=US&crumb=${encodeURIComponent(crumb)}`, {
+      method: "POST",
+      headers: { "User-Agent": BROWSER_UA, Cookie: cookie, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        sortType: "ASC",
+        entityIdType: "economic_event",
+        sortField: "startdatetime",
+        includeFields: ECONOMIC_FIELDS,
+        size: 100,
+        offset,
+        query: { operator: "and", operands: [
+          { operator: "gte", operands: ["startdatetime", from] },
+          { operator: "lte", operands: ["startdatetime", to] },
+        ] },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json<any>();
+    if (body?.finance?.error) throw new Error(String(body.finance.error?.description ?? "error"));
+    const page = parseEconomic(body);
+    rows.push(...page);
+    if (page.length < 100) break;
+  }
+  return economicEvents(rows, econ, now);
+}
+
+/** A meeting from calendar.json takes the rate decision Yahoo lists for it as its result. */
+export function mergeMeetingResults(
+  meetings: (CalendarEvent & { country?: string })[],
+  economic: EconomicEvent[],
+): { meetings: CalendarEvent[]; economic: EconomicEvent[] } {
+  const used = new Set<EconomicEvent>();
+  const merged = meetings.map(({ country, ...m }) => {
+    const hit = economic.find((e) => !used.has(e) && e.kind === "rate" && e.country === country &&
+      Math.abs(Date.parse(e.start) - Date.parse(m.start)) <= 6 * 3_600_000);
+    if (!hit) return m;
+    used.add(hit);
+    return { ...m, result: hit.result };
+  });
+  return { meetings: merged, economic: economic.filter((e) => !used.has(e)) };
+}
+
+/** Earnings dates for watchlist tickers listed outside the US, from Yahoo's calendarEvents. */
+async function yahooEarnings(session: () => Promise<YahooSession>, cfg: Config, fromMs: number, toMs: number, fetcher: typeof fetch): Promise<CalendarEvent[]> {
   const foreign = cfg.watchlist.filter((w) => w.symbol.includes("."));
   if (!foreign.length) return [];
-  const first = await fetcher("https://fc.yahoo.com", { headers: { "User-Agent": BROWSER_UA }, redirect: "manual", signal: AbortSignal.timeout(10_000) });
-  const cookie = (first.headers.get("set-cookie") ?? "").split(";")[0];
-  const crumbRes = await fetcher("https://query2.finance.yahoo.com/v1/test/getcrumb", {
-    headers: { "User-Agent": BROWSER_UA, Cookie: cookie }, signal: AbortSignal.timeout(10_000),
-  });
-  const crumb = (await crumbRes.text()).trim();
-  if (!crumbRes.ok || !crumb || crumb.length > 40) throw new Error(`no Yahoo crumb (HTTP ${crumbRes.status})`);
+  const { cookie, crumb } = await session();
   const out: CalendarEvent[] = [];
   for (const w of foreign) {
     const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(w.symbol)}?modules=calendarEvents&crumb=${encodeURIComponent(crumb)}`;
@@ -304,32 +509,70 @@ async function yahooEarnings(cfg: Config, fromMs: number, toMs: number, fetcher:
 // the daily job
 // --------------------------------------------------------------------------
 
-/** Rebuild the calendar from 7 days back to 8 days ahead. Each source replaces only its own rows. */
+export interface RefreshOptions {
+  cfg?: Config;
+  cal?: CalendarConfig;
+  fetcher?: typeof fetch;
+  /** Days back and ahead of today (New York). Daily: 7 and 8. Hourly results refresh: 1 and 1. */
+  back?: number;
+  ahead?: number;
+  /** Only these sources (by origin); all when omitted. */
+  only?: string[];
+}
+
+/** Rebuild the calendar for the window. Each source replaces only its own rows in it. */
 export async function refreshCalendar(
   env: Env,
   now = Date.now(),
-  { cfg = CONFIG, cal = CALENDAR, fetcher = fetch }: { cfg?: Config; cal?: CalendarConfig; fetcher?: typeof fetch } = {},
+  { cfg = CONFIG, cal = CALENDAR, fetcher = fetch, back = DAYS_BACK, ahead = DAYS_AHEAD, only }: RefreshOptions = {},
 ): Promise<string> {
   const today = wallClock(now, ET).date;
-  const from = addDays(today, -DAYS_BACK);
-  const to = addDays(today, DAYS_AHEAD);
+  const from = addDays(today, -back);
+  const to = addDays(today, ahead);
   const fromMs = zonedToUtc(from, 0, 0, ET);
   const toMs = zonedToUtc(addDays(to, 1), 0, 0, ET);
-  const { meetings, rules } = fixedEvents(from, to, cal);
+  const wanted = (origin: string) => !only || only.includes(origin);
+  const fixed = fixedEvents(from, to, cal);
+  const session = yahooSession(fetcher);
+
+  // The Yahoo economic calendar first: the meetings take their results from
+  // it, and the fallback sources are only needed when it is unreachable.
+  let economic: EconomicEvent[] | null = null;
+  let economicError = "";
+  if (cal.yahooEconomic && (wanted("yahoo-economic") || wanted("meetings"))) {
+    try {
+      // Past days only matter for their results: from yesterday.
+      economic = await yahooEconomic(session, addDays(today, -1) < from ? from : addDays(today, -1), to, cal.yahooEconomic, now, fetcher);
+    } catch (err) {
+      economicError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  const { meetings, economic: others } = mergeMeetingResults(fixed.meetings, economic ?? []);
+  const useFallback = economic === null;
 
   const sources: [string, () => Promise<CalendarEvent[]>][] = [
     ["meetings", async () => meetings],
-    ["rules", async () => rules],
-    ...cal.ics.map((s) => [s.id, () => icsEvents(s, fromMs, toMs, fetcher)] as [string, () => Promise<CalendarEvent[]>]),
+    ["dated", async () => fixed.dated],
+    ...(cal.yahooEconomic
+      ? [["yahoo-economic", async () => {
+          if (economic === null) throw new Error(economicError);
+          return others;
+        }] as [string, () => Promise<CalendarEvent[]>]]
+      : []),
+    ["rules", async () => fixed.rules],
+    ["fallback-rules", async () => (useFallback ? fixed.fallbackRules : [])],
+    ...cal.ics.map((s) => [s.id, async () => (s.fallback && !useFallback ? [] : icsEvents(s, fromMs, toMs, fetcher))] as [string, () => Promise<CalendarEvent[]>]),
     // Nasdaq from yesterday, whose reported EPS fills in the result.
     ["nasdaq", () => nasdaqEarnings(days(addDays(today, -1), to), cfg, fetcher)],
-    ["yahoo", () => yahooEarnings(cfg, fromMs, toMs, fetcher)],
+    ["yahoo", () => yahooEarnings(session, cfg, fromMs, toMs, fetcher)],
   ];
 
   const report: string[] = [];
   const stamp = iso(now);
-  const cutoff = iso(zonedToUtc(today, 0, 0, ET));
-  for (const [origin, load] of sources) {
+  // Rows before today keep what they have (their results); rows from today
+  // to the end of the window are rewritten by the source that owns them.
+  const cutoff = iso(Math.max(zonedToUtc(today, 0, 0, ET), fromMs));
+  for (const [origin, load] of sources.filter(([o]) => wanted(o))) {
     let events: CalendarEvent[];
     try {
       events = await load();
@@ -338,8 +581,7 @@ export async function refreshCalendar(
       continue; // a failed source keeps what it wrote before
     }
     await env.DB.batch([
-      // Upcoming rows this source wrote before; it writes them again below.
-      env.DB.prepare("DELETE FROM news_events WHERE origin = ? AND start_at >= ? AND result IS NULL").bind(origin, cutoff),
+      env.DB.prepare("DELETE FROM news_events WHERE origin = ? AND start_at >= ? AND start_at < ? AND result IS NULL").bind(origin, cutoff, iso(toMs)),
       ...events.map((e) =>
         env.DB.prepare(
           `INSERT INTO news_events (id, type, title, start_at, end_at, region, importance, stream_url, result, tickers, origin, updated)

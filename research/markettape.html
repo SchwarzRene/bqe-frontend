@@ -400,23 +400,24 @@ accent, like the research write-ups.</p>
 <h2 id="calendar"><span class="num">8</span> Calendar</h2>
 <p class="lead">What's on now, later today and this week, so headlines can be read against scheduled events.</p>
 <p>Built in code, with no model involved: central bank meetings from a yearly config
-(<code>worker/news/calendar.json</code>), weekly and monthly releases from fixed rules, BLS's published
-iCalendar schedule, and the Nasdaq and Yahoo earnings calendars. The last column says what is covered
-so far.</p>
+(<code>worker/news/calendar.json</code>), Yahoo Finance's economic calendar for data releases, rate
+decisions and speakers (with consensus and actual figures), weekly releases from fixed rules, and the
+Nasdaq and Yahoo earnings calendars. BLS's published schedule is the fallback when Yahoo is
+unreachable.</p>
 
 <h3>Event types</h3>
 <table>
-  <tr><th>Type</th><th>Examples</th><th>Source</th><th>Built so far</th></tr>
-  <tr><td>Fed</td><td>FOMC decision, press conference, speeches, testimony</td><td>Fed meeting calendar + RSS</td><td>FOMC decisions with the live stream; speeches as Fed RSS headlines</td></tr>
-  <tr><td>US economic data</td><td>CPI, jobs report, PCE, GDP, retail sales, jobless claims</td><td>BLS and BEA release schedules</td><td>BLS iCalendar (CPI, jobs, PPI, JOLTS, ECI); jobless claims as a rule. BEA, Census: not yet</td></tr>
+  <tr><th>Type</th><th>Examples</th><th>Source</th><th>Built</th></tr>
+  <tr><td>Fed</td><td>FOMC decision, press conference, speeches, testimony</td><td>Fed meeting calendar + Yahoo</td><td>FOMC decisions with the live stream and the decided rate; speakers from Yahoo</td></tr>
+  <tr><td>US economic data</td><td>CPI, jobs report, PCE, GDP, retail sales, jobless claims</td><td>Yahoo's economic calendar</td><td>All, with consensus and actual; BLS and a claims rule as fallback</td></tr>
   <tr><td>Earnings</td><td>Watchlist companies, plus large caps reporting that day</td><td>Nasdaq / Yahoo calendar</td><td>Nasdaq: US watchlist + 5 largest per day, EPS estimate and reported EPS</td></tr>
-  <tr><td>European central banks</td><td>ECB decision and press conference, BoE, SNB, OeNB statements</td><td>Their meeting calendars, set once a year</td><td>ECB, BoE, SNB</td></tr>
-  <tr><td>European data</td><td>Euro-area inflation flash, GDP, German ifo and ZEW, Austrian CPI</td><td>Eurostat, Destatis and Statistik Austria release calendars</td><td>Not yet</td></tr>
+  <tr><td>European central banks</td><td>ECB decision and press conference, BoE, SNB, OeNB statements</td><td>Meeting calendars + Yahoo</td><td>ECB, BoE, SNB with the decided rate; ECB speakers</td></tr>
+  <tr><td>European data</td><td>Euro-area inflation flash, GDP, German ifo and ZEW, Austrian CPI</td><td>Yahoo's economic calendar</td><td>Euro area, Germany, Austria, UK, Switzerland</td></tr>
   <tr><td>European earnings</td><td>European watchlist companies (e.g. SAP, ASML, Erste)</td><td>Yahoo calendarEvents per ticker</td><td>Yahoo (day only); ASML via Nasdaq</td></tr>
-  <tr><td>Asian central banks</td><td>BoJ decision, PBoC loan prime rate, RBI decision</td><td>Their meeting calendars, set once a year</td><td>BoJ; PBoC LPR as a rule. RBI: not yet</td></tr>
-  <tr><td>Asian data</td><td>China PMIs, CPI, trade, GDP; Japan CPI and Tankan</td><td>China NBS and Japan statistics release calendars</td><td>China PMIs as a rule. The rest: not yet</td></tr>
-  <tr><td>Russia</td><td>Bank of Russia key rate decision, CPI</td><td>Bank of Russia meeting calendar, Rosstat releases</td><td>Key rate decisions. Rosstat: not yet</td></tr>
-  <tr><td>Commodities</td><td>USDA WASDE, crop progress and export sales; EIA crude and gas storage; OPEC+ meetings</td><td>USDA and EIA release schedules, OPEC meeting calendar</td><td>EIA and USDA weekly releases as rules. WASDE, OPEC+: not yet</td></tr>
+  <tr><td>Asian central banks</td><td>BoJ decision, PBoC loan prime rate, RBI decision</td><td>Meeting calendars + Yahoo</td><td>BoJ; PBoC and RBI from Yahoo</td></tr>
+  <tr><td>Asian data</td><td>China PMIs, CPI, trade, GDP; Japan CPI and Tankan</td><td>Yahoo's economic calendar</td><td>China, Japan, India</td></tr>
+  <tr><td>Russia</td><td>Bank of Russia key rate decision, CPI</td><td>Meeting calendar + Yahoo</td><td>Key rate decisions; CPI where Yahoo lists it</td></tr>
+  <tr><td>Commodities</td><td>USDA WASDE, crop progress and export sales; EIA crude and gas storage; OPEC+ meetings</td><td>USDA and EIA schedules, OPEC</td><td>EIA and USDA weekly releases as rules; WASDE and OPEC+ as dated entries in calendar.json</td></tr>
 </table>
 
 <h3>What it shows</h3>
@@ -424,7 +425,7 @@ so far.</p>
   <li><strong>On now:</strong> events currently live (press conference, earnings call), with stream link</li>
   <li><strong>Next up:</strong> the next 3 events with countdown</li>
   <li><strong>This week:</strong> a 5-day view, one row per day</li>
-  <li>After an event, the result in one line where the source publishes it — for now reported EPS vs. estimate from Nasdaq. Result lines for data and decisions: later</li>
+  <li>After an event, the result in one line from the source: actual vs. consensus (Yahoo), the decided rate, reported EPS (Nasdaq) — refreshed hourly on weekdays so it appears once published</li>
 </ul>
 
 <h3>Tie-in with the briefing</h3>
@@ -433,8 +434,9 @@ so far.</p>
   <li>Headlines matching an event (e.g. mentioning "CPI" on CPI day) are grouped under it</li>
   <li>Importance is ranked up for news about events happening today</li>
 </ul>
-<p>Calendar events are stored in D1 and refreshed daily at 05:00 ET, 7 days back and 8 days ahead.
-Each source replaces only its own rows; a source that fails keeps what it had.</p>
+<p>Calendar events are stored in D1 and refreshed daily at 05:00 ET, 7 days back and 8 days ahead, and
+hourly on weekdays for their results. Each source replaces only its own rows; a source that fails keeps
+what it had.</p>
 
 <h2 id="schedule"><span class="num">9</span> Schedule, cost and storage</h2>
 <p class="lead">Fetch headlines often, run the briefing model only at fixed times.</p>
@@ -489,7 +491,6 @@ Cloudflare's free tier at this volume.</p>
   <div class="ventry"><h4><span class="vtag">open</span>Briefing language</h4><div class="row">English or German?</div></div>
   <div class="ventry"><h4><span class="vtag">open</span>Update rhythm</h4><div class="row">Are fixed briefings a day enough, or near-live updates?</div></div>
   <div class="ventry"><h4><span class="vtag">open</span>Chat model</h4><div class="row">Gemini: provider decided. Same Flash model as the briefing, or a larger one for the chat? Google Search grounding on or off?</div></div>
-  <div class="ventry"><h4><span class="vtag">later</span>Event result lines</h4><div class="row">One-line results for data releases and rate decisions, e.g. written by the briefing from the headlines.</div></div>
   <div class="ventry"><h4><span class="vtag">later</span>Alerts</h4><div class="row">Push alert for importance-3 stories?</div></div>
   <div class="ventry win"><h4><span class="vtag">decided</span>Coverage</h4><div class="row">Europe (ECB, Eurostat, Euronews, European tickers and earnings), Asia and Russia (BBC Asia, Nikkei Asia, SCMP, The Moscow Times, Meduza, Bank of Russia), and commodities as a separate page. Chat about current events: yes.</div></div>
 </div>
@@ -502,7 +503,7 @@ Cloudflare's free tier at this volume.</p>
   <div><span class="f">worker/news/store.ts</span> <span class="d">— filter, dedupe, pre-score, store; source health; pruning</span></div>
   <div><span class="f">worker/news/gemini.ts</span> <span class="d">— the Gemini client (briefing and chat only)</span></div>
   <div><span class="f">worker/news/briefing.ts</span> <span class="d">— prompt, response schema, validation against the input ids, retry once</span></div>
-  <div><span class="f">worker/news/calendar.ts</span> <span class="d">— the calendar from calendar.json, BLS, Nasdaq and Yahoo; no model calls</span></div>
+  <div><span class="f">worker/news/calendar.ts</span> <span class="d">— the calendar from calendar.json, Yahoo, Nasdaq and BLS; no model calls</span></div>
   <div><span class="f">worker/news/chat.ts</span> <span class="d">— POST /api/chat: context, tools, sources, daily limit</span></div>
   <div><span class="f">worker/news/index.ts</span> <span class="d">— GET /api/news, POST /api/news/refresh, the 15-minute cron</span></div>
   <div><span class="f">migrations/0003_news.sql</span> <span class="d">— news_items, news_item_tickers, news_briefings, news_events, news_chat_usage</span></div>

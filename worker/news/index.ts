@@ -8,6 +8,7 @@
 //   fetch + dedupe         every run on weekdays, hourly at weekends
 //   briefing (Gemini)      02:30, 08:00, 12:30, 16:30 New York time on weekdays, Sat 10:00
 //   calendar + pruning     05:00 New York time (no model calls)
+//   calendar results       hourly on weekdays, yesterday to tomorrow (no model calls)
 
 import { currentUser, pruneAuth } from "../auth";
 import { pruneContact } from "../contact";
@@ -17,7 +18,7 @@ import { buildBriefing, latestBriefing } from "./briefing";
 import { calendarIsEmpty, type CalendarEvent, readCalendar, refreshCalendar } from "./calendar";
 import { CONFIG } from "./feeds";
 import { type Item, eventWordsFor, ingest, itemsById, pruneNews, readHealth, recentItems, staleSources } from "./store";
-import { briefingSlot, isCalendarRun, iso, shouldFetch } from "./time";
+import { briefingSlot, isCalendarRun, isResultsRun, iso, shouldFetch } from "./time";
 
 export { handleChat } from "./chat";
 
@@ -159,6 +160,11 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG): Promise
   } else if ((await calendarIsEmpty(env, ms)) && (await claim(env, "news:calendar-first", 60 * 60_000))) {
     // A fresh deploy: the calendar is built by the first run, not at 05:00.
     await record("calendar (first)", () => refreshCalendar(env, ms, { cfg }));
+  } else if (isResultsRun(ms)) {
+    // Hourly on weekdays: results (actual vs. consensus, reported EPS, rate
+    // decisions) appear once they are published.
+    await record("calendar results", () =>
+      refreshCalendar(env, ms, { cfg, back: 1, ahead: 1, only: ["meetings", "yahoo-economic", "nasdaq"] }));
   }
 
   // The only model calls the cron makes: the briefing.

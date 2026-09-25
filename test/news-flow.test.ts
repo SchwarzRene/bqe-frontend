@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildBriefing, latestBriefing } from "../worker/news/briefing";
-import { type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
+import { CALENDAR, type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
 import type { Config } from "../worker/news/feeds";
 import { handleChat, handleNews, newsTick } from "../worker/news/index";
 import { ingest, pruneNews } from "../worker/news/store";
@@ -75,7 +75,7 @@ function rss(items: [string, string, number][]): string {
 const gemini = (text: string) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }));
 
 /** Stubbed internet: two feeds, Yahoo, and a Gemini that answers by what it is asked. */
-function internet(opts: { briefing?: (prompt: string) => unknown; chat?: (body: any) => Response } = {}) {
+function internet(opts: { briefing?: (prompt: string) => unknown; chat?: (body: any) => Response; econ?: () => unknown[][] } = {}) {
   const calls: { url: string; body: any }[] = [];
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : null;
@@ -110,6 +110,12 @@ function internet(opts: { briefing?: (prompt: string) => unknown; chat?: (body: 
         "BEGIN:VEVENT", "DTSTART;TZID=America/New_York:20261002T083000", "SUMMARY:The Employment Situation - September 2026", "END:VEVENT",
         "END:VCALENDAR",
       ].join("\r\n"));
+    }
+    if (url.includes("fc.yahoo.com")) return new Response("", { status: 404, headers: { "Set-Cookie": "A3=session; Domain=.yahoo.com" } });
+    if (url.includes("getcrumb")) return opts.econ ? new Response("crumb123") : new Response("Unauthorized", { status: 401 });
+    if (url.includes("finance/visualization")) {
+      const ids = ["econ_release", "country_code", "startdatetime", "period", "after_release_actual", "consensus_estimate", "prior_release_actual", "originally_reported_actual"];
+      return new Response(JSON.stringify({ finance: { result: [{ documents: [{ columns: ids.map((id) => ({ id, label: id })), rows: opts.econ!() }] }], error: null } }));
     }
     if (url.includes("api.nasdaq.com")) {
       const rows = url.endsWith("2026-09-23")
@@ -191,7 +197,7 @@ describe("Market News flow", () => {
       ] }],
     };
     // The calendar makes no model calls.
-    expect(await refreshCalendar(env, NOW, { cfg, cal })).toBe("meetings: 1, rules: 3, bls: 2, nasdaq: 1, yahoo: 0");
+    expect(await refreshCalendar(env, NOW, { cfg, cal })).toBe("meetings: 1, dated: 0, rules: 3, fallback-rules: 0, bls: 2, nasdaq: 1, yahoo: 0");
     expect(calls.some((c) => c.url.includes("generativelanguage"))).toBe(false);
     const events = await readCalendar(env, NOW - 86_400_000, NOW + 3 * 86_400_000);
     expect(events.map((e) => [e.title, e.start, e.result])).toEqual([
@@ -226,6 +232,53 @@ describe("Market News flow", () => {
     expect(body.yahooOk).toBe(true);
   });
 
+  it("reads Yahoo's economic calendar: results as published, meetings' rates, fallbacks off", async () => {
+    // CPI at 08:30 New York on the 24th, before release: Yahoo writes 0 for "not yet".
+    let econ: unknown[][] = [
+      ["CPI MM, SA", "US", "2026-09-24T12:30:00.000Z", "Aug", 0, 0.3, 0.2, 0],
+      ["CPI YY, NSA", "US", "2026-09-24T12:30:00.000Z", "Aug", 0, 2.9, 2.7, 0],
+      ["Initial Jobless Clm", "US", "2026-09-24T12:30:00.000Z", "", 0, 225, 231, 0],
+      ["ECB Refinancing Rate", "EZ", "2026-09-25T12:15:00.000Z", "", 0, 2.15, 2.15, 0],
+      ["Tankan Big Mfg Idx", "JP", "2026-10-01T23:50:00.000Z", "Q3", 0, 13, 12, 0],
+      ["Fed Waller Speaks", "US", "2026-09-24T15:00:00.000Z", "", 0, 0, 0, 0],
+      ["BoE MPC Member Speaks", "GB", "2026-09-24T10:00:00.000Z", "", 0, 0, 0, 0],
+      ["Car Registrations", "IT", "2026-09-24T08:00:00.000Z", "", 5, 0, 0, 0],
+    ];
+    const calls = internet({ econ: () => econ });
+    const env = envWith();
+    const cal: CalendarConfig = {
+      meetings: [{ type: "eu-central-bank", title: "ECB rate decision", date: "2026-09-25", time: "14:15", tz: "Europe/Berlin", minutes: 90, region: "europe", importance: 3, country: "EZ" }],
+      weekly: [{ type: "us-data", title: "US weekly jobless claims", weekday: 4, time: "08:30", tz: "America/New_York", region: "us", importance: 2, fallback: true }],
+      monthly: [],
+      yahooEconomic: CALENDAR.yahooEconomic,
+      ics: [{ id: "bls", name: "BLS", url: "https://www.bls.gov/schedule/news_release/bls.ics", type: "us-data", region: "us", fallback: true, include: [{ match: "Consumer Price Index", title: "US CPI", importance: 3 }] }],
+    };
+    const before = NOW - 60 * 60_000; // 07:05 New York, before the release
+    expect(await refreshCalendar(env, before, { cfg, cal })).toBe(
+      "meetings: 1, dated: 0, yahoo-economic: 4, rules: 0, fallback-rules: 0, bls: 0, nasdaq: 1, yahoo: 0",
+    );
+    expect(calls.some((c) => c.url.includes("bls.ics"))).toBe(false);
+    const titles = async () => (await readCalendar(env, NOW - 86_400_000, NOW + 8 * 86_400_000)).map((e) => [e.title, e.result]);
+    expect(await titles()).toEqual([
+      ["NVIDIA results, after the close", "EPS $1.10 vs $1.00 est."],
+      ["US inflation (CPI) (Aug)", ""],
+      ["US weekly jobless claims", ""],
+      ["US: Fed Waller Speaks", ""],
+      ["ECB rate decision", ""],
+      ["Japan Tankan survey (Q3)", ""],
+    ]);
+
+    // Published: the hourly run fills in the figures, and the ECB meeting its rate.
+    econ = econ.map((r) => (r[0] === "CPI MM, SA" ? [...r.slice(0, 4), 0.2, ...r.slice(5)] : r[0] === "CPI YY, NSA" ? [...r.slice(0, 4), 3.0, ...r.slice(5)] : r));
+    await refreshCalendar(env, NOW, { cfg, cal, back: 1, ahead: 1, only: ["meetings", "yahoo-economic", "nasdaq"] });
+    econ = econ.map((r) => (r[0] === "ECB Refinancing Rate" ? [...r.slice(0, 4), 2.15, ...r.slice(5)] : r));
+    await refreshCalendar(env, NOW + 86_400_000 + 3_600_000, { cfg, cal, back: 1, ahead: 1, only: ["meetings", "yahoo-economic", "nasdaq"] });
+    const after = Object.fromEntries(await titles());
+    expect(after["US inflation (CPI) (Aug)"]).toBe("CPI MM, SA 0.2 (exp. 0.3); CPI YY, NSA 3 (exp. 2.9)");
+    expect(after["ECB rate decision"]).toBe("2.15 (exp. 2.15)");
+    expect(after["Japan Tankan survey (Q3)"]).toBe("");
+  });
+
   it("keeps the previous briefing when the model's answer is unusable twice", async () => {
     const calls = internet({ briefing: () => ({ general: { topStories: [] } }) });
     const env = envWith();
@@ -241,7 +294,8 @@ describe("Market News flow", () => {
     // 10:15 New York on a Thursday: no slot, but nothing exists yet.
     const report = await newsTick(env, Date.parse("2026-09-24T14:15:00Z"), cfg);
     expect(report).toMatch(/fetch: /);
-    expect(report).toMatch(/calendar \(first\): meetings: \d+, rules: \d+, bls: \d+, nasdaq: \d+, yahoo: 0/);
+    // Yahoo unreachable in this test: the fallbacks (BLS, the jobless-claims rule …) take over.
+    expect(report).toMatch(/calendar \(first\): .*yahoo-economic failed: no Yahoo crumb.*fallback-rules: [1-9]\d*, bls: [1-9]/);
     expect(report).toMatch(/briefing \(first\): briefing written/);
   });
 

@@ -108,6 +108,16 @@ export function shouldFetch(ms: number): boolean {
   return !weekend || w.minute < 15;
 }
 
+/**
+ * The hourly results refresh: weekdays, the run at a quarter past each hour.
+ * A briefing slot is never at :15, so the two never share a run (and its
+ * subrequest limit).
+ */
+export function isResultsRun(ms: number): boolean {
+  const w = wallClock(ms, ET);
+  return w.weekday >= 1 && w.weekday <= 5 && w.minute >= 15 && w.minute < 30;
+}
+
 /** The daily calendar run: 05:00 New York time. */
 export function isCalendarRun(ms: number): boolean {
   const w = wallClock(ms, ET);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateBriefing, pickInput } from "../worker/news/briefing";
-import { type CalendarConfig, fixedEvents, nasdaqEvent, parseIcs, pickNasdaq } from "../worker/news/calendar";
+import { type CalendarConfig, fixedEvents, mergeMeetingResults, nasdaqEvent, parseEconomic, parseIcs, pickNasdaq } from "../worker/news/calendar";
 import { describeGeminiError } from "../worker/news/gemini";
 import { cleanMessages, handleChat, splitSources } from "../worker/news/chat";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
@@ -205,6 +205,26 @@ describe("news calendar", () => {
     expect(at("China official PMIs")).toEqual(["2026-09-30T01:30:00Z", "2026-10-31T01:30:00Z"]);
     // Crop progress only runs April to November.
     expect(fixedEvents("2026-12-01", "2026-12-31", cal).rules.some((r) => r.title === "USDA crop progress")).toBe(false);
+  });
+
+  it("reads Yahoo's economic calendar by column label, with epoch times", () => {
+    const body = { finance: { result: [{ documents: [{
+      columns: [{ label: "Event" }, { label: "Country Code" }, { label: "Event Time" }, { label: "For" }, { label: "Actual" }, { label: "Market Expectation" }, { label: "Prior to This" }, { label: "Revised from" }],
+      rows: [["GDP Final", "us", 1790253000, "Q2", 3.8, 3.3, 3.3, null], ["", "US", 1790253000, "", null, null, null, null], ["X", "US", "not a date", "", 1, 1, 1, 1]],
+    }] }] } };
+    expect(parseEconomic(body)).toEqual([
+      { name: "GDP Final", country: "US", start: 1790253000000, period: "Q2", actual: 3.8, consensus: 3.3, prior: 3.3 },
+    ]);
+    expect(parseEconomic({})).toEqual([]);
+  });
+
+  it("gives a meeting the rate decision Yahoo lists for its country and time", () => {
+    const meeting = { id: "m", type: "fed" as const, title: "FOMC rate decision", start: "2026-10-28T18:00:00Z", end: "", region: "us" as const, importance: 3, streamUrl: "", result: "", tickers: [], country: "US" };
+    const rate = (country: string, start: string) => ({ ...meeting, id: `y-${country}`, title: "rate", start, result: "4 (exp. 4)", country, kind: "rate" as const });
+    const out = mergeMeetingResults([meeting], [rate("GB", "2026-10-28T18:00:00Z"), rate("US", "2026-10-28T18:00:00Z"), rate("US", "2026-10-30T18:00:00Z")]);
+    expect(out.meetings).toEqual([expect.objectContaining({ id: "m", result: "4 (exp. 4)" })]);
+    expect(out.meetings[0]).not.toHaveProperty("country");
+    expect(out.economic.map((e) => e.id)).toEqual(["y-GB", "y-US"]);
   });
 
   it("parses a published iCalendar schedule", () => {

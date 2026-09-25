@@ -30,7 +30,7 @@ worker/news/sources.json   feeds, watchlist, commodities, blocked publishers, pr
 worker/news/calendar.json  central bank meetings, weekly and monthly releases, published schedules
 worker/news/feeds.ts       fetch RSS/Atom + Yahoo search, parse, normalize, classify
 worker/news/store.ts       filter, dedupe, pre-score, store in D1; source health; reads; pruning
-worker/news/calendar.ts    the calendar, from calendar.json, BLS, Nasdaq and Yahoo (no model calls)
+worker/news/calendar.ts    the calendar, from calendar.json, Yahoo, Nasdaq and BLS (no model calls)
 worker/news/gemini.ts      the Gemini client
 worker/news/briefing.ts    the briefing: prompt, response schema, validation, retry, storage
 worker/news/chat.ts        POST /api/chat: context, tools, sources, daily limit
@@ -51,15 +51,15 @@ research/markettape/index.html   the page
 
 **Which requests can cause a model call.** Only `POST /api/chat` and `POST /api/news/refresh`, both of which answer `401` to anyone not signed in before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's only model call is the scheduled briefing.
 
-**One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything and `newsTick()` decides per run what is due, in New York time: the headline fetch (every run on weekdays, on the hour at weekends), the briefing at the briefing times, and at 05:00 the calendar plus the daily clean-up (7-day retention, old contact messages and sessions). Right after a deploy, the first run builds the calendar and the first briefing instead of waiting for their times.
+**One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything and `newsTick()` decides per run what is due, in New York time: the headline fetch (every run on weekdays, on the hour at weekends), the briefing at the briefing times, the calendar's results hourly on weekdays, and at 05:00 the calendar plus the daily clean-up (7-day retention, old contact messages and sessions). Right after a deploy, the first run builds the calendar and the first briefing instead of waiting for their times.
 
 **Settings** (`[vars]` in `wrangler.toml`): `GEMINI_MODEL` (the briefing, and the chat unless set otherwise), `GEMINI_CHAT_MODEL` (optional, the chat), `NEWS_CHAT_SEARCH` (`on` = Google Search grounding in the chat, off by default), `NEWS_CHAT_DAILY_LIMIT` (default 50). The watchlist, the commodity list and the feeds are in `worker/news/sources.json`; the calendar's fixed parts in `worker/news/calendar.json`.
 
 **Where it differs from the spec below, and why**
 
 - The latest briefing is one row in D1's `documents` table (`news:briefing`), not KV: still one read per page load, and no KV namespace to create before a deploy.
-- Market Tape is gone, so the calendar reads its sources itself (see [Calendar](#calendar)); the table there says which source each event type comes from, and which ones are not covered yet.
-- Result lines after an event come only from sources that publish them in a machine-readable form (reported EPS from Nasdaq). Data releases and rate decisions have no result line yet; the chat's `get_event_result` tool returns the headlines about the event instead. Result lines written by the briefing model are possible later.
+- Market Tape is gone, so the calendar reads its sources itself (see [Calendar](#calendar)). Most data releases, rate decisions and speakers come from Yahoo Finance's economic calendar rather than from each agency's own release calendar: one source, with the consensus and the actual figure, instead of a dozen formats. BLS's calendar and the fixed rules stay as the fallback.
+- Result lines come from the sources, never from a model: actual vs. consensus from Yahoo, reported EPS from Nasdaq. An hourly refresh on weekdays picks them up once they are published.
 - Eurostat has no headline feed in `sources.json`: its feed lists dataset updates, not news.
 - The feed and calendar URLs could not be checked from the environment this was built in. Any that are wrong show up in the Worker's log (`news: no items for 24 h from …`, `calendar: … failed`) and under the page's headlines; fix them in `sources.json` / `calendar.json`.
 
@@ -289,27 +289,27 @@ The calendar shows what's on now, later today and this week, so headlines can be
 
 **Event types**
 
-| Type | Examples | Source | Built so far |
+| Type | Examples | Source | Built |
 | --- | --- | --- | --- |
-| Fed | FOMC decision, press conference, speeches, testimony | Fed meeting calendar (set once a year) + Fed RSS | FOMC decisions from `calendar.json`, with the Fed's live stream; speeches reach the page as Fed RSS headlines, not as calendar rows |
-| US economic data | CPI, jobs report, PCE, GDP, retail sales, jobless claims | BLS and BEA release schedules | BLS's published iCalendar (CPI, jobs report, PPI, JOLTS, ECI), fetched daily; weekly jobless claims as a Thursday 08:30 ET rule. BEA (GDP, PCE) and Census (retail sales): not yet |
-| Earnings | Watchlist companies, plus large caps reporting that day | Nasdaq / Yahoo calendar | Nasdaq's earnings calendar: US watchlist tickers plus the 5 largest companies reporting each day, with the EPS estimate and, once reported, the actual figure |
-| European central banks | ECB decision and press conference, BoE, SNB, OeNB statements | Their meeting calendars, set once a year | ECB, BoE, SNB in `calendar.json`. OeNB: no scheduled statements to list |
-| European data | Euro-area inflation flash, GDP, German ifo and ZEW, Austrian CPI | Eurostat, Destatis and Statistik Austria release calendars | Not yet: add their schedules to `calendar.json` (an `ics` source, or dated entries) |
-| European earnings | European watchlist companies (e.g. SAP, ASML, Erste) | Yahoo calendarEvents per ticker | Yahoo calendarEvents for watchlist tickers listed outside the US (the day only; Yahoo gives no hour). ASML via Nasdaq |
-| Asian central banks | BoJ decision, PBoC loan prime rate, RBI decision | Their meeting calendars, set once a year | BoJ in `calendar.json`; PBoC loan prime rate as a rule (the 20th, next business day). RBI: not yet |
-| Asian data | China PMIs, CPI, trade, GDP; Japan CPI and Tankan | China NBS and Japan statistics release calendars | China official PMIs as a rule (last day of the month). The rest: not yet |
-| Russia | Bank of Russia key rate decision, CPI | Bank of Russia meeting calendar, Rosstat releases | Key rate decisions in `calendar.json`. Rosstat CPI: not yet |
-| Commodities | USDA WASDE, crop progress and export sales; EIA crude and gas storage; OPEC+ meetings | USDA and EIA release schedules, OPEC meeting calendar | EIA petroleum (Wed 10:30 ET) and gas storage (Thu 10:30 ET), USDA export sales (Thu 08:30 ET) and crop progress (Mon 16:00 ET, April–November) as rules. WASDE and OPEC+: not yet |
+| Fed | FOMC decision, press conference, speeches, testimony | Fed meeting calendar (set once a year) + Yahoo's economic calendar | FOMC decisions from `calendar.json` with the Fed's live stream, and the decided rate as the result; Fed speakers and testimony from Yahoo |
+| US economic data | CPI, jobs report, PCE, GDP, retail sales, jobless claims | Yahoo's economic calendar (BEA, BLS, Census releases) | All of them, plus PPI and ISM, with consensus and actual. BLS's iCalendar and a jobless-claims rule are the fallback when Yahoo is unreachable |
+| Earnings | Watchlist companies, plus large caps reporting that day | Nasdaq / Yahoo calendar | Nasdaq's earnings calendar: US watchlist tickers plus the 5 largest companies reporting each day, EPS estimate and reported EPS |
+| European central banks | ECB decision and press conference, BoE, SNB, OeNB statements | Their meeting calendars, set once a year + Yahoo | ECB, BoE, SNB in `calendar.json`, with the decided rate as the result; ECB speakers from Yahoo. OeNB publishes no scheduled statements |
+| European data | Euro-area inflation flash, GDP, German ifo and ZEW, Austrian CPI | Yahoo's economic calendar (Eurostat, Destatis, ifo, ZEW, Statistik Austria releases) | Euro area, Germany, Austria, UK, Switzerland: CPI, GDP, jobs, PMIs, ifo, ZEW, retail sales |
+| European earnings | European watchlist companies (e.g. SAP, ASML, Erste) | Yahoo calendarEvents per ticker | Yahoo calendarEvents for watchlist tickers listed outside the US (the day; Yahoo gives no hour). ASML via Nasdaq |
+| Asian central banks | BoJ decision, PBoC loan prime rate, RBI decision | Their meeting calendars + Yahoo | BoJ in `calendar.json`; PBoC loan prime rate and RBI decisions from Yahoo (the PBoC rule is the fallback) |
+| Asian data | China PMIs, CPI, trade, GDP; Japan CPI and Tankan | Yahoo's economic calendar (NBS, Japan statistics releases) | China and Japan (and India): CPI, GDP, PMIs, trade, industrial production, Tankan |
+| Russia | Bank of Russia key rate decision, CPI | Bank of Russia meeting calendar + Yahoo | Key rate decisions in `calendar.json`; CPI and other Rosstat releases from Yahoo where it lists them |
+| Commodities | USDA WASDE, crop progress and export sales; EIA crude and gas storage; OPEC+ meetings | USDA and EIA release schedules, OPEC meeting calendar | EIA petroleum and gas storage, USDA export sales and crop progress as rules. WASDE and OPEC+: add their dates under `dated` in `calendar.json` as they are announced (OPEC+ meets at short notice; its meetings also reach the page as headlines) |
 
-The rules ignore public holidays, when an agency moves a weekly release by a day. The meeting dates in `calendar.json` run to the end of 2026; add next year's when the banks publish them.
+Yahoo's economic calendar is the page behind finance.yahoo.com/calendar/economic; the Worker reads it the way the `yfinance` library does (a POST to `query1.finance.yahoo.com/v1/finance/visualization`, `entityIdType: "economic_event"`). Which releases and countries are kept, and how they are titled, is in `yahooEconomic` in `calendar.json`: variants of one release at the same time (CPI m/m, y/y, core) become one event whose result lists their figures, e.g. "CPI MM 0.2 (exp. 0.3); CPI YY 3 (exp. 2.9)". The rules ignore public holidays, when an agency moves a weekly release by a day. The meeting dates in `calendar.json` run to the end of 2026; add next year's when the banks publish them.
 
 **What it shows**
 
 - **On now:** events currently live (press conference, earnings call), with stream link
 - **Next up:** the next 3 events with countdown
 - **This week:** a 5-day view, one row per day
-- After an event, it shows the result in one line where the source publishes one: for now, reported EPS vs. estimate from Nasdaq (e.g. "EPS $1.30 vs $1.25 est."). Other events have none yet; the headlines about them are grouped under them
+- After an event, it shows the result in one line, from the source: actual vs. consensus from Yahoo's economic calendar (e.g. "CPI YY 3 (exp. 2.9)"), the decided rate for a central bank meeting, reported EPS vs. estimate from Nasdaq. An hourly refresh on weekdays adds them once they are published
 
 **Tie-in with the briefing**
 
@@ -317,7 +317,7 @@ The rules ignore public holidays, when an agency moves a weekly release by a day
 - Headlines matching an event (e.g. mentioning "CPI" on CPI day) are grouped under it
 - Importance is ranked up for news about events happening today
 
-Calendar events are stored in D1 and refreshed daily at 05:00 ET, 7 days back and 8 days ahead. Each source replaces only its own rows, and a source that fails keeps what it had.
+Calendar events are stored in D1 and refreshed daily at 05:00 ET, 7 days back and 8 days ahead, and hourly on weekdays for yesterday to tomorrow (results). Each source replaces only its own rows, and a source that fails keeps what it had.
 
 ## Schedule, cost and storage
 
@@ -329,6 +329,7 @@ Fetch headlines often, but run the briefing model only at fixed times: that keep
 | --- | --- | --- |
 | Fetch + dedupe | Every 15 min around the clock on weekdays (Asian, European and US sessions); hourly on weekends | No |
 | Calendar + clean-up | 05:00 | No |
+| Calendar results | Hourly on weekdays, at :15 | No |
 | Asia close and European open briefing | 02:30 (08:30 Vienna) | Yes |
 | Pre-market briefing | 08:00 | Yes |
 | Midday briefing | 12:30 | Yes |
@@ -378,7 +379,6 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 - [x] AI provider: Gemini, for the briefing and the chat only.
 - [ ] Chat model: the same Flash model as the briefing, or a larger one? Google Search grounding on or off?
 - [ ] Later: push alert for importance-3 stories?
-- [ ] Later: result lines for data releases and rate decisions (e.g. written by the briefing from the headlines).
 
 ## References
 
