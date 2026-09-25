@@ -56,10 +56,17 @@ Without `wrangler.toml` wrangler improvises — it treats the *whole repository*
 as the assets directory, sweeps in `.git`, and fails on a pack file bigger
 than the 25 MiB per-asset limit.
 
-**`build.sh`** produces `_site/`: everything in the repository except the
-furniture — `.git`, `.github/`, `docs/`, `README.md`, `wrangler.toml`, the
-Worker's source and tooling, and itself. It refuses to publish a tree with no
-`index.html`.
+**`build.sh`** produces `_site/` from an **allowlist**: `index.html`,
+`_headers`, `assets/`, `components/`, `pages/`, `research/` (and one image).
+Nothing else is published — not the Worker's source, not the docs, and above
+all not a local `.dev.vars` or `.env` when you deploy from your own machine. It
+refuses to publish a tree with a hidden file in it or without `index.html`. A
+new top-level folder goes live only once it is added to `SITE` in `build.sh`.
+
+**`_headers`** sets the security headers for every page, including the
+Content-Security-Policy: scripts only from this site (third-party libraries are
+vendored in `assets/vendor/`) and Cloudflare Turnstile. A page that needs a new
+outside origin (a font, an API) needs it added there, or the browser blocks it.
 
 **`migrations/`** is the D1 schema. `wrangler d1 migrations apply` records what
 it has applied, so the deploy command can run it every time.
@@ -101,7 +108,12 @@ from a terminal in this repository:
 ```bash
 npx wrangler secret put GEMINI_API_KEY   # free key: https://aistudio.google.com/apikey
 npx wrangler secret put ADMIN_TOKEN      # any long random string: openssl rand -hex 32
+npx wrangler secret put IP_HASH_SECRET   # any long random string: openssl rand -hex 32
 ```
+
+`IP_HASH_SECRET` keys the daily visitor hash used by the rate limits. Without
+it the hash is unkeyed, and anyone holding a copy of the database could turn it
+back into IP addresses by trying them all (the log warns once per instance).
 
 `GEMINI_API_KEY` is what the Market News briefing and chat use; the Worker
 reads it as `env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
@@ -109,12 +121,25 @@ reads it as `env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
 `npm run dev` locally, put the same names in a `.dev.vars` file
 (git-ignored) instead.
 
-**Then change the `ceo` password.** The account comes from
-`migrations/0002_users.sql` with the password you chose, and that file is
-public. Sign in on the site → click `ceo` in the header → **Change
-password**. `ceo` is the admin: the account panel links to the admin
-terminal (`/pages/admin.html`), where new sign-ups get their AI access —
-they have none until you grant it.
+**Then set the `ceo` password.** The account comes from
+`migrations/0002_users.sql`, whose hash is public. Migration 0006 disables that
+hash if it was never changed, so on a fresh database `ceo` cannot sign in until
+you set a password:
+
+```bash
+node scripts/set-password.mjs ceo          # asks for the password, prints one wrangler command
+```
+
+Run the printed command. It stores only the hash and signs the account out
+everywhere. `ceo` is the admin: the account panel links to the admin terminal
+(`/pages/admin.html`), where new sign-ups get their AI access — they have none
+until you grant it — and where contact messages and the audit log are read.
+
+**Optional but recommended — Turnstile on sign-up.** Dashboard → **Turnstile**
+→ **Add widget** (managed, your domain). Put its site key in `wrangler.toml` as
+`TURNSTILE_SITE_KEY` and its secret in `npx wrangler secret put
+TURNSTILE_SECRET`. Until both are set, sign-up is limited only by the per-visitor
+(5 a day) and site-wide (`SIGNUP_HOURLY_LIMIT`, 30 an hour) limits.
 
 **4. Fill the data.** Market News fills itself: the first 15-minute run
 after a deploy fetches headlines and builds the calendar and the first
@@ -139,7 +164,11 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/ru
 
 ## Contact form messages
 
-Submissions land in the `contact_messages` table. Read the open ones:
+Submissions land in the `contact_messages` table. The admin terminal reads
+them: `messages`, `read 42`, and `answered 42` once you have replied, which
+starts the 30-day deletion the privacy policy promises (section 7.1). A
+message nobody marks answered is deleted 180 days after it arrived. From a
+terminal instead:
 
 ```bash
 npx wrangler d1 execute bqe --remote --command \
@@ -155,8 +184,54 @@ npx wrangler d1 execute bqe --remote --command \
 ```
 
 The D1 console in the dashboard runs the same SQL. No IP address is stored,
-only a salted hash that changes daily, used for the rate limit (5 messages per
-hour) and cleared after a day.
+only a keyed hash that changes daily (see `IP_HASH_SECRET`), used for the rate
+limit (5 messages per hour) and cleared after a day.
+
+## Security settings
+
+| Setting | Where | What |
+|---|---|---|
+| `AUTH_LIMITER`, `MARKET_LIMITER` | `[[ratelimits]]` in `wrangler.toml` | Cloudflare's per-visitor flood limits on `/api/auth/*` (20/min) and the Yahoo-backed `/api/market/*`, `/api/quotes/*` (120/min) |
+| `SIGNUP_HOURLY_LIMIT` | `[vars]` | new accounts per hour, site-wide (30) |
+| `PASSWORD_BREACH_CHECK` | `[vars]` | `on`: new passwords are checked against Have I Been Pwned (k-anonymity) |
+| `PBKDF2_ITERATIONS` | `[vars]` | unset = 50,000 (free plan's CPU). On Workers Paid set `600000`; old hashes upgrade at the next sign-in |
+| `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET` | `[vars]` + secret | anti-bot check on sign-up |
+| `IP_HASH_SECRET` | secret | keys the visitor hash |
+
+Sign-in is limited to 10 failures per visitor per 15 minutes and 10 per
+account per hour (`worker/auth.ts`). The per-account limit means someone
+guessing at an account can keep its owner out for up to an hour; the admin can
+clear it with `DELETE FROM login_attempts WHERE account = 'name'`.
+
+## Backups and restore
+
+D1 keeps a point-in-time history (**Time Travel**: 7 days on the free plan, 30
+on Workers Paid). Restore the whole database to a moment before a mistake:
+
+```bash
+npx wrangler d1 time-travel info bqe                               # the current bookmark
+npx wrangler d1 time-travel restore bqe --timestamp=2026-09-25T10:00:00Z
+```
+
+A restore replaces everything, including accounts and sessions created since.
+Try it once on a copy before you need it: `npx wrangler d1 export bqe --remote
+--output=bqe.sql` makes a full SQL dump (keep it private: it holds emails and
+password hashes), and `npx wrangler d1 execute bqe-restore-test --remote
+--file=bqe.sql` loads it into a scratch database. A weekly export to storage
+you control is the backup that survives losing the Cloudflare account.
+
+**Where the data lives.** A D1 database's location is fixed when it is created.
+To keep it in the EU, create it with `npx wrangler d1 create bqe
+--jurisdiction=eu` (an existing database cannot be moved; export, create the
+new one, import, and point `database_id` at it).
+
+## Monitoring
+
+`[observability]` is on, so the Worker's logs are in the dashboard (Workers →
+`bqe-frontend` → **Logs**). Worth a notification (dashboard → **Notifications**):
+the Worker's error rate, and D1 storage passing 70% of the plan's limit. The
+limits that end the free plan first are 100,000 Worker requests a day and D1's
+500 MB; move to Workers Paid before either is close.
 
 ## Pull request previews
 

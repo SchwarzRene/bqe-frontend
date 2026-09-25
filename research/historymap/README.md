@@ -71,7 +71,7 @@ HistoryMap/
 └── Start-HistoryMap.bat     # One-click start for Windows
 ```
 
-No build tools, no framework — just HTML/CSS/JS, with [Leaflet](https://leafletjs.com) loaded from a CDN.
+No build tools, no framework — just HTML/CSS/JS, with [Leaflet](https://leafletjs.com) 1.9.4 served from the site itself (`/assets/vendor/leaflet-1.9.4/`).
 
 ## Extending it
 

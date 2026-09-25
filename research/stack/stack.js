@@ -1,0 +1,1875 @@
+// The Stack page. Moved out of index.html so the site's Content-Security-Policy
+// can refuse inline scripts; it is still a classic script, run after the markup.
+"use strict";
+
+/* ============================================================
+   1. Universe — a bundled snapshot of S&P 500 members.
+   Edit this list freely; the app reads nothing else.
+   ============================================================ */
+const RAW = `
+AAPL|Apple|Information Technology
+MSFT|Microsoft|Information Technology
+NVDA|NVIDIA|Information Technology
+AVGO|Broadcom|Information Technology
+ORCL|Oracle|Information Technology
+CRM|Salesforce|Information Technology
+AMD|Advanced Micro Devices|Information Technology
+ADBE|Adobe|Information Technology
+ACN|Accenture|Information Technology
+CSCO|Cisco Systems|Information Technology
+NOW|ServiceNow|Information Technology
+INTU|Intuit|Information Technology
+IBM|IBM|Information Technology
+QCOM|Qualcomm|Information Technology
+TXN|Texas Instruments|Information Technology
+AMAT|Applied Materials|Information Technology
+MU|Micron Technology|Information Technology
+LRCX|Lam Research|Information Technology
+KLAC|KLA|Information Technology
+ADI|Analog Devices|Information Technology
+INTC|Intel|Information Technology
+PANW|Palo Alto Networks|Information Technology
+SNPS|Synopsys|Information Technology
+CDNS|Cadence Design Systems|Information Technology
+ANET|Arista Networks|Information Technology
+CRWD|CrowdStrike|Information Technology
+PLTR|Palantir Technologies|Information Technology
+MSI|Motorola Solutions|Information Technology
+ROP|Roper Technologies|Information Technology
+APH|Amphenol|Information Technology
+NXPI|NXP Semiconductors|Information Technology
+MCHP|Microchip Technology|Information Technology
+FTNT|Fortinet|Information Technology
+MPWR|Monolithic Power Systems|Information Technology
+TEL|TE Connectivity|Information Technology
+GLW|Corning|Information Technology
+ON|ON Semiconductor|Information Technology
+TER|Teradyne|Information Technology
+KEYS|Keysight Technologies|Information Technology
+ZBRA|Zebra Technologies|Information Technology
+HPQ|HP|Information Technology
+DELL|Dell Technologies|Information Technology
+WDC|Western Digital|Information Technology
+STX|Seagate Technology|Information Technology
+SMCI|Super Micro Computer|Information Technology
+CTSH|Cognizant Technology|Information Technology
+IT|Gartner|Information Technology
+FICO|Fair Isaac|Information Technology
+AKAM|Akamai Technologies|Information Technology
+GDDY|GoDaddy|Information Technology
+GOOGL|Alphabet|Communication Services
+META|Meta Platforms|Communication Services
+NFLX|Netflix|Communication Services
+DIS|Walt Disney|Communication Services
+CMCSA|Comcast|Communication Services
+TMUS|T-Mobile US|Communication Services
+VZ|Verizon Communications|Communication Services
+T|AT&T|Communication Services
+CHTR|Charter Communications|Communication Services
+EA|Electronic Arts|Communication Services
+TTWO|Take-Two Interactive|Communication Services
+WBD|Warner Bros. Discovery|Communication Services
+OMC|Omnicom Group|Communication Services
+IPG|Interpublic Group|Communication Services
+LYV|Live Nation Entertainment|Communication Services
+FOXA|Fox|Communication Services
+NWSA|News Corp|Communication Services
+MTCH|Match Group|Communication Services
+AMZN|Amazon|Consumer Discretionary
+TSLA|Tesla|Consumer Discretionary
+HD|Home Depot|Consumer Discretionary
+MCD|McDonald's|Consumer Discretionary
+BKNG|Booking Holdings|Consumer Discretionary
+LOW|Lowe's|Consumer Discretionary
+NKE|Nike|Consumer Discretionary
+SBUX|Starbucks|Consumer Discretionary
+TJX|TJX Companies|Consumer Discretionary
+ORLY|O'Reilly Automotive|Consumer Discretionary
+AZO|AutoZone|Consumer Discretionary
+CMG|Chipotle Mexican Grill|Consumer Discretionary
+MAR|Marriott International|Consumer Discretionary
+HLT|Hilton Worldwide|Consumer Discretionary
+ABNB|Airbnb|Consumer Discretionary
+GM|General Motors|Consumer Discretionary
+F|Ford Motor|Consumer Discretionary
+ROST|Ross Stores|Consumer Discretionary
+YUM|Yum! Brands|Consumer Discretionary
+DHI|D.R. Horton|Consumer Discretionary
+LEN|Lennar|Consumer Discretionary
+NVR|NVR|Consumer Discretionary
+PHM|PulteGroup|Consumer Discretionary
+EBAY|eBay|Consumer Discretionary
+DPZ|Domino's Pizza|Consumer Discretionary
+LVS|Las Vegas Sands|Consumer Discretionary
+RCL|Royal Caribbean|Consumer Discretionary
+CCL|Carnival|Consumer Discretionary
+DRI|Darden Restaurants|Consumer Discretionary
+ULTA|Ulta Beauty|Consumer Discretionary
+BBY|Best Buy|Consumer Discretionary
+APTV|Aptiv|Consumer Discretionary
+LKQ|LKQ|Consumer Discretionary
+WMT|Walmart|Consumer Staples
+COST|Costco Wholesale|Consumer Staples
+PG|Procter & Gamble|Consumer Staples
+KO|Coca-Cola|Consumer Staples
+PEP|PepsiCo|Consumer Staples
+PM|Philip Morris International|Consumer Staples
+MO|Altria Group|Consumer Staples
+MDLZ|Mondelez International|Consumer Staples
+CL|Colgate-Palmolive|Consumer Staples
+KMB|Kimberly-Clark|Consumer Staples
+GIS|General Mills|Consumer Staples
+KHC|Kraft Heinz|Consumer Staples
+STZ|Constellation Brands|Consumer Staples
+SYY|Sysco|Consumer Staples
+KR|Kroger|Consumer Staples
+HSY|Hershey|Consumer Staples
+K|Kellanova|Consumer Staples
+CHD|Church & Dwight|Consumer Staples
+MNST|Monster Beverage|Consumer Staples
+KDP|Keurig Dr Pepper|Consumer Staples
+TGT|Target|Consumer Staples
+DG|Dollar General|Consumer Staples
+DLTR|Dollar Tree|Consumer Staples
+TSN|Tyson Foods|Consumer Staples
+CAG|Conagra Brands|Consumer Staples
+EL|Estee Lauder|Consumer Staples
+ADM|Archer-Daniels-Midland|Consumer Staples
+LLY|Eli Lilly|Health Care
+UNH|UnitedHealth Group|Health Care
+JNJ|Johnson & Johnson|Health Care
+ABBV|AbbVie|Health Care
+MRK|Merck|Health Care
+TMO|Thermo Fisher Scientific|Health Care
+ABT|Abbott Laboratories|Health Care
+PFE|Pfizer|Health Care
+DHR|Danaher|Health Care
+AMGN|Amgen|Health Care
+ISRG|Intuitive Surgical|Health Care
+BMY|Bristol-Myers Squibb|Health Care
+GILD|Gilead Sciences|Health Care
+VRTX|Vertex Pharmaceuticals|Health Care
+REGN|Regeneron Pharmaceuticals|Health Care
+CVS|CVS Health|Health Care
+MDT|Medtronic|Health Care
+ELV|Elevance Health|Health Care
+CI|Cigna Group|Health Care
+SYK|Stryker|Health Care
+BSX|Boston Scientific|Health Care
+ZTS|Zoetis|Health Care
+HCA|HCA Healthcare|Health Care
+MCK|McKesson|Health Care
+COR|Cencora|Health Care
+BDX|Becton Dickinson|Health Care
+EW|Edwards Lifesciences|Health Care
+IQV|IQVIA Holdings|Health Care
+A|Agilent Technologies|Health Care
+IDXX|IDEXX Laboratories|Health Care
+DXCM|DexCom|Health Care
+MRNA|Moderna|Health Care
+BIIB|Biogen|Health Care
+CNC|Centene|Health Care
+MOH|Molina Healthcare|Health Care
+WST|West Pharmaceutical|Health Care
+RMD|ResMed|Health Care
+ZBH|Zimmer Biomet|Health Care
+BAX|Baxter International|Health Care
+HOLX|Hologic|Health Care
+BRK.B|Berkshire Hathaway|Financials
+JPM|JPMorgan Chase|Financials
+V|Visa|Financials
+MA|Mastercard|Financials
+BAC|Bank of America|Financials
+WFC|Wells Fargo|Financials
+GS|Goldman Sachs|Financials
+MS|Morgan Stanley|Financials
+C|Citigroup|Financials
+SCHW|Charles Schwab|Financials
+BLK|BlackRock|Financials
+SPGI|S&P Global|Financials
+AXP|American Express|Financials
+PGR|Progressive|Financials
+CB|Chubb|Financials
+MMC|Marsh & McLennan|Financials
+AON|Aon|Financials
+ICE|Intercontinental Exchange|Financials
+CME|CME Group|Financials
+MCO|Moody's|Financials
+USB|U.S. Bancorp|Financials
+PNC|PNC Financial Services|Financials
+TFC|Truist Financial|Financials
+COF|Capital One Financial|Financials
+BK|Bank of New York Mellon|Financials
+STT|State Street|Financials
+AIG|American International Group|Financials
+MET|MetLife|Financials
+PRU|Prudential Financial|Financials
+ALL|Allstate|Financials
+TRV|Travelers|Financials
+AFL|Aflac|Financials
+DFS|Discover Financial Services|Financials
+FI|Fiserv|Financials
+FIS|Fidelity National Information|Financials
+GPN|Global Payments|Financials
+PYPL|PayPal Holdings|Financials
+NDAQ|Nasdaq|Financials
+AMP|Ameriprise Financial|Financials
+HIG|Hartford Financial|Financials
+WTW|Willis Towers Watson|Financials
+GE|GE Aerospace|Industrials
+CAT|Caterpillar|Industrials
+RTX|RTX|Industrials
+HON|Honeywell International|Industrials
+UNP|Union Pacific|Industrials
+BA|Boeing|Industrials
+DE|Deere|Industrials
+LMT|Lockheed Martin|Industrials
+UPS|United Parcel Service|Industrials
+ETN|Eaton|Industrials
+NOC|Northrop Grumman|Industrials
+GD|General Dynamics|Industrials
+MMM|3M|Industrials
+EMR|Emerson Electric|Industrials
+ITW|Illinois Tool Works|Industrials
+PH|Parker Hannifin|Industrials
+CSX|CSX|Industrials
+NSC|Norfolk Southern|Industrials
+FDX|FedEx|Industrials
+WM|Waste Management|Industrials
+RSG|Republic Services|Industrials
+CARR|Carrier Global|Industrials
+JCI|Johnson Controls|Industrials
+TT|Trane Technologies|Industrials
+CMI|Cummins|Industrials
+PCAR|PACCAR|Industrials
+LHX|L3Harris Technologies|Industrials
+TDG|TransDigm Group|Industrials
+URI|United Rentals|Industrials
+FAST|Fastenal|Industrials
+GWW|W.W. Grainger|Industrials
+ROK|Rockwell Automation|Industrials
+DOV|Dover|Industrials
+IR|Ingersoll Rand|Industrials
+OTIS|Otis Worldwide|Industrials
+PWR|Quanta Services|Industrials
+AME|Ametek|Industrials
+XYL|Xylem|Industrials
+SWK|Stanley Black & Decker|Industrials
+DAL|Delta Air Lines|Industrials
+UAL|United Airlines|Industrials
+LUV|Southwest Airlines|Industrials
+ODFL|Old Dominion Freight Line|Industrials
+EFX|Equifax|Industrials
+VRSK|Verisk Analytics|Industrials
+ADP|Automatic Data Processing|Industrials
+PAYX|Paychex|Industrials
+CTAS|Cintas|Industrials
+XOM|Exxon Mobil|Energy
+CVX|Chevron|Energy
+COP|ConocoPhillips|Energy
+EOG|EOG Resources|Energy
+SLB|SLB|Energy
+PSX|Phillips 66|Energy
+MPC|Marathon Petroleum|Energy
+VLO|Valero Energy|Energy
+OXY|Occidental Petroleum|Energy
+WMB|Williams|Energy
+KMI|Kinder Morgan|Energy
+OKE|ONEOK|Energy
+HAL|Halliburton|Energy
+BKR|Baker Hughes|Energy
+DVN|Devon Energy|Energy
+FANG|Diamondback Energy|Energy
+HES|Hess|Energy
+TRGP|Targa Resources|Energy
+CTRA|Coterra Energy|Energy
+EQT|EQT|Energy
+NEE|NextEra Energy|Utilities
+SO|Southern|Utilities
+DUK|Duke Energy|Utilities
+CEG|Constellation Energy|Utilities
+D|Dominion Energy|Utilities
+AEP|American Electric Power|Utilities
+SRE|Sempra|Utilities
+EXC|Exelon|Utilities
+XEL|Xcel Energy|Utilities
+ED|Consolidated Edison|Utilities
+PEG|Public Service Enterprise|Utilities
+VST|Vistra|Utilities
+WEC|WEC Energy Group|Utilities
+ES|Eversource Energy|Utilities
+AWK|American Water Works|Utilities
+DTE|DTE Energy|Utilities
+PPL|PPL|Utilities
+AEE|Ameren|Utilities
+CMS|CMS Energy|Utilities
+FE|FirstEnergy|Utilities
+ETR|Entergy|Utilities
+ATO|Atmos Energy|Utilities
+NRG|NRG Energy|Utilities
+LIN|Linde|Materials
+SHW|Sherwin-Williams|Materials
+APD|Air Products & Chemicals|Materials
+ECL|Ecolab|Materials
+FCX|Freeport-McMoRan|Materials
+NEM|Newmont|Materials
+DOW|Dow|Materials
+DD|DuPont de Nemours|Materials
+PPG|PPG Industries|Materials
+NUE|Nucor|Materials
+STLD|Steel Dynamics|Materials
+VMC|Vulcan Materials|Materials
+MLM|Martin Marietta Materials|Materials
+IFF|International Flavors|Materials
+LYB|LyondellBasell|Materials
+ALB|Albemarle|Materials
+CF|CF Industries|Materials
+MOS|Mosaic|Materials
+PKG|Packaging Corp of America|Materials
+IP|International Paper|Materials
+AMCR|Amcor|Materials
+BALL|Ball|Materials
+PLD|Prologis|Real Estate
+AMT|American Tower|Real Estate
+EQIX|Equinix|Real Estate
+WELL|Welltower|Real Estate
+CCI|Crown Castle|Real Estate
+PSA|Public Storage|Real Estate
+SPG|Simon Property Group|Real Estate
+O|Realty Income|Real Estate
+DLR|Digital Realty Trust|Real Estate
+VICI|VICI Properties|Real Estate
+AVB|AvalonBay Communities|Real Estate
+EQR|Equity Residential|Real Estate
+EXR|Extra Space Storage|Real Estate
+IRM|Iron Mountain|Real Estate
+MAA|Mid-America Apartment|Real Estate
+ARE|Alexandria Real Estate|Real Estate
+INVH|Invitation Homes|Real Estate
+ESS|Essex Property Trust|Real Estate
+KIM|Kimco Realty|Real Estate
+UDR|UDR|Real Estate
+HST|Host Hotels & Resorts|Real Estate
+CPT|Camden Property Trust|Real Estate
+BXP|BXP|Real Estate
+REG|Regency Centers|Real Estate
+`;
+
+let UNIVERSE = RAW.trim().split("\n").map(l => {
+  const p = l.split("|");
+  return { sym: p[0], name: p[1], sector: p[2] };
+});
+
+/* ============================================================
+   2. Price series (simulated — see the note in the reply)
+   One deterministic daily series per symbol; weekly, monthly and
+   hourly bars are aggregated from it, so a level drawn on one
+   timeframe lands in exactly the same place on the others.
+   ============================================================ */
+function xmur3(str){
+  let h = 1779033703 ^ str.length;
+  for (let i=0;i<str.length;i++){
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h>>>16), 2246822507);
+    h = Math.imul(h ^ (h>>>13), 3266489909);
+    return (h ^= h>>>16) >>> 0;
+  };
+}
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a>>>15), 1 | a);
+    t = (t + Math.imul(t ^ (t>>>7), 61 | t)) ^ t;
+    return ((t ^ (t>>>14)) >>> 0) / 4294967296;
+  };
+}
+const DAY = 86400000;
+
+function tradingDays(n){
+  // n weekday timestamps ending on the most recent weekday (UTC midnight)
+  let end = Math.floor(Date.now()/DAY)*DAY;
+  let d = new Date(end);
+  while (d.getUTCDay()===0 || d.getUTCDay()===6) { end -= DAY; d = new Date(end); }
+  const out = new Array(n);
+  let t = end;
+  for (let i=n-1;i>=0;i--){
+    out[i] = t;
+    do { t -= DAY; } while (new Date(t).getUTCDay()===0 || new Date(t).getUTCDay()===6);
+  }
+  return out;
+}
+const DAY_TIMES = tradingDays(2650);
+
+function buildDaily(sym){
+  const seed = xmur3(sym);
+  const r = mulberry32(seed());
+  const n = DAY_TIMES.length;
+  const base = 9 + Math.exp(1 + r()*5.4);         // ~12 to ~630
+  const annVol = 0.16 + r()*0.34;
+  let drift = (r()-0.30) * 0.20;
+  let volMul = 1;
+  let anchor = Math.log(base);                     // slow trend the price hugs
+  let lp = anchor;
+  const bars = new Array(n);
+  let nextRegime = 90 + Math.floor(r()*160);
+  let nextEvent = 40 + Math.floor(r()*30);
+
+  for (let i=0;i<n;i++){
+    if (i === nextRegime){
+      volMul = 0.7 + r()*1.1;
+      if (r() < 0.32) drift = -drift * (0.4 + r()*1.2);
+      nextRegime = i + 90 + Math.floor(r()*170);
+    }
+    const dv = (annVol*volMul)/Math.sqrt(252);
+    const g = Math.sqrt(-2*Math.log(1-r())) * Math.cos(2*Math.PI*r());
+    anchor += drift/252;
+    const dev = lp - anchor;
+    let ret = dv*g - 0.006*dev - (Math.abs(dev) > 0.85 ? 0.05*dev : 0);
+    let gap = 0;
+    if (i === nextEvent){                          // quarterly report gap
+      gap = (r()-0.5) * (0.05 + r()*0.09);
+      nextEvent = i + 58 + Math.floor(r()*12);
+    }
+    const o = Math.exp(lp + gap);
+    const c = o * Math.exp(ret);
+    const span = Math.abs(c-o) + o*dv*(0.5 + r()*1.4);
+    const h = Math.max(o,c) + span*r()*0.6;
+    const l = Math.min(o,c) - span*r()*0.6;
+    bars[i] = { t: DAY_TIMES[i], o, h: Math.max(h,o,c), l: Math.min(l,o,c), c };
+    lp = Math.log(c);
+  }
+  return bars;
+}
+
+function groupBy(daily, keyFn){
+  const out = [];
+  let cur = null, key = null;
+  for (const b of daily){
+    const k = keyFn(b.t);
+    if (k !== key){
+      if (cur) out.push(cur);
+      key = k;
+      cur = { t: b.t, o: b.o, h: b.h, l: b.l, c: b.c };
+    } else {
+      cur.h = Math.max(cur.h, b.h);
+      cur.l = Math.min(cur.l, b.l);
+      cur.c = b.c;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+const weekKey  = t => { const d=new Date(t); const s=t - ((d.getUTCDay()+6)%7)*DAY; return Math.floor(s/DAY); };
+const monthKey = t => { const d=new Date(t); return d.getUTCFullYear()*12 + d.getUTCMonth(); };
+
+function buildHourly(sym, daily, days){
+  const r = mulberry32(xmur3(sym+"|h1")());
+  const src = daily.slice(-days);
+  const perDay = 7;                                 // 09:30 -> 16:00 ET
+  const out = [];
+  for (const d of src){
+    const closes = new Array(perDay);
+    const bridge = new Array(perDay);
+    let acc = 0;
+    for (let k=0;k<perDay;k++){ acc += r()-0.5; bridge[k] = acc; }
+    for (let k=0;k<perDay;k++){
+      const f = (k+1)/perDay;
+      const detr = bridge[k] - bridge[perDay-1]*f;
+      const v = d.o + (d.c-d.o)*f + detr*(d.h-d.l)*0.42;
+      closes[k] = Math.min(d.h, Math.max(d.l, v));
+    }
+    closes[perDay-1] = d.c;
+    let hiK=0, loK=0;
+    for (let k=0;k<perDay;k++){
+      if (closes[k] > closes[hiK]) hiK = k;
+      if (closes[k] < closes[loK]) loK = k;
+    }
+    for (let k=0;k<perDay;k++){
+      const o = k===0 ? d.o : closes[k-1];
+      const c = closes[k];
+      const w = (d.h-d.l)*0.14*r();
+      let h = Math.min(d.h, Math.max(o,c)+w);
+      let l = Math.max(d.l, Math.min(o,c)-w);
+      if (k===hiK) h = d.h;
+      if (k===loK) l = d.l;
+      out.push({
+        t: d.t + 13.5*3600000 + k*3600000,
+        o, c,
+        h: Math.max(h,o,c),
+        l: Math.min(l,o,c)
+      });
+    }
+  }
+  return out;
+}
+
+const cache = new Map();
+function simSeries(sym){
+  let s = cache.get(sym);
+  if (s) return s;
+  const daily = buildDaily(sym);
+  s = {
+    D: daily,
+    W: groupBy(daily, weekKey),
+    M: groupBy(daily, monthKey),
+    H1: buildHourly(sym, daily, 55)
+  };
+  if (cache.size > 90) cache.delete(cache.keys().next().value);
+  cache.set(sym, s);
+  return s;
+}
+
+const TF = [
+  { id:"M",  label:"Monthly", bars:96  },
+  { id:"W",  label:"Weekly",  bars:130 },
+  { id:"D",  label:"Daily",   bars:150 },
+  { id:"H1", label:"1 hour",  bars:130 }
+];
+
+/* ------------------------------------------------------------
+   Real bars, when this page is hosted next to a data/ folder
+   (built by automation/scripts/fetch_market_data.py via yfinance).
+   Missing or unreachable -> the simulated series above is used.
+   ------------------------------------------------------------ */
+const DATA_BASE = "data/";
+let dataset = null;                                  // {updated, files}
+/* Live source. The site's own Worker answers /api/quotes/SYMBOL with
+   fresh bars (worker/index.ts); every card asks it first and falls back to
+   the stored snapshot when it is missing, slow or rate-limited. A live.json
+   next to this page holding {"proxy":"https://..."} points it elsewhere. */
+let live = null;                                     // {proxy}
+let liveSeen = false;                                // has the proxy answered?
+const realCache = new Map();
+const pendingLoad = new Set();
+
+function fromColumns(col){
+  const tu = col.tu || 86400000, n = col.t.length, out = new Array(n);
+  for (let i=0;i<n;i++) out[i] = { t: col.t[i]*tu, o: col.o[i], h: col.h[i], l: col.l[i], c: col.c[i] };
+  return out;
+}
+/* Bars for a symbol, or null while the real ones are still in flight.
+   Building the simulated fallback costs tens of milliseconds per symbol —
+   paid on mount, mid-scroll, for bars that are replaced a moment later and
+   that show a made-up price in the meantime. With a dataset present the
+   card waits instead; loadReal falls back to the simulation if the fetch
+   comes back empty. */
+function series(sym){
+  const r = realCache.get(sym);
+  if (r) return r;
+  if (dataset){ loadReal(sym); return null; }
+  return simSeries(sym);
+}
+async function loadReal(sym){
+  if (!dataset || realCache.has(sym) || pendingLoad.has(sym)) return;
+  const file = dataset.files.get(sym);
+  if (!file) return;
+  pendingLoad.add(sym);
+  try {
+    const j = (live && live.proxy ? await fetchLive(file) : null)
+           || await fetchSnapshot(file);
+    {
+      const D = j && j.d ? fromColumns(j.d) : [];
+      if (D.length > 40){
+        const s = {
+          D,
+          W: groupBy(D, weekKey),
+          M: groupBy(D, monthKey),
+          H1: (j.h1 && j.h1.t && j.h1.t.length > 20) ? fromColumns(j.h1) : D.slice(-120)
+        };
+        if (realCache.size > 80) realCache.delete(realCache.keys().next().value);
+        realCache.set(sym, s);
+        refreshSymbol(sym);
+      }
+    }
+  } catch(e){ /* handled below */ }
+  finally { pendingLoad.delete(sym); }
+  if (!realCache.has(sym)){            // nothing usable came back — simulate it
+    realCache.set(sym, simSeries(sym));
+    refreshSymbol(sym);
+  }
+}
+async function fetchSnapshot(file){
+  const res = await fetch(DATA_BASE + encodeURIComponent(file) + ".json");
+  return res.ok ? res.json() : null;
+}
+/* One request to the proxy, with a short deadline: a slow or unreachable
+   worker must never hold a card hostage — the snapshot is right there. */
+async function fetchLive(file){
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), 4000);
+  try {
+    const res = await fetch(live.proxy.replace(/\/$/, "") + "/" + encodeURIComponent(file),
+                            { signal: stop.signal });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (!j || !j.d || !Array.isArray(j.d.t) || j.d.t.length < 40) return null;
+    if (!liveSeen){ liveSeen = true; markSource(); }
+    return j;
+  } catch(e){ return null; }
+  finally { clearTimeout(timer); }
+}
+async function initData(){
+  let j;
+  try {
+    const res = await fetch("live.json", { cache:"no-cache" });
+    if (res.ok){
+      const cfg = await res.json();
+      if (cfg && typeof cfg.proxy === "string" && /^https?:\/\//.test(cfg.proxy)) live = cfg;
+    }
+  } catch(e){ /* no live.json — try the site's own API below */ }
+  if (!live){
+    /* Same-origin API, when this page is served by the Worker. A static
+       preview (python -m http.server) has none and answers 404 at once. */
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), 1500);
+    try {
+      const res = await fetch("/api/health", { cache:"no-store", signal: stop.signal });
+      if (res.ok) live = { proxy: location.origin + "/api/quotes" };
+    } catch(e){ /* no API — the snapshot is the source */ }
+    finally { clearTimeout(timer); }
+  }
+  try {
+    const res = await fetch(DATA_BASE + "index.json", { cache:"no-cache" });
+    if (!res.ok) return;
+    j = await res.json();
+  } catch(e){ return; }
+  if (!j || !Array.isArray(j.tickers) || !j.tickers.length) return;
+  UNIVERSE = j.tickers.map(t => ({
+    sym: t.s,
+    name: t.n || t.s,
+    sector: t.sec || "Unlisted",
+    file: t.f || t.s.replace(/\./g, "-")
+  }));
+  dataset = { updated: j.updated || "", files: new Map(UNIVERSE.map(u => [u.sym, u.file])) };
+  fillSectors();
+  markSource();
+  rebuild();
+}
+function markSource(){
+  const el = document.getElementById("src");
+  if (!dataset){ el.textContent = "Simulated prices"; el.title = "No data/ folder found next to this page"; return; }
+  const d = dataset.updated ? new Date(dataset.updated) : null;
+  if (liveSeen){
+    el.textContent = "Live · Yahoo";
+    el.title = "Fetched from the live proxy on load (Yahoo quotes are delayed ~15 min)";
+    el.classList.add("live");
+    return;
+  }
+  el.textContent = d && !isNaN(d)
+    ? "Yahoo data · " + d.toLocaleDateString(undefined,{month:"short",day:"numeric"})
+    : "Yahoo data";
+  el.title = dataset.updated ? "Last refreshed " + dataset.updated : "";
+  el.classList.add("live");
+}
+function refreshSymbol(sym){
+  // never re-render under a half-typed theory
+  if (savedOpen && !editingNote && isSaved(sym)) renderSaved();
+  const card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
+  if (card && mounted.has(card)){
+    card._views = defaultViews();
+    updateQuote(card);
+    drawCard(card);
+  }
+  if (!fsEl.hidden && fsSymCur === sym){
+    TF.forEach(t => { views[t.id] = { count: t.bars, offset: 0 }; });
+    drawFs();
+  }
+}
+
+/* ============================================================
+   3. Saved state: bookmarks + drawings
+   ============================================================ */
+/* Bookmarks, drawings, theories and the locator setting. For a signed-in
+   user they are saved to their account (the Worker's /api/state/stack); a
+   guest's live in this tab only and are gone on reload — nothing is stored
+   for guests, not even in this browser. */
+const LEGACY_KEY = "stack.v1";   // where this page used to keep state, per browser
+let state = { saved: [], draw: {}, notes: {}, locator: false };
+let downloads = null;
+const account = window.BQE ? window.BQE.store("stack") : null;
+
+function applyState(p){
+  if (!p || typeof p !== "object") return;
+  state.saved = Array.isArray(p.saved) ? p.saved : [];
+  state.draw  = (p.draw && typeof p.draw === "object") ? p.draw : {};
+  state.notes = (p.notes && typeof p.notes === "object") ? p.notes : {};
+  state.locator = !!p.locator;
+}
+function persist(){
+  if (account) account.save({ saved: state.saved, draw: state.draw, notes: state.notes, locator: state.locator });
+}
+function isSaved(sym){ return state.saved.indexOf(sym) >= 0; }
+function toggleSaved(sym){
+  const i = state.saved.indexOf(sym);
+  if (i >= 0) state.saved.splice(i,1); else state.saved.push(sym);
+  persist();
+  syncStars(sym);
+  if (onlySaved) rebuild();
+}
+function lines(sym){ return state.draw[sym] || (state.draw[sym] = []); }
+
+(async function(){
+  if (window.BQE) window.BQE.mountAccountChip(document.getElementById("account"),
+    { note: "Your marked charts, drawings and theories are saved to your account." });
+  if (account){
+    account.onStatus = (status, detail) => {
+      if (status === "conflict") toast("Changed in another tab — reload to keep saving");
+      else if (status === "error") toast("Could not save: " + detail);
+    };
+    try {
+      let data = await account.load();
+      if (account.signedIn){
+        // First sign-in on a browser that kept state the old way: move it
+        // into the account, then drop the local copy.
+        if (!data){
+          try {
+            const raw = localStorage.getItem(LEGACY_KEY);
+            if (raw){
+              data = JSON.parse(raw);
+              account.save(data, { now: true });
+              localStorage.removeItem(LEGACY_KEY);
+            }
+          } catch(e){ /* storage blocked or unreadable — start empty */ }
+        }
+        if (data){
+          applyState(data);
+          redrawAll();
+          document.querySelectorAll(".star").forEach(b => {
+            b.setAttribute("aria-pressed", isSaved(b.dataset.sym) ? "true" : "false");
+          });
+          document.getElementById("locBtn").setAttribute("aria-pressed", state.locator ? "true":"false");
+          document.getElementById("fsLoc").setAttribute("aria-pressed", state.locator ? "true":"false");
+          if (onlySaved) rebuild();
+        }
+      }
+    } catch(e){ toast("Could not load your saved charts — reload to try again"); }
+  }
+  if (!window.claude || typeof claude.use !== "function") return;
+  try { downloads = await claude.use("downloads"); } catch(e){ downloads = null; }
+  if (downloads) document.getElementById("fsPng").hidden = false;
+})();
+
+/* ============================================================
+   4. Chart painting
+   ============================================================ */
+let theme = readTheme();
+function readTheme(){
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(n).trim();
+  return {
+    pane:v("--pane"), grid:v("--grid"), fg:v("--fg"), muted:v("--muted"),
+    up:v("--up"), down:v("--down"), mark:v("--mark"), rule:v("--rule"),
+    focus:v("--focus"), focusSoft:v("--focusSoft")
+  };
+}
+function fmt(p){
+  if (p >= 1000) return p.toLocaleString("en-US",{minimumFractionDigits:1,maximumFractionDigits:1});
+  if (p >= 100)  return p.toFixed(2);
+  return p.toFixed(2);
+}
+function niceStep(raw){
+  const e = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw/e;
+  return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e;
+}
+function sizeCanvas(cv){
+  if (cv._fixed) return true;                       // offscreen export canvas
+  const dpr = Math.min(window.devicePixelRatio||1, 2.5);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return false;
+  if (cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)){
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  }
+  cv._dpr = dpr;
+  return true;
+}
+
+const RIGHT_PAD = 0.06;        // blank slots after the last bar, as a share of the window
+const PSCALE_MIN = 0.25, PSCALE_MAX = 6;
+
+// view: {count, offset, pscale}  offset = bars hidden at the right edge
+function paint(cv, bars, view, drawings, opt){
+  if (!sizeCanvas(cv)) return;
+  const ctx = cv.getContext("2d");
+  const dpr = cv._dpr, W = cv.width/dpr, H = cv.height/dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  if (opt.bg){ ctx.fillStyle = opt.bg; ctx.fillRect(0,0,W,H); }
+  else ctx.clearRect(0,0,W,H);
+  const big = !!opt.big;
+
+  const padL = 6, padR = big ? 58 : 46, padT = big ? 12 : 16, padB = big ? 20 : 8;
+  const x0 = padL, x1 = W - padR, y0 = padT, y1 = H - padB;
+  if (x1 <= x0 || y1 <= y0) return;
+
+  const total = bars.length;
+  const count = Math.max(1, Math.min(view.count, total));
+  const off = Math.max(0, Math.min(view.offset, total - count));
+  const i1 = total - off, i0 = i1 - count;
+  const vis = bars.slice(i0, i1);
+
+  let min = Infinity, max = -Infinity;
+  for (const b of vis){ if (b.l<min) min=b.l; if (b.h>max) max=b.h; }
+  const span0 = (max-min) || max*0.02 || 1;
+
+  // pull drawn levels into view when they sit near the data
+  for (const d of drawings){
+    const ps = d.kind === "level" ? [d.price] : [d.p1, d.p2];
+    for (const p of ps){
+      if (p > min - span0*0.9 && p < max + span0*0.9){
+        if (p<min) min=p; if (p>max) max=p;
+      }
+    }
+  }
+  const pad = (max-min)*0.07 || max*0.02 || 1;
+  min -= pad; max += pad;
+  // price-axis zoom: >1 shows a wider range (candles flatten), <1 a tighter one
+  const ps = Math.min(PSCALE_MAX, Math.max(PSCALE_MIN, view.pscale || 1));
+  if (ps !== 1){
+    const mid = (min+max)/2, half = (max-min)/2*ps;
+    min = mid-half; max = mid+half;
+  }
+  const rng = max-min;
+
+  const yOf = p => y0 + (max-p)/rng*(y1-y0);
+  const pOf = y => max - (y-y0)/(y1-y0)*rng;
+  // A few empty slots after the last bar, so the newest candle is never
+  // jammed against the price axis and there is room to draw ahead of it.
+  const padBars = Math.max(1, Math.round(count*RIGHT_PAD));
+  const cw = (x1-x0)/(count+padBars);
+  const xOf = k => x0 + cw*(k+0.5);                 // k = index within view
+  const xOfIdx = i => xOf(i - i0);
+
+  function xOfTime(t){
+    if (t <= bars[0].t){
+      const sp = bars.length>1 ? bars[1].t-bars[0].t : DAY;
+      return xOfIdx((t-bars[0].t)/sp);
+    }
+    if (t >= bars[total-1].t){
+      const sp = bars.length>1 ? bars[total-1].t-bars[total-2].t : DAY;
+      return xOfIdx(total-1 + (t-bars[total-1].t)/sp);
+    }
+    let lo=0, hi=total-1;
+    while (hi-lo > 1){ const m=(lo+hi)>>1; if (bars[m].t <= t) lo=m; else hi=m; }
+    const f = (t-bars[lo].t)/((bars[hi].t-bars[lo].t)||1);
+    return xOfIdx(lo+f);
+  }
+  function timeOfX(x){
+    const idx = (x-x0)/cw - 0.5 + i0;
+    const lo = Math.max(0, Math.min(total-2, Math.floor(idx)));
+    const f = idx - lo;
+    return bars[lo].t + (bars[lo+1].t-bars[lo].t)*f;
+  }
+
+  // grid + price ladder
+  const step = niceStep(rng/ (big?6:3.2));
+  ctx.strokeStyle = theme.grid; ctx.lineWidth = 1;
+  ctx.fillStyle = theme.muted;
+  ctx.font = (big?"11.5px":"10px") + " Archivo, Arial, sans-serif";
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  for (let p = Math.ceil(min/step)*step; p < max; p += step){
+    const y = Math.round(yOf(p)) + .5;
+    ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x1,y); ctx.stroke();
+    ctx.fillText(fmt(p), x1+6, y);
+  }
+
+  if (big){
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    const every = Math.max(1, Math.round(count/5));
+    for (let k=0;k<count;k+=every){
+      const d = new Date(vis[k].t);
+      const lbl = opt.tf === "H1"
+        ? (d.getUTCMonth()+1)+"/"+d.getUTCDate()+" "+String(d.getUTCHours()).padStart(2,"0")+":"+String(d.getUTCMinutes()).padStart(2,"0")
+        : opt.tf === "M" ? d.toLocaleString("en-US",{month:"short",timeZone:"UTC"})+" "+String(d.getUTCFullYear()).slice(2)
+        : (d.getUTCMonth()+1)+"/"+d.getUTCDate()+"/"+String(d.getUTCFullYear()).slice(2);
+      ctx.fillText(lbl, xOf(k), H-6);
+    }
+  }
+
+  // where the faster timeframes are currently looking
+  const bands = [];
+  if (opt.ranges){
+    for (const rg of opt.ranges){
+      let a = xOfTime(rg.t0), b = xOfTime(rg.t1);
+      if (b < a){ const s = a; a = b; b = s; }
+      if (b <= x0 || a >= x1) continue;
+      a = Math.max(x0, a); b = Math.min(x1, b);
+      if (b-a < 3){ const m = (a+b)/2; a = Math.max(x0, m-1.5); b = Math.min(x1, m+1.5); }
+      bands.push({ a, b, label: rg.label });
+      ctx.fillStyle = theme.focusSoft;
+      ctx.fillRect(a, y0, b-a, y1-y0);
+      ctx.strokeStyle = theme.focus; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(a)+.5, y0); ctx.lineTo(Math.round(a)+.5, y1);
+      ctx.moveTo(Math.round(b)+.5, y0); ctx.lineTo(Math.round(b)+.5, y1);
+      ctx.stroke();
+    }
+  }
+
+  /* Candles.
+     Everything is snapped to whole device pixels: a body drawn on a
+     fractional boundary is spread across two columns by the rasteriser, which
+     at small pane sizes turns a row of candles into a grey smear of varying
+     widths. Bodies and wicks go into one path per direction, so a pane costs
+     two fills instead of four state changes per bar.
+     Below ~1.6px per bar there is no room for a body at all — those draw as
+     high-low bars, which is what the pixels can actually carry. */
+  const px = 1/dpr;
+  const snap = v => Math.round(v*dpr)/dpr;
+  const dense = cw < 1.6;
+  const bodyW = Math.max(px, Math.min(16, Math.round(cw*0.62*dpr)/dpr));
+  const wickW = cw >= 5 ? Math.max(px, Math.round(bodyW*0.2*dpr)/dpr) : px;
+  const upPath = new Path2D(), downPath = new Path2D();
+  for (let k=0;k<count;k++){
+    const b = vis[k], up = b.c >= b.o;
+    const path = up ? upPath : downPath;
+    const x = snap(xOf(k));
+    const yh = snap(yOf(b.h)), yl = snap(yOf(b.l));
+    path.rect(snap(x-wickW/2), yh, wickW, Math.max(px, yl-yh));
+    if (dense) continue;
+    const top = snap(Math.min(yOf(b.o), yOf(b.c)));
+    const bot = snap(Math.max(yOf(b.o), yOf(b.c)));
+    path.rect(snap(x-bodyW/2), top, bodyW, Math.max(px, bot-top));
+  }
+  ctx.fillStyle = theme.up;   ctx.fill(upPath);
+  ctx.fillStyle = theme.down; ctx.fill(downPath);
+
+  if (bands.length){
+    ctx.font = (big?"10.5px":"9px") + " Archivo, Arial, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (const bd of bands){
+      if (bd.b-bd.a < 24) continue;
+      const cx = (bd.a+bd.b)/2, tw = ctx.measureText(bd.label).width;
+      ctx.fillStyle = theme.pane;
+      ctx.fillRect(cx-tw/2-3, y0+1, tw+6, 12);
+      ctx.fillStyle = theme.focus;
+      ctx.fillText(bd.label, cx, y0+2);
+    }
+  }
+
+  // last price marker
+  const last = vis[count-1];
+  const lastUp = last.c >= vis[0].o;
+  const ly = Math.round(yOf(last.c))+.5;
+  ctx.setLineDash([2,3]);
+  ctx.strokeStyle = lastUp ? theme.up : theme.down;
+  ctx.beginPath(); ctx.moveTo(x0,ly); ctx.lineTo(x1,ly); ctx.stroke();
+  ctx.setLineDash([]);
+  const tag = fmt(last.c), tw = ctx.measureText(tag).width + 10;
+  ctx.fillStyle = lastUp ? theme.up : theme.down;
+  ctx.fillRect(x1+2, ly-8, Math.min(tw, padR-4), 16);
+  ctx.fillStyle = theme.pane;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText(tag, x1+7, ly);
+
+  // drawn lines
+  ctx.lineWidth = 1.6;
+  for (const d of drawings){
+    ctx.strokeStyle = theme.mark; ctx.fillStyle = theme.mark;
+    if (d.kind === "level"){
+      const y = yOf(d.price);
+      if (y < y0-2 || y > y1+2) continue;
+      ctx.setLineDash([6,4]);
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = (big?"11px":"9.5px")+" Archivo, Arial, sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+      ctx.fillText(fmt(d.price), x0+4, y-2);
+    } else {
+      const ax = xOfTime(d.t1), ay = yOf(d.p1);
+      const bx = xOfTime(d.t2), by = yOf(d.p2);
+      if (Math.abs(bx-ax) < 0.01) continue;
+      const m = (by-ay)/(bx-ax);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x0,y0,x1-x0,y1-y0); ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(x0, ay + m*(x0-ax));
+      ctx.lineTo(x1, ay + m*(x1-ax));
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // preview while a trend line is being placed
+  if (opt.preview){
+    const p = opt.preview;
+    ctx.strokeStyle = theme.mark; ctx.setLineDash([4,4]); ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(xOfTime(p.t1), yOf(p.p1));
+    ctx.lineTo(xOfTime(p.t2), yOf(p.p2));
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  if (opt.title){
+    ctx.fillStyle = theme.fg;
+    ctx.font = "600 17px Archivo, Arial, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    ctx.fillText(opt.title, x0+8, y0+4);
+  }
+
+  cv._geom = { x0,x1,y0,y1,min,max,i0,i1,count,cw,padR,yOf,pOf,xOfTime,timeOfX,total };
+}
+
+/* which slice of time a view is showing, and how that maps onto slower charts */
+const SPEED = ["H1","D","W","M"];                   // fastest to slowest
+const TFNAME = { H1:"1H", D:"Daily", W:"Weekly", M:"Monthly" };
+
+function visibleSpan(bars, view){
+  const total = bars.length;
+  const count = Math.max(1, Math.min(view.count, total));
+  const off = Math.max(0, Math.min(view.offset, total-count));
+  const i1 = total-off, i0 = i1-count;
+  const gap = total > 1 ? bars[total-1].t - bars[total-2].t : DAY;
+  return { t0: bars[i0].t, t1: i1 < total ? bars[i1].t : bars[total-1].t + gap };
+}
+function rangesFor(sym, tf, views){
+  if (!state.locator) return null;
+  const depth = SPEED.indexOf(tf);
+  if (depth <= 0) return null;
+  const s = series(sym);
+  if (!s) return null;
+  const out = [];
+  for (let i = 0; i < depth; i++){
+    const id = SPEED[i];
+    const sp = visibleSpan(s[id], views[id]);
+    out.push({ t0: sp.t0, t1: sp.t1, label: TFNAME[id] });
+  }
+  return out;
+}
+function defaultViews(){
+  const v = {};
+  TF.forEach(t => { v[t.id] = { count: t.bars, offset: 0, pscale: 1 }; });
+  return v;
+}
+
+function chg(bars){
+  const a = bars[bars.length-2], b = bars[bars.length-1];
+  if (!a) return 0;
+  return (b.c-a.c)/a.c*100;
+}
+
+/* ============================================================
+   4b. Marked charts — the page one swipe to the left of the feed
+   ============================================================ */
+const svEl = document.getElementById("saved");
+const svList = document.getElementById("svList");
+let savedOpen = false;
+
+function sparkline(cv, bars){
+  const dpr = Math.min(window.devicePixelRatio||1, 2.5);
+  const w = 96, h = 34;
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const vis = bars.slice(-60);
+  if (vis.length < 2) return;
+  let min = Infinity, max = -Infinity;
+  for (const b of vis){ if (b.c<min) min=b.c; if (b.c>max) max=b.c; }
+  const rng = (max-min) || max*0.02 || 1;
+  const up = vis[vis.length-1].c >= vis[0].c;
+  ctx.strokeStyle = up ? theme.up : theme.down;
+  ctx.lineWidth = 1.5; ctx.lineJoin = "round";
+  ctx.beginPath();
+  vis.forEach((b,i) => {
+    const x = 1 + i/(vis.length-1)*(w-2);
+    const y = 2 + (max-b.c)/rng*(h-4);
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+}
+
+function noteOf(sym){ return state.notes[sym] || null; }
+function setNote(sym, text){
+  const clean = String(text||"").trim().slice(0, 4000);
+  if (clean) state.notes[sym] = { text: clean, updated: Date.now() };
+  else delete state.notes[sym];
+  persist();
+}
+function whenText(ms){
+  if (!ms) return "";
+  const d = new Date(ms);
+  return isNaN(d) ? "" : "Written " + d.toLocaleDateString(undefined,
+    { month:"short", day:"numeric", year:"numeric" });
+}
+function esc(t){
+  return String(t).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+}
+
+/* The reason a chart is on this page — why you would buy or sell it. */
+let editingNote = null;                       // symbol whose theory is open for editing
+function theoryHTML(sym){
+  const n = noteOf(sym);
+  if (editingNote === sym){
+    return `<textarea class="sv-th-in" data-sym="${sym}" rows="4"
+              placeholder="Why this one? The setup, the level that invalidates it, what you are waiting for."
+              >${n ? esc(n.text) : ""}</textarea>
+      <div class="sv-th-row" style="margin-top:6px">
+        <button class="sv-th-btn" data-act="save" data-sym="${sym}">Save theory</button>
+        <button class="sv-th-btn" data-act="cancel" data-sym="${sym}">Cancel</button>
+        <span class="sv-th-when">⌘/Ctrl + Enter saves · Esc cancels</span>
+      </div>`;
+  }
+  if (n){
+    return `<p class="sv-th-text">${esc(n.text)}</p>
+      <div class="sv-th-row">
+        <button class="sv-th-btn" data-act="edit" data-sym="${sym}">Edit theory</button>
+        <button class="sv-th-btn danger" data-act="clear" data-sym="${sym}">Remove</button>
+        <span class="sv-th-when">${whenText(n.updated)}</span>
+      </div>`;
+  }
+  return `<div class="sv-th-row">
+      <button class="sv-th-btn" data-act="add" data-sym="${sym}">+ Add theory</button>
+      <span class="sv-th-when">Why you want to buy or sell it</span>
+    </div>`;
+}
+
+function renderSaved(){
+  const syms = state.saved.slice();
+  document.getElementById("svN").textContent =
+    syms.length ? syms.length + (syms.length>1 ? " charts" : " chart") : "";
+  if (!syms.length){
+    svList.innerHTML = `<p class="sv-empty">No charts marked yet.<br>` +
+      `Tap the bookmark on a chart to keep it here.</p>`;
+    return;
+  }
+  svList.innerHTML = "";
+  for (const sym of syms){
+    const it = UNIVERSE.find(u => u.sym === sym) || { sym, name:"", sector:"" };
+    const bars = (series(sym) || {}).D || null;
+    const last = bars ? bars[bars.length-1] : null;
+    const pct = bars ? chg(bars) : 0;
+    const lines = (state.draw[sym] || []).length;
+    const row = document.createElement("button");
+    row.className = "sv-row";
+    row.dataset.sym = sym;
+    row.innerHTML = `
+      <span class="sv-id">
+        <span class="sv-sym">${sym}</span>
+        <span class="sv-nm">${it.name || ""}${it.sector ? " · " + it.sector : ""}</span>
+        ${lines ? `<span class="sv-lines">${lines} drawn ${lines>1?"lines":"line"}</span>` : ""}
+      </span>
+      <canvas class="sv-spark" aria-hidden="true"></canvas>
+      <span class="sv-q">
+        <span class="sv-px">${last ? fmt(last.c) : "—"}</span><br>
+        <span class="sv-chg" style="color:var(${pct>=0?"--up":"--down"})">
+          ${bars ? (pct>=0?"+":"") + pct.toFixed(2) + "%" : ""}
+        </span>
+      </span>
+      <span class="sv-drop" role="button" tabindex="0" aria-label="Unmark ${sym}">×</span>`;
+    const item = document.createElement("div");
+    item.className = "sv-item";
+    item.appendChild(row);
+    const th = document.createElement("div");
+    th.className = "sv-th";
+    th.innerHTML = theoryHTML(sym);
+    item.appendChild(th);
+    svList.appendChild(item);
+    if (bars) sparkline(row.querySelector("canvas"), bars);
+    if (editingNote === sym){
+      const ta = th.querySelector("textarea");
+      if (ta){ ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }
+  }
+  const hint = document.createElement("p");
+  hint.className = "sv-hint";
+  hint.textContent = "Swipe left, or press Escape, to go back to the feed.";
+  svList.appendChild(hint);
+}
+
+function openSaved(){
+  if (savedOpen) return;
+  savedOpen = true;
+  renderSaved();
+  svEl.classList.add("open");
+  svEl.setAttribute("aria-hidden", "false");
+}
+function closeSaved(){
+  if (!savedOpen) return;
+  savedOpen = false;
+  editingNote = null;
+  svEl.classList.remove("open");
+  svEl.setAttribute("aria-hidden", "true");
+}
+
+/** Show a symbol in the feed, lifting any filter that would hide it. */
+function jumpTo(sym){
+  closeSaved();
+  let card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
+  if (!card){
+    onlySaved = false;
+    document.getElementById("savedBtn").setAttribute("aria-pressed","false");
+    document.getElementById("q").value = "";
+    secSel.value = "";
+    rebuild();
+    card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
+  }
+  if (card) card.scrollIntoView({ block:"start", behavior:"auto" });
+}
+
+svList.addEventListener("keydown", e => {
+  const ta = e.target.closest(".sv-th-in");
+  if (!ta) return;
+  if (e.key === "Escape"){
+    e.stopPropagation(); editingNote = null; renderSaved();
+  } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)){
+    e.preventDefault(); setNote(ta.dataset.sym, ta.value); editingNote = null; renderSaved();
+  }
+});
+svList.addEventListener("click", e => {
+  const th = e.target.closest("[data-act]");
+  if (th){
+    const sym = th.dataset.sym;
+    if (th.dataset.act === "add" || th.dataset.act === "edit") editingNote = sym;
+    else if (th.dataset.act === "cancel") editingNote = null;
+    else if (th.dataset.act === "save"){
+      const ta = svList.querySelector('.sv-th-in[data-sym="'+CSS.escape(sym)+'"]');
+      setNote(sym, ta ? ta.value : "");
+      editingNote = null;
+    } else if (th.dataset.act === "clear"){
+      setNote(sym, "");
+      editingNote = null;
+    }
+    renderSaved();
+    return;
+  }
+  const drop = e.target.closest(".sv-drop");
+  if (drop){
+    e.stopPropagation();
+    toggleSaved(drop.closest(".sv-row").dataset.sym);
+    renderSaved();
+    return;
+  }
+  const row = e.target.closest(".sv-row");
+  if (row) jumpTo(row.dataset.sym);
+});
+document.getElementById("svBack").addEventListener("click", closeSaved);
+
+/* swipe right anywhere off a chart (or from the left edge, even over one)
+   opens the marked charts; swipe left there goes back. */
+let swipe = null;
+const SWIPE_MIN = 60;
+document.addEventListener("pointerdown", e => {
+  swipe = null;
+  if (!fsEl.hidden) return;                       // the full-screen chart owns its gestures
+  if (savedOpen){
+    if (e.target.closest(".sv-th")) return;      // typing or selecting, not swiping
+    swipe = { x:e.clientX, y:e.clientY, mode:"close" };
+    return;
+  }
+  const onChart = !!e.target.closest(".pane");
+  if (onChart && e.clientX > 28) return;           // that drag pans the chart
+  swipe = { x:e.clientX, y:e.clientY, mode:"open" };
+}, { passive:true });
+document.addEventListener("pointerup", e => {
+  if (!swipe) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+  const swiped = Math.abs(dx) > SWIPE_MIN && Math.abs(dx) > Math.abs(dy)*1.6;
+  if (swiped && swipe.mode === "open" && dx > 0) openSaved();
+  else if (swiped && swipe.mode === "close" && dx < 0) closeSaved();
+  swipe = null;
+}, { passive:true });
+document.addEventListener("pointercancel", () => { swipe = null; }, { passive:true });
+
+/* ============================================================
+   5. The feed
+   ============================================================ */
+const feed = document.getElementById("feed");
+const countEl = document.getElementById("count");
+let list = UNIVERSE.slice();
+let onlySaved = false;
+const mounted = new Set();
+
+const io = new IntersectionObserver(entries => {
+  for (const e of entries){
+    if (e.isIntersecting) mount(e.target); else unmount(e.target);
+  }
+}, { root: feed, rootMargin: "120% 0px" });
+
+function cardHTML(it){
+  const panes = TF.map(t =>
+    `<div class="pane" data-tf="${t.id}"><span class="tfl">${t.label}</span><span class="paxis" aria-hidden="true"></span></div>`
+  ).join("");
+  return `<section class="card" data-sym="${it.sym}">
+    <div class="slide">
+    <div class="chd">
+      <div class="sym">${it.sym}</div>
+      <div class="meta"><span class="nm">${it.name}</span><span class="sec">${it.sector}</span></div>
+      <div class="quote"><span class="px">—</span><span class="chg">—</span></div>
+      <button class="star" data-sym="${it.sym}" aria-pressed="${isSaved(it.sym)}" aria-label="Save ${it.sym}">
+        <svg viewBox="0 0 24 24"><path d="M7 3h10a1 1 0 0 1 1 1v17l-6-4-6 4V4a1 1 0 0 1 1-1z"/></svg>
+      </button>
+    </div>
+    <div class="panes">${panes}</div>
+    </div>
+  </section>`;
+}
+
+function rebuild(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const sec = document.getElementById("sector").value;
+  list = UNIVERSE.filter(it =>
+    (!sec || it.sector === sec) &&
+    (!onlySaved || isSaved(it.sym)) &&
+    (!q || it.sym.toLowerCase().includes(q) || it.name.toLowerCase().includes(q))
+  );
+  mounted.forEach(c => io.unobserve(c)); mounted.clear();
+  feed.innerHTML = list.length
+    ? list.map(cardHTML).join("")
+    : `<p class="empty">Nothing here yet.<br>${onlySaved ? "Tap the bookmark on a chart to save it." : "Try a different search or sector."}</p>`;
+  feed.querySelectorAll(".card").forEach(c => io.observe(c));
+  feed.scrollTop = 0;
+  updateCount();
+}
+function updateCount(){
+  const n = list.length;
+  const i = n ? Math.round(feed.scrollTop / Math.max(1, feed.clientHeight)) + 1 : 0;
+  countEl.textContent = n ? `${Math.min(i,n)} / ${n}` : "";
+}
+
+function mount(card){
+  if (mounted.has(card)) return;
+  mounted.add(card);
+  const sym = card.dataset.sym;
+  series(sym);
+  card.querySelectorAll(".pane").forEach(p => {
+    if (!p.querySelector("canvas")){
+      const cv = document.createElement("canvas");
+      p.appendChild(cv);
+    }
+  });
+  updateQuote(card);
+  /* Scrolling mounts a card mid-flick, inside the observer callback. Sizing a
+     canvas there reads clientWidth, which forces a synchronous layout of the
+     whole feed — ~40ms, a dropped frame, before a single bar is drawn. Paint
+     on the following frames instead, daily first because that is where the
+     eye lands, then the other three one frame at a time. */
+  const order = ["D", ...TF.map(t => t.id).filter(id => id !== "D")];
+  const step = () => {
+    if (!mounted.has(card)) return;
+    const id = order.shift();
+    if (!id) return;
+    drawPane(card, id);
+    if (order.length) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function updateQuote(card){
+  const s = series(card.dataset.sym);
+  if (!s){
+    card.querySelector(".px").textContent = "—";
+    const q = card.querySelector(".chg");
+    q.textContent = ""; q.className = "chg";
+    return;
+  }
+  const d = s.D[s.D.length-1], c = chg(s.D);
+  card.querySelector(".px").textContent = fmt(d.c);
+  const ce = card.querySelector(".chg");
+  ce.textContent = (c>=0?"+":"") + c.toFixed(2) + "%";
+  ce.className = "chg " + (c>=0?"pos":"neg");
+}
+function unmount(card){
+  if (!mounted.has(card)) return;
+  mounted.delete(card);
+  card.querySelectorAll("canvas").forEach(c => c.remove());
+}
+function drawPane(card, tfId){
+  const p = card.querySelector('.pane[data-tf="'+tfId+'"]');
+  const cv = p && p.querySelector("canvas");
+  if (!cv) return;
+  const sym = card.dataset.sym;
+  const s = series(sym);
+  if (!s){ clearPane(cv); return; }                 // bars still loading
+  const dl = state.draw[sym] || [];
+  if (!card._views) card._views = defaultViews();
+  paint(cv, s[tfId], card._views[tfId], dl,
+        { tf: tfId, ranges: rangesFor(sym, tfId, card._views) });
+  let m = p.querySelector(".marked");
+  if (dl.length && !m){
+    m = document.createElement("span");
+    m.className = "marked";
+    m.textContent = dl.length + (dl.length>1 ? " lines" : " line");
+    p.appendChild(m);
+  } else if (m){
+    if (!dl.length) m.remove(); else m.textContent = dl.length + (dl.length>1?" lines":" line");
+  }
+}
+function clearPane(cv){
+  if (!sizeCanvas(cv)) return;
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+}
+function drawCard(card){
+  if (!card._views) card._views = defaultViews();
+  for (const t of TF) drawPane(card, t.id);
+}
+/* Pointer events outrun the display: a pan can fire several moves per frame,
+   and each one used to repaint four canvases. Collapse them into one repaint
+   on the next frame instead. */
+const drawQueue = new Set();
+let drawRaf = 0, fsQueued = false;
+function flushDraws(){
+  drawRaf = 0;
+  const cards = [...drawQueue];
+  drawQueue.clear();
+  for (const c of cards) drawCard(c);
+  if (fsQueued){ fsQueued = false; drawFs(); }
+}
+function queueDraw(card){
+  drawQueue.add(card);
+  if (!drawRaf) drawRaf = requestAnimationFrame(flushDraws);
+}
+function queueFs(){
+  fsQueued = true;
+  if (!drawRaf) drawRaf = requestAnimationFrame(flushDraws);
+}
+function redrawAll(){ mounted.forEach(drawCard); if (!fsEl.hidden) drawFs(); }
+function syncStars(sym){
+  document.querySelectorAll('.star[data-sym="'+CSS.escape(sym)+'"]').forEach(b =>
+    b.setAttribute("aria-pressed", isSaved(sym) ? "true" : "false"));
+  if (fsSymCur === sym) document.getElementById("fsStar").textContent = isSaved(sym) ? "Saved" : "Save chart";
+}
+
+feed.addEventListener("click", e => {
+  const star = e.target.closest(".star");
+  if (star){ toggleSaved(star.dataset.sym); return; }
+  if (Date.now() - gestureEnd < 320) return;        // that tap was a zoom or a pan
+  const pane = e.target.closest(".pane");
+  if (pane && !e.target.classList.contains("paxis")){
+    openFs(pane.closest(".card").dataset.sym, pane.dataset.tf);
+  }
+});
+
+/* two fingers zoom a pane, one finger sideways pans it */
+const fpts = new Map();
+let fPinch = null, fPan = null, fAxis = null, gestureEnd = 0;
+const clampScale = v => Math.min(PSCALE_MAX, Math.max(PSCALE_MIN, v));
+function paneView(pane){
+  const card = pane.closest(".card");
+  if (!card._views) card._views = defaultViews();
+  return { card, view: card._views[pane.dataset.tf] };
+}
+function setCount(pane, n){
+  const { card, view } = paneView(pane);
+  const s = series(card.dataset.sym);
+  if (!s) return;
+  const total = s[pane.dataset.tf].length;
+  view.count = Math.max(15, Math.min(total, Math.round(n)));
+  view.offset = Math.max(0, Math.min(total - view.count, view.offset));
+  queueDraw(card);
+}
+function fSpread(){
+  const v = [...fpts.values()];
+  return Math.hypot(v[0].x-v[1].x, v[0].y-v[1].y) || 1;
+}
+feed.addEventListener("pointerdown", e => {
+  const pane = e.target.closest(".pane");
+  if (!pane) return;
+  if (e.target.classList.contains("paxis")){        // price axis: drag = zoom price
+    const { view } = paneView(pane);
+    fAxis = { pane, y:e.clientY, pscale: view.pscale || 1, live:false };
+    e.target.setPointerCapture(e.pointerId);
+    return;
+  }
+  fpts.set(e.pointerId, { x:e.clientX, y:e.clientY, pane });
+  if (fpts.size === 2){
+    const v = [...fpts.values()];
+    if (v[0].pane === v[1].pane){
+      fPinch = { pane: v[0].pane, d: fSpread(), count: paneView(v[0].pane).view.count };
+      fPan = null;
+    }
+  } else if (fpts.size === 1){
+    fPan = { pane, x:e.clientX, y:e.clientY, off: paneView(pane).view.offset, live:false };
+  }
+});
+feed.addEventListener("pointermove", e => {
+  if (fAxis){
+    const dy = e.clientY - fAxis.y;
+    if (!fAxis.live){
+      if (Math.abs(dy) < 4) return;
+      fAxis.live = true;
+    }
+    // down = more range (candles flatten), up = tighter range
+    const { card, view } = paneView(fAxis.pane);
+    view.pscale = clampScale(fAxis.pscale * Math.exp(dy/220));
+    gestureEnd = Date.now();
+    queueDraw(card);
+    return;
+  }
+  if (!fpts.has(e.pointerId)) return;
+  const rec = fpts.get(e.pointerId);
+  rec.x = e.clientX; rec.y = e.clientY;
+  if (fPinch && fpts.size >= 2){
+    setCount(fPinch.pane, fPinch.count * fPinch.d / fSpread());
+    gestureEnd = Date.now();
+    return;
+  }
+  if (!fPan) return;
+  const dx = e.clientX - fPan.x, dy = e.clientY - fPan.y;
+  if (!fPan.live){
+    if (Math.abs(dy) > Math.abs(dx)) { fPan = null; return; }   // that's a scroll
+    if (Math.abs(dx) < 8) return;
+    fPan.live = true;
+  }
+  const cv = fPan.pane.querySelector("canvas");
+  const g = cv && cv._geom;
+  if (!g) return;
+  const { card, view } = paneView(fPan.pane);
+  const sr = series(card.dataset.sym);
+  if (!sr) return;
+  const total = sr[fPan.pane.dataset.tf].length;
+  view.offset = Math.max(0, Math.min(total - view.count, fPan.off + Math.round(dx/g.cw)));
+  gestureEnd = Date.now();
+  queueDraw(card);
+});
+function feedPointerEnd(e){
+  if (fAxis){
+    if (fAxis.live) gestureEnd = Date.now();
+    fAxis = null;
+  }
+  fpts.delete(e.pointerId);
+  if (fpts.size < 2) fPinch = null;
+  if (fPan && fPan.live) gestureEnd = Date.now();
+  if (fpts.size === 0) fPan = null;
+}
+feed.addEventListener("pointerup", feedPointerEnd);
+feed.addEventListener("pointercancel", feedPointerEnd);
+feed.addEventListener("dblclick", e => {              // axis double-click resets the range
+  if (!e.target.classList.contains("paxis")) return;
+  const pane = e.target.closest(".pane");
+  const { card, view } = paneView(pane);
+  view.pscale = 1;
+  gestureEnd = Date.now();
+  queueDraw(card);
+});
+feed.addEventListener("wheel", e => {                 // trackpad pinch / ctrl+wheel
+  if (!e.ctrlKey) return;
+  const pane = e.target.closest(".pane");
+  if (!pane) return;
+  e.preventDefault();
+  setCount(pane, paneView(pane).view.count * (e.deltaY>0 ? 1.12 : 0.89));
+  gestureEnd = Date.now();
+}, { passive:false });
+let scrollTick = 0;
+feed.addEventListener("scroll", () => {
+  clearTimeout(scrollTick);
+  scrollTick = setTimeout(updateCount, 80);
+}, { passive:true });
+
+/* ============================================================
+   6. Fullscreen chart + drawing
+   ============================================================ */
+const fsEl    = document.getElementById("fs");
+const fsCv    = document.getElementById("fsCanvas");
+const fsTabs  = document.getElementById("fsTabs");
+const fsHint  = document.getElementById("fsHint");
+let fsSymCur = null, fsTf = "D", tool = null, pending = null, preview = null;
+const views = {};                                   // per timeframe zoom/pan
+
+fsTabs.innerHTML = TF.map(t =>
+  `<button data-tf="${t.id}" aria-pressed="false">${t.id === "H1" ? "1H" : t.id}</button>`).join("");
+
+function openFs(sym, tf){
+  fsSymCur = sym; fsTf = tf;
+  const it = UNIVERSE.find(u => u.sym === sym);
+  document.getElementById("fsSym").textContent = sym;
+  document.getElementById("fsNm").textContent = it ? it.name : "";
+  document.getElementById("fsStar").textContent = isSaved(sym) ? "Saved" : "Save chart";
+  const card = feed.querySelector('.card[data-sym="'+CSS.escape(sym)+'"]');
+  const src = (card && card._views) || defaultViews();
+  TF.forEach(t => { views[t.id] = { count: src[t.id].count, offset: src[t.id].offset,
+                                    pscale: src[t.id].pscale || 1 }; });
+  setTool(null);
+  fsEl.hidden = false;
+  requestAnimationFrame(drawFs);
+}
+function closeFs(){
+  fsEl.hidden = true;
+  pending = null; preview = null;
+  if (fsSymCur){
+    const card = feed.querySelector('.card[data-sym="'+CSS.escape(fsSymCur)+'"]');
+    if (card){
+      card._views = {};
+      TF.forEach(t => { card._views[t.id] = { count: views[t.id].count, offset: views[t.id].offset,
+                                              pscale: views[t.id].pscale || 1 }; });
+      if (mounted.has(card)) drawCard(card);
+    }
+  }
+}
+function drawFs(){
+  if (!fsSymCur) return;
+  const s = series(fsSymCur);
+  fsTabs.querySelectorAll("button").forEach(b =>
+    b.setAttribute("aria-pressed", b.dataset.tf === fsTf ? "true" : "false"));
+  if (!s){ clearPane(fsCv); return; }               // bars still loading
+  paint(fsCv, s[fsTf], views[fsTf], state.draw[fsSymCur] || [],
+        { big:true, tf:fsTf, preview, ranges: rangesFor(fsSymCur, fsTf, views) });
+  document.getElementById("fsLoc").setAttribute("aria-pressed", state.locator ? "true" : "false");
+}
+function setTool(t){
+  tool = t; pending = null; preview = null;
+  document.querySelectorAll(".tool[data-tool]").forEach(b =>
+    b.setAttribute("aria-pressed", b.dataset.tool === t ? "true" : "false"));
+  fsHint.textContent =
+    t === "level" ? "Drag anywhere to place a price line. It shows on all four timeframes." :
+    t === "trend" ? "Tap the first point, then the second." :
+    t === "erase" ? "Tap a line to remove it." :
+    "Drag to pan, pinch or scroll to zoom. Simulated data.";
+  drawFs();
+}
+fsTabs.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  fsTf = b.dataset.tf; pending = null; preview = null; drawFs();
+});
+document.getElementById("fsBack").addEventListener("click", closeFs);
+document.querySelectorAll(".tool[data-tool]").forEach(b =>
+  b.addEventListener("click", () => setTool(tool === b.dataset.tool ? null : b.dataset.tool)));
+document.getElementById("fsFit").addEventListener("click", () => {
+  const t = TF.find(x => x.id === fsTf);
+  views[fsTf] = { count: Math.round(t.bars*0.85), offset: 0 };
+  drawFs();
+});
+document.getElementById("fsStar").addEventListener("click", () => toggleSaved(fsSymCur));
+document.getElementById("fsClear").addEventListener("click", () => {
+  const cur = state.draw[fsSymCur] || [];
+  if (!cur.length) { toast("No lines on " + fsSymCur); return; }
+  const backup = cur.slice();
+  state.draw[fsSymCur] = [];
+  persist(); drawFs();
+  toast(backup.length + (backup.length>1?" lines removed":" line removed"), "Undo", () => {
+    state.draw[fsSymCur] = backup; persist(); drawFs();
+  });
+});
+
+/* pointer interaction on the fullscreen canvas */
+let drag = null, pinch = null;
+const pts = new Map();
+const spread = () => {
+  const v = [...pts.values()];
+  return Math.hypot(v[0].x-v[1].x, v[0].y-v[1].y) || 1;
+};
+function zoomTo(n){
+  const g = fsCv._geom, v = views[fsTf];
+  v.count = Math.max(20, Math.min(g.total, Math.round(n)));
+  v.offset = Math.max(0, Math.min(g.total - v.count, v.offset));
+  queueFs();
+}
+fsCv.addEventListener("pointerdown", e => {
+  const g = fsCv._geom; if (!g) return;
+  fsCv.setPointerCapture(e.pointerId);
+  const r = fsCv.getBoundingClientRect();
+  const x = e.clientX-r.left, y = e.clientY-r.top;
+  pts.set(e.pointerId, {x,y});
+  if (pts.size === 2){
+    pinch = { d: spread(), count: views[fsTf].count };
+    drag = null;
+    return;
+  }
+
+  if (tool === "level"){
+    const d = { id: uid(), kind:"level", price: g.pOf(y) };
+    lines(fsSymCur).push(d);
+    drag = { mode:"level", d };
+    drawFs();
+  } else if (tool === "trend"){
+    const pt = { t: g.timeOfX(x), p: g.pOf(y) };
+    if (!pending){
+      pending = pt;
+      preview = { t1:pt.t, p1:pt.p, t2:pt.t, p2:pt.p };
+      drag = { mode:"trend" };
+    } else {
+      lines(fsSymCur).push({ id:uid(), kind:"trend", t1:pending.t, p1:pending.p, t2:pt.t, p2:pt.p });
+      pending = null; preview = null; persist();
+    }
+    drawFs();
+  } else if (tool === "erase"){
+    eraseAt(x,y);
+  } else if (x > g.x1){                              // price axis: drag = zoom price
+    drag = { mode:"pscale", y, pscale: views[fsTf].pscale || 1 };
+  } else {
+    drag = { mode:"pan", x, startOff: views[fsTf].offset };
+  }
+});
+fsCv.addEventListener("pointermove", e => {
+  const g = fsCv._geom; if (!g) return;
+  const r = fsCv.getBoundingClientRect();
+  const x = e.clientX-r.left, y = e.clientY-r.top;
+  if (pts.has(e.pointerId)) pts.set(e.pointerId, {x,y});
+  if (pinch && pts.size >= 2){ zoomTo(pinch.count * pinch.d / spread()); return; }
+  if (drag && drag.mode === "level"){
+    drag.d.price = g.pOf(y); queueFs();
+  } else if (pending){
+    preview = { t1:pending.t, p1:pending.p, t2:g.timeOfX(x), p2:g.pOf(y) };
+    queueFs();
+  } else if (drag && drag.mode === "pscale"){
+    views[fsTf].pscale = Math.min(PSCALE_MAX, Math.max(PSCALE_MIN,
+      drag.pscale * Math.exp((y-drag.y)/220)));
+    queueFs();
+  } else if (drag && drag.mode === "pan"){
+    const shift = Math.round((x-drag.x)/g.cw);
+    const max = g.total - views[fsTf].count;
+    views[fsTf].offset = Math.max(0, Math.min(max, drag.startOff + shift));
+    queueFs();
+  }
+});
+function endDrag(e){
+  if (e) pts.delete(e.pointerId);
+  if (pts.size < 2) pinch = null;
+  if (drag && drag.mode === "level") persist();
+  drag = null;
+}
+fsCv.addEventListener("pointerup", endDrag);
+fsCv.addEventListener("pointercancel", endDrag);
+fsCv.addEventListener("dblclick", e => {             // axis double-click resets the range
+  const g = fsCv._geom; if (!g) return;
+  const r = fsCv.getBoundingClientRect();
+  if (e.clientX - r.left <= g.x1) return;
+  views[fsTf].pscale = 1;
+  drawFs();
+});
+fsCv.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (!fsCv._geom) return;
+  zoomTo(views[fsTf].count * (e.deltaY>0 ? 1.15 : 0.87));
+}, { passive:false });
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function eraseAt(x,y){
+  const g = fsCv._geom, arr = state.draw[fsSymCur] || [];
+  let best = -1, bestD = 14;
+  arr.forEach((d,i) => {
+    let dist;
+    if (d.kind === "level"){
+      dist = Math.abs(y - g.yOf(d.price));
+    } else {
+      const ax = g.xOfTime(d.t1), ay = g.yOf(d.p1);
+      const bx = g.xOfTime(d.t2), by = g.yOf(d.p2);
+      if (Math.abs(bx-ax) < 0.01) return;
+      const m = (by-ay)/(bx-ax);
+      const ly = ay + m*(x-ax);
+      dist = Math.abs(y-ly) / Math.sqrt(1+m*m);
+    }
+    if (dist < bestD){ bestD = dist; best = i; }
+  });
+  if (best < 0){ toast("No line there"); return; }
+  const removed = arr.splice(best,1)[0];
+  persist(); drawFs();
+  toast("Line removed", "Undo", () => { arr.splice(best,0,removed); persist(); drawFs(); });
+}
+
+/* PNG export */
+document.getElementById("fsPng").addEventListener("click", async () => {
+  if (!downloads) return;
+  const out = document.createElement("canvas");
+  const dpr = 2, w = 900, h = 520;
+  out.width = w*dpr; out.height = h*dpr;
+  out._dpr = dpr; out._fixed = true;
+  const tfLabel = (TF.find(t => t.id === fsTf) || {}).label || fsTf;
+  const sFs = series(fsSymCur);
+  if (!sFs) return;
+  paint(out, sFs[fsTf], views[fsTf], state.draw[fsSymCur] || [],
+        { big:true, tf:fsTf, bg:theme.pane, title:`${fsSymCur} · ${tfLabel}` });
+  out.toBlob(async b => {
+    try {
+      await downloads.save({ filename: `${fsSymCur}_${fsTf}.png`, data: b });
+      toast("Chart saved");
+    } catch(err){
+      if (err && err.code === "declined") return;
+      toast("Couldn't save the file");
+    }
+  }, "image/png");
+});
+/* ============================================================
+   7. Chrome wiring
+   ============================================================ */
+const secSel = document.getElementById("sector");
+function fillSectors(){
+  const keep = secSel.value;
+  secSel.length = 1;
+  [...new Set(UNIVERSE.map(u => u.sector))].sort().forEach(s => {
+    const o = document.createElement("option"); o.value = s; o.textContent = s;
+    secSel.appendChild(o);
+  });
+  secSel.value = [...secSel.options].some(o => o.value === keep) ? keep : "";
+}
+fillSectors();
+function setLocator(on){
+  state.locator = on;
+  persist();
+  document.getElementById("locBtn").setAttribute("aria-pressed", on ? "true":"false");
+  document.getElementById("fsLoc").setAttribute("aria-pressed", on ? "true":"false");
+  redrawAll();
+}
+document.getElementById("locBtn").addEventListener("click", () => {
+  setLocator(!state.locator);
+  toast(state.locator
+    ? "Slower charts now show where the faster ones are looking"
+    : "Range markers off");
+});
+document.getElementById("fsLoc").addEventListener("click", () => setLocator(!state.locator));
+document.getElementById("filterBtn").addEventListener("click", e => {
+  const box = document.getElementById("filters");
+  const open = box.classList.toggle("open");
+  e.currentTarget.setAttribute("aria-pressed", open ? "true":"false");
+  if (open) document.getElementById("q").focus();
+});
+document.getElementById("savedBtn").addEventListener("click", e => {
+  onlySaved = !onlySaved;
+  e.currentTarget.setAttribute("aria-pressed", onlySaved ? "true":"false");
+  rebuild();
+});
+document.getElementById("markedBtn").addEventListener("click", () => openSaved());
+let qTick = 0;
+document.getElementById("q").addEventListener("input", () => {
+  clearTimeout(qTick); qTick = setTimeout(rebuild, 160);
+});
+secSel.addEventListener("change", rebuild);
+document.getElementById("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const dark = cur ? cur === "dark"
+    : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+  theme = readTheme();
+  redrawAll();
+});
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  theme = readTheme(); redrawAll();
+});
+
+let rTick = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(rTick);
+  rTick = setTimeout(() => { redrawAll(); updateCount(); }, 140);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !fsEl.hidden){ closeFs(); return; }
+  if (e.key === "Escape" && savedOpen){ closeSaved(); return; }
+  if (!fsEl.hidden || savedOpen) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    feed.scrollBy({ top: (e.key==="ArrowDown"?1:-1)*feed.clientHeight, behavior:"smooth" });
+  }
+});
+
+/* toast */
+let toastTick = 0;
+function toast(msg, actionLabel, fn){
+  const box = document.getElementById("toast");
+  const act = document.getElementById("toastAct");
+  document.getElementById("toastMsg").textContent = msg;
+  act.hidden = !actionLabel;
+  if (actionLabel){
+    act.textContent = actionLabel;
+    act.onclick = () => { box.hidden = true; fn && fn(); };
+  }
+  box.hidden = false;
+  clearTimeout(toastTick);
+  toastTick = setTimeout(() => { box.hidden = true; }, actionLabel ? 5200 : 2000);
+}
+
+setLocator(state.locator);
+markSource();
+rebuild();
+initData();

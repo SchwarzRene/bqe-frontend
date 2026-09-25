@@ -2,11 +2,11 @@
 // reach this code; only the paths in wrangler.toml's run_worker_first do,
 // plus the cron triggers.
 
-import { handleAdminUsers } from "./admin";
+import { handleAdminAudit, handleAdminMessages, handleAdminUsers } from "./admin";
 import { handleAuth } from "./auth";
 import { handleContact } from "./contact";
 import type { Env } from "./env";
-import { json } from "./http";
+import { allowed, json, visitor } from "./http";
 import { handleMarket } from "./market";
 import { handleAnalysis, handleChat, handleNews, newsTick } from "./news";
 import { handleConversations } from "./news/conversations";
@@ -27,6 +27,11 @@ export default {
 
     try {
       if (path === "/api/health") return json({ status: "ok" });
+
+      // The endpoints that reach Yahoo for anyone: limited per visitor when the binding is configured.
+      if ((path.startsWith("/api/quotes/") || path.startsWith("/api/market/")) && !(await allowed(env.MARKET_LIMITER, await visitor(request, env)))) {
+        return json({ error: "Too many requests — slow down and try again in a minute." }, 429, { "Retry-After": "60" });
+      }
 
       let m = path.match(/^\/api\/quotes\/([^/]+)$/);
       if (m && method === "GET") return quote(decodeURIComponent(m[1]).toUpperCase(), request, ctx);
@@ -55,6 +60,10 @@ export default {
 
       m = path.match(/^\/api\/admin\/users(?:\/(\d+)(?:\/([a-z]+))?)?$/);
       if (m) return handleAdminUsers(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
+
+      m = path.match(/^\/api\/admin\/messages(?:\/(\d+)(?:\/([a-z]+))?)?$/);
+      if (m) return handleAdminMessages(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
+      if (path === "/api/admin/audit") return handleAdminAudit(request, env);
 
       m = path.match(/^\/api\/admin\/run\/(stack|news|calendar|briefing)$/);
       if (m) {

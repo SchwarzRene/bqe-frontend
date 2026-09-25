@@ -966,7 +966,7 @@
 <p class="lead">A full account of the codec's evolution from its initial implementation to its current form — each change, the hypothesis that motivated it, and the measured outcome. All decode times are for AAPL (4.08 M rows, warm OS cache, machine-calibrated thread count); file sizes refer to the AAPL compressed output.</p>
 
 <figure>
-  <img src="utils/00_history.png" alt="Decode time and file size across versions" onerror="this.style.display='none'">
+  <img src="utils/00_history.png" alt="Decode time and file size across versions">
   <figcaption>Decode time (lower better) and file size across versions. The big drops: zstd+parallelism (v3), per-row widths (v5), byte-planes (v8), and the lz4 codec (v9).</figcaption>
 </figure>
 
@@ -1258,7 +1258,7 @@ ts_all, ohlcv_all = bqe.read_concat(all_files)  <span class="c"># concatenated a
 <h3>Round-trip correctness</h3>
 <p>A full encode → decode → CSV round-trip is lossless at the integer level. The <code>bqe.decompress()</code> function reconstructs the original CSV representation from the stored integers without any intermediate floating-point conversion. Prices are written with the minimum number of decimal places required to represent the stored integer exactly (e.g., 1 523 400 → <code>152.34</code>, not <code>152.3400</code>).</p>
 <figure>
-  <img src="../../plots/ohlc_overlay.png" alt="Original vs BQE round-trip overlay" onerror="this.style.display='none'">
+  <img src="../../plots/ohlc_overlay.png" alt="Original vs BQE round-trip overlay">
   <figcaption>AAPL close price: original CSV values (gold) and BQE round-trip output (white) overlaid across 4.08 M rows. The curves are visually indistinguishable at all time scales; the residual panel shows zero error at the resolution of <code>float32</code> output.</figcaption>
 </figure>
 
@@ -1280,5 +1280,6 @@ ts_all, ohlcv_all = bqe.read_concat(all_files)  <span class="c"># concatenated a
 </p>
 
 </div>
+<script src="/research/bqe-decomp/figures.js"></script>
 </body>
 </html>

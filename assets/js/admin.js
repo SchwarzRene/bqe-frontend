@@ -1,8 +1,9 @@
 /**
  * The admin terminal (/pages/admin.html): every account, with AI access,
  * suspension, role, password reset and deletion — as buttons in the table
- * and as commands at the prompt. Talks to /api/admin/users (worker/admin.ts),
- * which checks the admin role on every request.
+ * and as commands at the prompt — plus the contact-form inbox and the audit
+ * log of admin actions. Talks to /api/admin/* (worker/admin.ts), which
+ * checks the admin role on every request.
  */
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -182,6 +183,11 @@
     '  reset <user>                     new temporary password',
     '  delete <user>                    remove the account',
     '  whois <user>                     details of one account',
+    '  messages [all]                   contact-form messages (unanswered only by default)',
+    '  read <id>                        one message in full',
+    '  answered <id>                    mark answered: it is deleted 30 days later',
+    '  audit                            the last admin actions',
+    '  (unanswered messages are deleted after 180 days)',
     '  reload · clear · help',
   ];
 
@@ -222,6 +228,34 @@
       case 'promote': case 'demote': await actions.role(find(args[0]), cmd === 'promote' ? 'admin' : 'user'); break;
       case 'reset': await actions.reset(find(args[0])); break;
       case 'delete': case 'rm': await actions.delete(find(args[0])); break;
+      case 'messages': case 'inbox': {
+        const { messages } = await api('GET', '/api/admin/messages');
+        const list = args[0] === 'all' ? messages : messages.filter((m) => !m.answeredAt);
+        list.forEach((m) => print(`#${String(m.id).padEnd(5)} ${when(m.createdAt).padEnd(18)} ${m.answeredAt ? 'answered ' : 'OPEN     '} ${m.subject.padEnd(13)} ${m.name} <${m.email}>`));
+        print(`${list.length} message${list.length === 1 ? '' : 's'} — read <id> to open one`);
+        break;
+      }
+      case 'read': {
+        const { messages } = await api('GET', '/api/admin/messages');
+        const m = messages.find((x) => String(x.id) === String(args[0]));
+        if (!m) throw new Error(`no such message: ${args[0] || '(none given)'}`);
+        print(`#${m.id} · ${when(m.createdAt)} · ${m.subject} · ${m.answeredAt ? 'answered ' + when(m.answeredAt) : 'not answered'}`);
+        print(`from ${m.name} <${m.email}>${m.phone ? ' · ' + m.phone : ''}`);
+        String(m.message).split('\n').forEach((l) => print('  ' + l));
+        break;
+      }
+      case 'answered': {
+        if (!/^\d+$/.test(args[0] || '')) throw new Error('usage: answered <id>');
+        await api('POST', `/api/admin/messages/${args[0]}/answered`);
+        print(`#${args[0]} marked answered; it is deleted in 30 days`, 'ok');
+        break;
+      }
+      case 'audit': {
+        const { entries } = await api('GET', '/api/admin/audit');
+        entries.slice(0, 50).reverse().forEach((e) => print(`${when(e.at).padEnd(18)} ${e.admin.padEnd(16)} ${e.action.padEnd(9)} ${e.target} ${e.detail}`));
+        print(`${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} (a year is kept)`);
+        break;
+      }
       default: throw new Error(`unknown command: ${cmd} — type help`);
     }
   }

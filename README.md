@@ -50,12 +50,16 @@ Consequences worth remembering:
   against it — `/assets/css/shared.css` is `assets/css/shared.css` on disk — so a
   local preview must be served from the root (see [Local preview](#local-preview)),
   and opening a page as a `file://` URL shows it unstyled.
-- Repository furniture never reaches the CDN. `build.sh` leaves out `.git`,
-  `.github/`, `.gitignore`, `docs/`, `README.md`, `wrangler.toml`, the
-  Worker's source (`worker/`, `migrations/`, `test/`, `package.json`) and itself,
-  so adding documentation here cannot bloat the site. This matters more than
-  it looks: publishing the root would push `.git` at Cloudflare, and a pack
-  file over 25 MiB fails the deploy outright.
+- Only the site reaches the CDN. `build.sh` copies an allowlist — `index.html`,
+  `_headers`, `assets/`, `components/`, `pages/`, `research/` — and refuses to
+  publish any hidden file, so the Worker's source, the docs and a local
+  `.dev.vars` with your secrets never do. A new top-level folder is published
+  only once it is added to `SITE` in `build.sh`.
+- No third-party script runs on the site: the two libraries the apps use
+  (Leaflet, Lightweight Charts) are vendored in `assets/vendor/`, and
+  `_headers` sets a Content-Security-Policy that allows scripts from this
+  site only (plus Cloudflare Turnstile). No inline `<script>` or `onclick=`:
+  put code in a `.js` file.
 - All server-side code is in `worker/` (see [The Worker](#the-worker)). Its
   data lives in a Cloudflare D1 database called `bqe`.
 - `_headers` at the root sets the security and caching headers Cloudflare
@@ -64,8 +68,8 @@ Consequences worth remembering:
 
 ## Repository layout
 
-The repository root **is** the site root: everything here is served, except the
-handful of things `build.sh` leaves out.
+The repository root **is** the site root, but only the folders `build.sh`
+lists are served.
 
 ```
 ├── README.md               This file (not published)
@@ -78,7 +82,8 @@ handful of things `build.sh` leaves out.
 ├── migrations/             D1 schema, applied by wrangler
 ├── test/                   Worker unit tests (vitest)
 ├── package.json            Worker tooling (wrangler, typescript, vitest)
-├── build.sh                Assembles _site/ — what Cloudflare publishes
+├── build.sh                Assembles _site/ — what Cloudflare publishes (an allowlist)
+├── scripts/set-password.mjs  Sets an account's password without committing it
 ├── .github/workflows/
 │   └── ci.yml              Link check, Worker typecheck/tests/bundle
 │
@@ -414,8 +419,10 @@ slow upstream degrades to stored data rather than an error.
 | `POST /api/chat` | `worker/news/chat.ts` | Market News chat (Gemini). AI access; daily limit per user. |
 | `GET/POST /api/company/analysis` | `worker/news/analyst.ts` | Market News AI analyst note. AI access; same daily limit. |
 | `POST /api/admin/run/{stack,news,calendar,briefing}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
-| `POST /api/auth/{signup,login,logout,password}`, `GET /api/auth/me` | `worker/auth.ts` | Sign-up and sign-in with an HttpOnly session cookie. |
+| `POST /api/auth/{signup,login,logout,password}`, `GET /api/auth/{me,config}` | `worker/auth.ts` | Sign-up and sign-in with an HttpOnly session cookie. |
+| `GET /api/auth/export`, `POST /api/auth/delete` | `worker/auth.ts` | A user downloads everything stored for their account, or deletes it. |
 | `GET /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password` | `worker/admin.ts` | The admin terminal: list accounts, grant/revoke AI access, suspend, change role, reset a password, delete. Signed-in admins only. |
+| `GET /api/admin/messages`, `POST /api/admin/messages/:id/answered`, `GET /api/admin/audit` | `worker/admin.ts` | The admin terminal: contact-form inbox and the log of admin actions. |
 | `GET/PUT /api/state/{stack,journal,news}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
 | `GET /api/market/{quote,candles}` | `worker/market.ts` | Yahoo quotes and candles for the Trading Journal, cached at the edge. |
 
@@ -436,9 +443,13 @@ AI conversations are saved to the account too (`GET/DELETE /api/chats`),
 with a history to reopen or delete them.
 
 Anyone can create an account (Login → *Create one*): a username (3–32
-letters, digits, `. _ -`), a password of at least 8 characters and,
-optionally, an email address. Sign-ups are limited to 5 per visitor per
-day.
+letters, digits, `. _ -`), a password of at least 12 characters that is not
+known from a data breach and, optionally, an email address. Sign-ups are
+limited to 5 per visitor per day and 30 an hour site-wide, and Cloudflare
+Turnstile is asked when it is configured. Sign-in allows 10 failures per
+visitor per 15 minutes and 10 per account per hour. An account keeps up
+to 4 MB of saved work across the apps. Signed-in users can download their
+data or delete their account from the account panel.
 
 **AI access is off by default.** A new account can save its work, but the
 AI features — Market News's Ask AI chat, the AI analyst note and a fresh
@@ -453,14 +464,16 @@ per user for AI access, plus suspend (which also signs them out), make
 admin / demote, reset password (shows a temporary one to pass on) and
 delete. The same actions work as commands at its prompt — `grant alice
 bob`, `revoke alice`, `grant-all`, `suspend`, `promote`, `reset`, `list
-noai`, `whois`; `help` lists them. An admin cannot suspend, demote or
-delete their own account.
+noai`, `whois` — as do the contact-form inbox (`messages`, `read 12`,
+`answered 12`) and the log of admin actions (`audit`); `help` lists them.
+Every admin change is recorded in `admin_audit` (kept a year). An admin
+cannot suspend, demote or delete their own account.
 
 The first admin is `ceo`, created by `migrations/0002_users.sql` and made
-admin by `migrations/0004_accounts.sql`. Its starting password is weak and
-its hash is in this public repository: change it after the first sign-in
-(Login → Change password), which also signs out every other session. To
-make another account admin from the command line:
+admin by `migrations/0004_accounts.sql`. Its seeded hash is public, so
+`migrations/0006_security.sql` disables it unless it was already changed; set
+the password with `node scripts/set-password.mjs ceo` (see
+docs/DEPLOYMENT.md). To make another account admin from the command line:
 `npx wrangler d1 execute bqe --remote --command "UPDATE users SET role = 'admin' WHERE username = 'NAME'"`.
 
 An app opts in with `/assets/js/session.js`: `BQE.store("<app>")` loads and
@@ -513,7 +526,7 @@ curl "localhost:8787/__scheduled?cron=*/3+22-23+*+*+1-5"   # fire the Stack job
 curl "localhost:8787/__scheduled?cron=*/15+*+*+*+*"        # fire the Market News tick
 ```
 
-For the Market News briefing and chat locally, put `GEMINI_API_KEY=...` in `.dev.vars` (git-ignored).
+For the Market News briefing and chat locally, put `GEMINI_API_KEY=...` in `.dev.vars` (git-ignored, and never copied into `_site/` by `build.sh`).
 
 ## Deploying
 

@@ -110,12 +110,12 @@
           <input type="email" id="signup-email" name="email" autocomplete="email" maxlength="200" />
         </div>
         <div class="login-form-group">
-          <label for="signup-password">Password (at least 8 characters)</label>
-          <input type="password" id="signup-password" name="password" autocomplete="new-password" minlength="8" required />
+          <label for="signup-password">Password (at least 12 characters)</label>
+          <input type="password" id="signup-password" name="password" autocomplete="new-password" minlength="12" required />
         </div>
         <div class="login-form-group">
           <label for="signup-confirm">Repeat the password</label>
-          <input type="password" id="signup-confirm" name="confirm" autocomplete="new-password" minlength="8" required />
+          <input type="password" id="signup-confirm" name="confirm" autocomplete="new-password" minlength="12" required />
         </div>
         <p id="signup-error" class="login-error" role="alert"></p>
         <button type="submit" class="login-submit">Create account</button>
@@ -133,13 +133,23 @@
             <input type="password" id="current-password" name="current" autocomplete="current-password" required />
           </div>
           <div class="login-form-group">
-            <label for="new-password">New password (at least 8 characters)</label>
-            <input type="password" id="new-password" name="next" autocomplete="new-password" minlength="8" required />
+            <label for="new-password">New password (at least 12 characters)</label>
+            <input type="password" id="new-password" name="next" autocomplete="new-password" minlength="12" required />
           </div>
           <p id="password-status" class="login-error" role="status"></p>
           <button type="submit" class="login-submit">Change password</button>
         </form>
         <button type="button" id="logout-btn" class="login-submit login-secondary">Sign out</button>
+        <!-- Your data: a copy of everything stored for the account, or all of it deleted. -->
+        <button type="button" id="export-btn" class="login-submit login-secondary">Download my data</button>
+        <form id="delete-form" class="login-form">
+          <div class="login-form-group">
+            <label for="delete-password">Delete this account — enter your password</label>
+            <input type="password" id="delete-password" name="password" autocomplete="current-password" required />
+          </div>
+          <p id="delete-status" class="login-error" role="status"></p>
+          <button type="submit" class="login-submit login-secondary">Delete account and all saved work</button>
+        </form>
       </div>
     </div>
   </div>

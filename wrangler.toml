@@ -45,6 +45,20 @@ database_name = "bqe"
 # or left out: wrangler then creates the database on the first deploy.
 migrations_dir = "migrations"
 
+# Rate limits in front of D1, PBKDF2 and Yahoo (worker/http.ts `allowed`).
+# Counted per visitor hash and per Cloudflare location, so they are a flood
+# guard rather than an exact quota; the exact per-account limits are in D1
+# (worker/auth.ts). A namespace_id is any number unique within the account.
+[[ratelimits]]
+name = "AUTH_LIMITER"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }   # sign-in, sign-up, password: 20 a minute
+
+[[ratelimits]]
+name = "MARKET_LIMITER"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }  # /api/market/*, /api/quotes/*: 120 a minute
+
 [triggers]
 crons = [
   # Stack prices: a batch every 3 minutes for the two hours after 22:00 UTC
@@ -80,6 +94,18 @@ GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash"
 NEWS_CHAT_SEARCH = "off"
 NEWS_CHAT_DAILY_LIMIT = "50"
+# New accounts per hour, site-wide (on top of 5 per visitor per day).
+SIGNUP_HOURLY_LIMIT = "30"
+# New passwords are checked against Have I Been Pwned (only a 5-character
+# hash prefix is sent). "off" to skip.
+PASSWORD_BREACH_CHECK = "on"
+# PBKDF2 iterations for passwords set from now on; older hashes are upgraded
+# at the next sign-in. 50000 fits the free plan's 10 ms CPU; on Workers Paid
+# set 600000 (OWASP's figure for PBKDF2-SHA256).
+# PBKDF2_ITERATIONS = "600000"
+# Cloudflare Turnstile on sign-up: set the widget's site key here and its
+# secret with `npx wrangler secret put TURNSTILE_SECRET`. Off until both are set.
+# TURNSTILE_SITE_KEY = "0x4AAAAAAA…"
 
 [observability]
 enabled = true

@@ -18,12 +18,31 @@ const MODULES = [
 
 export class ProfileError extends Error {}
 
+// One Yahoo session per Worker instance, reused for half an hour, instead of
+// two extra round trips (cookie, then crumb) for every profile.
+const SESSION_TTL_MS = 30 * 60_000;
+let shared: { at: number; get: ReturnType<typeof yahooSession> } | null = null;
+
+function session(fetcher: typeof fetch): ReturnType<typeof yahooSession> {
+  // Tests pass their own fetcher: they get a fresh session every time.
+  if (fetcher !== fetch) return yahooSession(fetcher);
+  if (!shared || Date.now() - shared.at > SESSION_TTL_MS) shared = { at: Date.now(), get: yahooSession(fetch) };
+  const mine = shared;
+  return () =>
+    mine.get().catch((err) => {
+      if (shared === mine) shared = null; // a failed session is not kept
+      throw err;
+    });
+}
+
 export async function fetchProfile(ticker: string, fetcher: typeof fetch = fetch): Promise<Profile> {
-  const { cookie, crumb } = await yahooSession(fetcher)();
+  const { cookie, crumb } = await session(fetcher)();
   const res = await fetcher(
     `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${MODULES}&crumb=${encodeURIComponent(crumb)}`,
     { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", Cookie: cookie, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) },
   );
+  // An expired crumb: the next request mints a new session.
+  if (res.status === 401 || res.status === 403) shared = null;
   const body = await res.json<any>().catch(() => null);
   const result = body?.quoteSummary?.result?.[0];
   if (!result) throw new ProfileError(body?.quoteSummary?.error?.description || `No company data for ${ticker} (HTTP ${res.status})`);

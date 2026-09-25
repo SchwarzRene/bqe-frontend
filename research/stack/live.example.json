@@ -1,4 +1,4 @@
 {
-  "_comment": "Optional. The page already asks the site's own /api/quotes when it is served by the Worker. Copy this to live.json only to point it at a different quote service; the page appends /SYMBOL, so the URL must end in /api/quotes.",
+  "_comment": "Optional. The page already asks the site's own /api/quotes when it is served by the Worker. Copy this to live.json only to point it at a different quote service; the page appends /SYMBOL, so the URL must end in /api/quotes. A service on another origin must also be added to connect-src in the Content-Security-Policy in _headers, or the browser blocks it.",
   "proxy": "https://example.com/api/quotes"
 }

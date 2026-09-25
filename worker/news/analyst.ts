@@ -1,7 +1,7 @@
 // The AI analyst in Market News's company window:
 //
 //   GET  /api/company/analysis?ticker=NVDA   the stored analysis, if one is fresh (no model call)
-//   POST /api/company/analysis {ticker, name} write one: a Gemini call, counted against the
+//   POST /api/company/analysis {ticker}       write one: a Gemini call, counted against the
 //                                             chat's daily limit per user
 //
 // Signed-in users with AI access only, like the chat. The model gets what the page shows —
@@ -19,6 +19,7 @@ import { fetchChart, toCandles } from "../market";
 import { fetchProfile, type Profile } from "../profile";
 import { putDocument } from "../stack";
 import { readCalendar, type CalendarEvent } from "./calendar";
+import { CONFIG } from "./feeds";
 import { askJson, model } from "./gemini";
 import { type Item, toItem } from "./store";
 import { iso } from "./time";
@@ -259,7 +260,9 @@ export async function handleAnalysis(request: Request, env: Env): Promise<Respon
       fetchChart(ticker, { range: "1y", interval: "1d" }).catch(() => null),
       fetchProfile(ticker).catch(() => null),
     ]);
-    const name = clip(body?.name, 80) || profile?.name || ticker;
+    // Never the client's spelling: the analysis is stored and shown to every
+    // user, so nothing one user types may reach the prompt (prompt injection).
+    const name = profile?.name || CONFIG.watchlist.find((w) => w.symbol === ticker)?.name || ticker;
     const [heads, events] = await Promise.all([
       headlinesAbout(env, ticker, name, now),
       readCalendar(env, now - 86_400_000, now + 30 * 86_400_000),

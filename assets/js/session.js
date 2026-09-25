@@ -8,9 +8,12 @@
  *   BQE.user                   Promise<{username, role, ai} | null>
  *                              (ai: may use the AI features; an admin grants it)
  *   BQE.login(name, password)  -> the user, throws Error with a message
- *   BQE.signup({username, password, email})  -> the new user, signed in
+ *   BQE.signup({username, password, email, host})  -> the new user, signed in
+ *                              (host: where the anti-bot check may ask for a click)
  *   BQE.logout()
  *   BQE.changePassword(current, next)
+ *   BQE.exportAccount()        downloads everything stored for the account
+ *   BQE.deleteAccount(password)  deletes the account and everything it saved
  *   BQE.store(app)             -> Store (see below)
  *   BQE.prefs.sync(section, local, apply)   display settings that follow the account
  *   BQE.mountAccountChip(el, {note})   status + sign-in/out for app pages
@@ -46,8 +49,48 @@
     BQE.user = Promise.resolve(user);
     return user;
   };
-  BQE.signup = async ({ username, password, email = "" }) => {
-    const { user } = await call("POST", "/api/auth/signup", { username, password, email });
+  // Sign-up settings from the Worker: the minimum password length, and the
+  // Cloudflare Turnstile site key when the anti-bot check is switched on.
+  let configP = null;
+  BQE.config = () => (configP = configP || call("GET", "/api/auth/config").catch(() => ({})));
+
+  let turnstileP = null;
+  const loadTurnstile = () => (turnstileP = turnstileP || new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.onload = () => resolve(window.turnstile);
+    script.onerror = () => { turnstileP = null; reject(new Error("The anti-bot check could not load — check your connection.")); };
+    document.head.appendChild(script);
+  }));
+
+  /** A Turnstile token, or undefined when the check is off. Usually invisible; asks for a click only when unsure. */
+  async function turnstileToken(host) {
+    const { turnstileSiteKey } = await BQE.config();
+    if (!turnstileSiteKey) return undefined;
+    const turnstile = await loadTurnstile();
+    return new Promise((resolve, reject) => {
+      const box = document.createElement("div");
+      box.className = "bqe-turnstile";
+      (host || document.querySelector("dialog[open]") || document.body).appendChild(box);
+      let id = null;
+      const finish = (fn) => (value) => {
+        try { if (id !== null) turnstile.remove(id); } catch { /* already gone */ }
+        box.remove();
+        fn(value);
+      };
+      id = turnstile.render(box, {
+        sitekey: turnstileSiteKey,
+        appearance: "interaction-only",
+        callback: finish(resolve),
+        "error-callback": finish(() => reject(new Error("The anti-bot check failed — please try again."))),
+        "timeout-callback": finish(() => reject(new Error("The anti-bot check timed out — please try again."))),
+      });
+    });
+  }
+
+  BQE.signup = async ({ username, password, email = "", host = null }) => {
+    const turnstile = await turnstileToken(host);
+    const { user } = await call("POST", "/api/auth/signup", { username, password, email, turnstile });
     BQE.user = Promise.resolve(user);
     return user;
   };
@@ -57,6 +100,22 @@
     BQE.user = Promise.resolve(null);
   };
   BQE.changePassword = (current, next) => call("POST", "/api/auth/password", { current, next });
+
+  BQE.exportAccount = async () => {
+    const data = await call("GET", "/api/auth/export");
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: `bqe-${data.account?.username || "account"}.json` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  BQE.deleteAccount = async (password) => {
+    await call("POST", "/api/auth/delete", { password });
+    prefsDoc = null;
+    BQE.user = Promise.resolve(null);
+  };
 
   /**
    * One app's saved document.
@@ -258,7 +317,7 @@
       try {
         if (!signingUp) return done(await BQE.login(form.username.value, form.password.value));
         if (form.password.value !== form.confirm.value) throw new Error("The passwords don't match.");
-        done(await BQE.signup({ username: form.username.value, password: form.password.value, email: form.email.value }));
+        done(await BQE.signup({ username: form.username.value, password: form.password.value, email: form.email.value, host: form }));
       } catch (error) {
         err.textContent = error.message;
       }
