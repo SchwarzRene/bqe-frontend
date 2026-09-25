@@ -11,7 +11,7 @@ import { liveCard, nextCard, renderCommodities, renderGeneral, renderStocks } fr
 import { allRegions, briefing, data, events, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
 
 const $ = (id) => document.getElementById(id);
-const ICON_CAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+const TAB_EMOJI = { general: '📰', stocks: '📈', commodities: '🛢️', calendar: '📅' };
 
 // ---------- Chrome ----------
 function renderChrome() {
@@ -29,7 +29,7 @@ function renderChrome() {
   $('tz').innerHTML = TZS.map(([id, label]) => `<button type="button" data-tz="${id}" aria-pressed="${state.tz === id}">${label}</button>`).join('');
   const upcoming = events().filter((e) => Date.parse(e.start) > Date.now()).length;
   $('tabs').innerHTML = PAGES.map(([id, label]) =>
-    `<a href="#${id}"${state.page === id ? ' aria-current="page"' : ''}>${id === 'calendar' ? ICON_CAL : ''}${label}${id === 'calendar' && upcoming ? `<span class="n">${upcoming}</span>` : ''}</a>`).join('');
+    `<a href="#${id}"${state.page === id ? ' aria-current="page"' : ''}><span class="tab-emoji" aria-hidden="true">${TAB_EMOJI[id]}</span>${label}${id === 'calendar' && upcoming ? `<span class="n">${upcoming}</span>` : ''}</a>`).join('');
   const globe = $('globe');
   globe.innerHTML = globeLabel();
   globe.setAttribute('aria-expanded', String(state.mapOpen));

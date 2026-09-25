@@ -458,3 +458,5 @@ body dialog.bqe-login .err { color: var(--red); }
   .chat-form textarea { font-size: 16px; resize: none; min-height: 44px; }
   .chat-note { padding: 0 16px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
 }
+.tabs .tab-emoji { font-size: 15px; line-height: 1; filter: saturate(.85); }
+.tabs a:not([aria-current="page"]) .tab-emoji { opacity: .75; }
