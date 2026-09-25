@@ -412,7 +412,7 @@ slow upstream degrades to stored data rather than an error.
 | `POST /api/chat` | `worker/news/chat.ts` | Market News chat (Gemini). Signed in; daily limit per user. |
 | `POST /api/admin/run/{stack,news,calendar,briefing}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
 | `POST /api/auth/{login,logout,password}`, `GET /api/auth/me` | `worker/auth.ts` | Sign-in with an HttpOnly session cookie. |
-| `GET/PUT /api/state/{stack,journal}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
+| `GET/PUT /api/state/{stack,journal,news}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
 | `GET /api/market/{quote,candles}` | `worker/market.ts` | Yahoo quotes and candles for the Trading Journal, cached at the edge. |
 
 ### Accounts and saved work
