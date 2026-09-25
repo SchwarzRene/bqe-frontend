@@ -67,10 +67,14 @@ STACK_BATCH = "20"
 # Gemini model for the Market News briefing (and the chat, unless
 # GEMINI_CHAT_MODEL is set). The watchlist, feeds and calendar sources are in
 # worker/news/sources.json and worker/news/calendar.json.
-GEMINI_MODEL = "gemini-3.7-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 # Market News chat. GEMINI_CHAT_MODEL (unset: GEMINI_MODEL) picks a different
 # model for it; NEWS_CHAT_SEARCH = "on" lets it search the web with Google
 # Search grounding instead of only the app's own data.
+# When the model is overloaded ("high demand", HTTP 503), over its quota or
+# not available on the key, the same request goes to these, in order, after
+# two short retries. Comma-separated; "off" for none.
+GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash"
 NEWS_CHAT_SEARCH = "off"
 NEWS_CHAT_DAILY_LIMIT = "50"
 

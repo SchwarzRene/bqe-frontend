@@ -35,10 +35,10 @@ ex-dividend at once. If the Worker's logs show Stack runs ending in
 Paid ($5/month)**, which allows 30 s of CPU per invocation (raise
 `STACK_BATCH` to 100 there). A run that hits the limit writes nothing and is
 retried 20 minutes later. The other jobs wait on the network, which
-costs no CPU time, and fit the free plan comfortably — except possibly
-the Market News fetch, which parses ~20 feeds every 15 minutes; if its runs
-end in `exceededCpu`, drop feeds from `worker/news/sources.json` (see
-`research/markettape/README.md`).
+costs no CPU time, and fit the free plan comfortably. Market News is built
+for the 10 ms: one job per run, a third of its sources per fetch (see
+`research/markettape/README.md`); if its runs still end in `exceededCpu`,
+drop feeds from `worker/news/sources.json` or move to Workers Paid.
 
 Gemini's free tier covers Market News, which calls it for two things only:
 the briefing, about 4 requests a day, and the chat, per question, for

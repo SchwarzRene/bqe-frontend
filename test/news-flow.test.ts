@@ -9,7 +9,11 @@ import { buildBriefing, latestBriefing } from "../worker/news/briefing";
 import { CALENDAR, type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
 import type { Config } from "../worker/news/feeds";
 import { handleChat, handleNews, newsTick } from "../worker/news/index";
-import { ingest, pruneNews } from "../worker/news/store";
+import { ingest as ingestPart, pruneNews } from "../worker/news/store";
+
+// Every source in one run: the rotation over runs is tested on its own.
+const ALL = { part: 0, of: 1, budget: Infinity };
+const ingest = (env: any, now: number, cfg: Config) => ingestPart(env, now, cfg, fetch, ALL);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -288,15 +292,28 @@ describe("Market News flow", () => {
     expect(await latestBriefing(env)).toBeNull();
   });
 
-  it("runs the tick: first briefing and calendar right after a deploy", async () => {
-    internet({ briefing: briefingFrom });
+  it("runs one job per tick: calendar, then headlines, then the first briefing, after a deploy", async () => {
+    const calls = internet({ briefing: briefingFrom });
     const env = envWith();
-    // 10:15 New York on a Thursday: no slot, but nothing exists yet.
-    const report = await newsTick(env, Date.parse("2026-09-24T14:15:00Z"), cfg);
-    expect(report).toMatch(/fetch: /);
+    const tick = (utc: string) => newsTick(env, Date.parse(utc), cfg, ALL);
+    // 10:00 New York on a Thursday: nothing exists yet. First the calendar, with no fetch.
+    let report = await tick("2026-09-24T14:00:00Z");
     // Yahoo unreachable in this test: the fallbacks (BLS, the jobless-claims rule …) take over.
-    expect(report).toMatch(/calendar \(first\): .*yahoo-economic failed: no Yahoo crumb.*fallback-rules: [1-9]\d*, bls: [1-9]/);
-    expect(report).toMatch(/briefing \(first\): briefing written/);
+    expect(report).toMatch(/^calendar \(first\): .*yahoo-economic failed: no Yahoo crumb.*fallback-rules: [1-9]\d*, bls: [1-9]/);
+    expect(report).not.toMatch(/fetch/);
+    // The calendar's other half: earnings, dated events, rules.
+    report = await tick("2026-09-24T14:30:00Z");
+    expect(report).toMatch(/^calendar \(first, part 2\): dated: 0, rules: \d+, nasdaq: 1, yahoo: 0$/);
+    // No headlines yet, so no briefing: this run fetches.
+    report = await tick("2026-09-24T14:45:00Z");
+    expect(report).toMatch(/^fetch: \{"fetched":9,"added":5/);
+    expect(calls.some((c) => c.url.includes("generativelanguage"))).toBe(false);
+    // Now the first briefing, in a run of its own.
+    report = await tick("2026-09-24T15:00:00Z");
+    expect(report).toBe("briefing (first): briefing written from 5 headlines");
+    // From then on: results at :15, fetch otherwise.
+    expect(await tick("2026-09-24T15:15:00Z")).toMatch(/^calendar results: /);
+    expect(await tick("2026-09-24T15:30:00Z")).toMatch(/^fetch: /);
   });
 
   it("answers signed-in users with sources, counts the limit, and refuses past it", async () => {
@@ -333,6 +350,33 @@ describe("Market News flow", () => {
 
     const again = await ask();
     expect(again.status).toBe(429);
+  });
+
+  it("shows Gemini's reason when the chat fails, and does not count the question", async () => {
+    vi.stubGlobal("fetch", async (url: string) =>
+      url.includes("generativelanguage")
+        ? new Response(JSON.stringify({ error: { code: 404, status: "NOT_FOUND", message: "models/gemini-9 is not found for API version v1beta" } }), { status: 404 })
+        : new Response("", { status: 404 }));
+    const env = envWith();
+    env.DB.raw.exec("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES ('" + (await sha256("tok")) + "', 1, '2026-01-01', '2999-01-01')");
+    const res = await handleChat(new Request("https://site/api/chat", {
+      method: "POST",
+      headers: { Cookie: "bqe_session=tok", Origin: "https://site" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+    }), env);
+    expect(res.status).toBe(502);
+    expect((await res.json<any>()).error).toBe("The model could not answer: NOT_FOUND — models/gemini-9 is not found for API version v1beta");
+    expect(env.DB.raw.prepare("SELECT count FROM news_chat_usage").get()).toEqual({ count: 0 });
+  });
+
+  it("fetches a third of the sources per run, and a budget of new headlines", async () => {
+    internet();
+    const env = envWith();
+    const five = { ...cfg, feeds: [...cfg.feeds, ...cfg.feeds.map((f) => ({ ...f, id: f.id + "2" }))] };
+    const report = await ingestPart(env, NOW, five, fetch, { part: 1, of: 3, budget: 2 });
+    // Sources 1 and 4 of wire, other, wire2, other2, yahoo NVDA, yahoo CL=F.
+    expect(Object.keys(JSON.parse((env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'news:health'").get() as any).body).sources).sort()).toEqual(["other", "yahoo:NVDA"]);
+    expect(report.added).toBe(2);
   });
 
   it("prunes what is older than 7 days", async () => {

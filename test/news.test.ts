@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateBriefing, pickInput } from "../worker/news/briefing";
 import { type CalendarConfig, fixedEvents, mergeMeetingResults, nasdaqEvent, parseEconomic, parseIcs, pickNasdaq } from "../worker/news/calendar";
 import { describeGeminiError } from "../worker/news/gemini";
-import { cleanMessages, handleChat, splitSources } from "../worker/news/chat";
+import { chatError, cleanMessages, handleChat, splitSources } from "../worker/news/chat";
+import { GeminiError, generate, RETRY_DELAYS_MS } from "../worker/news/gemini";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
 import { dedupe, eventWordsFor, isBlocked, isPromo, sameStory, scoreItem, staleSources, titleWords } from "../worker/news/store";
-import { briefingSlot, isCalendarRun, shouldFetch, wallClock, zonedToUtc } from "../worker/news/time";
+import { briefingSlot, calendarRun, isCalendarRun, isResultsRun, wallClock, zonedToUtc } from "../worker/news/time";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -169,12 +170,15 @@ describe("news time", () => {
     expect(briefingSlot(Date.parse("2026-12-03T21:30:00Z"))).toBe("close");
   });
 
-  it("fetches every run on weekdays and hourly at weekends; the calendar at 05:00", () => {
-    expect(shouldFetch(Date.parse("2026-09-24T12:45:00Z"))).toBe(true);
-    expect(shouldFetch(Date.parse("2026-09-26T12:45:00Z"))).toBe(false);
-    expect(shouldFetch(Date.parse("2026-09-26T13:00:00Z"))).toBe(true);
+  it("results at a quarter past on weekdays; the calendar at 05:00", () => {
+    expect(isResultsRun(Date.parse("2026-09-24T12:15:00Z"))).toBe(true);
+    expect(isResultsRun(Date.parse("2026-09-24T12:30:00Z"))).toBe(false);
+    expect(isResultsRun(Date.parse("2026-09-26T12:15:00Z"))).toBe(false);
     expect(isCalendarRun(Date.parse("2026-09-24T09:00:00Z"))).toBe(true);
     expect(isCalendarRun(Date.parse("2026-09-24T09:15:00Z"))).toBe(false);
+    expect(calendarRun(Date.parse("2026-09-24T09:00:00Z"))).toBe(1);
+    expect(calendarRun(Date.parse("2026-09-24T09:30:00Z"))).toBe(2);
+    expect(calendarRun(Date.parse("2026-09-24T09:45:00Z"))).toBeNull();
     expect(wallClock(Date.parse("2026-09-24T03:00:00Z"), "America/New_York").date).toBe("2026-09-23");
   });
 });
@@ -238,6 +242,8 @@ describe("news calendar", () => {
       { summary: "Consumer Price Index for September 2026", start: Date.parse("2026-10-14T12:30:00Z") },
       { summary: "Employment Situation, October", start: Date.parse("2026-11-06T13:30:00Z") },
     ]);
+    // Only the days asked for are converted.
+    expect(parseIcs(ics, "America/New_York", "2026-11-01", "2026-11-10").map((e) => e.summary)).toEqual(["Employment Situation, October"]);
   });
 
   it("reads Nasdaq earnings rows: watchlist plus the largest, reported EPS as the result", () => {
@@ -321,6 +327,44 @@ describe("describeGeminiError", () => {
   });
 });
 
+describe("Gemini overload", () => {
+  const overloaded = () => new Response(JSON.stringify({ error: { code: 503, status: "UNAVAILABLE", message: "This model is currently experiencing high demand." } }), { status: 503 });
+  const ok = (text: string) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }));
+  const saved = [...RETRY_DELAYS_MS];
+  afterEach(() => RETRY_DELAYS_MS.splice(0, RETRY_DELAYS_MS.length, ...saved));
+  const env: any = { GEMINI_API_KEY: "k" };
+
+  it("retries an overloaded model", async () => {
+    RETRY_DELAYS_MS.splice(0, 2, 0, 0);
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => (calls.push(url), calls.length < 3 ? overloaded() : ok("hi")));
+    expect((await generate(env, "gemini-3.7-flash", {}, "t")).candidates[0].content.parts[0].text).toBe("hi");
+    expect(calls.map((u) => u.split("/models/")[1])).toEqual(Array(3).fill("gemini-3.7-flash:generateContent"));
+  });
+
+  it("goes down the fallback list while models stay overloaded or do not exist, and gives up after it", async () => {
+    RETRY_DELAYS_MS.splice(0, 2, 0, 0);
+    const calls: string[] = [];
+    const missing = () => new Response(JSON.stringify({ error: { code: 404, status: "NOT_FOUND", message: "not found" } }), { status: 404 });
+    vi.stubGlobal("fetch", async (url: string) => (
+      calls.push(url.split("/models/")[1].split(":")[0]),
+      url.includes("gemini-3.6-flash") ? ok("from 3.6") : url.includes("gemini-3.1-flash-lite") ? missing() : overloaded()
+    ));
+    expect((await generate(env, "gemini-3.5-flash-lite", {}, "t")).candidates[0].content.parts[0].text).toBe("from 3.6");
+    expect(calls).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]);
+
+    vi.stubGlobal("fetch", async () => overloaded());
+    await expect(generate({ ...env, GEMINI_FALLBACK_MODEL: "off" }, "gemini-3.7-flash", {}, "t")).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("does not fall back on a request the model rejects", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => (calls.push(url), new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "bad" } }), { status: 400 })));
+    await expect(generate(env, "gemini-3.7-flash", {}, "t")).rejects.toMatchObject({ status: 400 });
+    expect(calls).toHaveLength(1);
+  });
+});
+
 describe("news chat", () => {
   it("keeps a clean, alternating history that ends with the question", () => {
     expect(cleanMessages([
@@ -340,6 +384,14 @@ describe("news chat", () => {
       ids: ["3fa9c1d2e4b5", "77aa01bc02de"],
     });
     expect(splitSources("No news on that.\n**Sources:** none", known)).toEqual({ answer: "No news on that.", ids: [] });
+  });
+
+  it("says why the model could not answer", () => {
+    expect(chatError(new GeminiError("NOT_FOUND — models/x is not found for API version v1beta", 404)).error)
+      .toBe("The model could not answer: NOT_FOUND — models/x is not found for API version v1beta");
+    expect(chatError(new GeminiError("RESOURCE_EXHAUSTED", 429)).error).toMatch(/^Gemini is busy right now/);
+    expect(chatError(new GeminiError("UNAVAILABLE — high demand", 503)).error).toBe("Gemini is busy right now — try again in a minute. (UNAVAILABLE — high demand)");
+    expect(chatError(new Error("D1_ERROR: no such table")).error).toBe("The chat failed on the server: D1_ERROR: no such table");
   });
 
   it("answers 401 to a guest without calling the model", async () => {
