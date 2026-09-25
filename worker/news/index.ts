@@ -3,6 +3,7 @@
 //   GET  /api/news          everything the page shows, one JSON document (public)
 //   POST /api/news/refresh  fetch now and build a new briefing (signed in; max 1 per 15 min)
 //   POST /api/chat          see chat.ts (signed in; daily limit per user)
+//   /api/company/analysis   see analyst.ts (signed in; the same daily limit)
 //
 // and one cron, every 15 minutes (see newsTick):
 //   fetch + dedupe         every run not doing one of the jobs below; a third
@@ -28,6 +29,7 @@ import { latestRanks, rankCalendar } from "./rank";
 import { briefingSlot, calendarRun, isRankRun, isResultsRun, iso } from "./time";
 
 export { handleChat } from "./chat";
+export { handleAnalysis } from "./analyst";
 
 const REFRESH_EVERY_MS = 15 * 60_000;
 
