@@ -6,6 +6,14 @@
 // Guests get 401 and keep their work in the page only. `version` is the one
 // the client last saw; a save from a tab that fell behind gets 409 instead
 // of overwriting newer work.
+//
+// Display preferences (theme, regions, language …) are one more document,
+// "prefs", with a section per app. It is merged rather than versioned: a
+// setting is last-write-wins, and two apps saving their sections at once
+// must not refuse each other.
+//
+//   GET   /api/state/prefs                -> {version, updated, data: {news: {…}, journal: {…}}}
+//   PATCH /api/state/prefs  {news: {…}}   -> {ok}   (a section set to null is removed)
 
 import { currentUser } from "./auth";
 import type { Env } from "./env";
@@ -16,10 +24,16 @@ export const APPS = new Set(["stack", "journal", "news"]);
 // D1 rows top out at 2 MB; the JSON envelope needs a little room.
 const MAX_BYTES = 1_800_000;
 
+// Sections of the prefs document, one per app that has settings.
+export const PREF_SECTIONS = new Set(["news", "journal", "historymap"]);
+const MAX_PREF_BYTES = 4096; // per section
+
 export async function handleState(request: Request, env: Env, app: string): Promise<Response> {
-  if (!APPS.has(app)) return json({ error: "not found" }, 404);
+  if (!APPS.has(app) && app !== "prefs") return json({ error: "not found" }, 404);
   const user = await currentUser(request, env);
   if (!user) return json({ error: "Sign in to save your work." }, 401);
+  if (app === "prefs" && request.method === "PATCH") return patchPrefs(request, env, user.id);
+  if (app === "prefs" && request.method === "PUT") return json({ error: "method not allowed" }, 405, { Allow: "GET, PATCH" });
 
   if (request.method === "GET") {
     const row = await env.DB.prepare("SELECT body, version, updated_at FROM user_state WHERE user_id = ? AND app = ?")
@@ -63,4 +77,30 @@ export async function handleState(request: Request, env: Env, app: string): Prom
     return json({ error: "Saved from another tab in the meantime — reload to continue.", version: current?.version ?? 0 }, 409);
   }
   return json({ version: next, updated: now });
+}
+
+async function patchPrefs(request: Request, env: Env, userId: number): Promise<Response> {
+  if (crossSite(request)) return json({ error: "forbidden" }, 403);
+  const body = await readJson(request, PREF_SECTIONS.size * MAX_PREF_BYTES + 1024);
+  if (!body) return json({ error: "Send the settings as a JSON object." }, 400);
+  const sections = Object.keys(body);
+  if (!sections.length) return json({ error: "Nothing to save." }, 400);
+  for (const key of sections) {
+    const value = body[key];
+    if (!PREF_SECTIONS.has(key)) return json({ error: `Unknown settings section: ${key}` }, 400);
+    if (value !== null && (typeof value !== "object" || Array.isArray(value))) {
+      return json({ error: `${key} must be an object or null.` }, 400);
+    }
+    if (JSON.stringify(value).length > MAX_PREF_BYTES) return json({ error: `${key} is too large.` }, 413);
+  }
+  // json_patch (RFC 7396) merges each section into the stored one and drops
+  // the sections set to null.
+  const now = isoNow();
+  await env.DB.prepare(
+    `INSERT INTO user_state (user_id, app, body, version, updated_at) VALUES (?1, 'prefs', json_patch('{}', ?2), 1, ?3)
+     ON CONFLICT (user_id, app) DO UPDATE SET body = json_patch(user_state.body, ?2), version = user_state.version + 1, updated_at = ?3`,
+  )
+    .bind(userId, JSON.stringify(body), now)
+    .run();
+  return json({ ok: true, updated: now });
 }

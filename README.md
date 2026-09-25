@@ -425,7 +425,13 @@ Visitors can use every research app without an account, but **nothing a
 guest does is stored** — not on the server and not in their browser. It
 lives in the open tab and is gone on reload. A signed-in user's work in
 Stack (marked charts, drawings, theories) and in the Trading Journal is
-saved to their account and follows them to any device.
+saved to their account and follows them to any device. So do their
+display settings — Market News's regions, time zone, headline sort and
+calendar filters, the Trading Journal's light/dark theme and the History
+Map's language: one `prefs` document per user with a section per app
+(`PATCH /api/state/prefs`, merged rather than versioned, via
+`BQE.prefs.sync/save` in `session.js`). Each app also keeps them in
+`localStorage`, so guests keep theirs in the browser.
 
 Anyone can create an account (Login → *Create one*): a username (3–32
 letters, digits, `. _ -`), a password of at least 8 characters and,

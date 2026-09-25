@@ -185,3 +185,34 @@ describe("admin terminal API", () => {
     expect((await call(env, "PATCH", `/api/admin/users/${me}`, { role: "nope" }, boss)).status).toBe(400);
   });
 });
+
+describe("display preferences", () => {
+  it("merges each app's section into one document per user", async () => {
+    const env = envWith();
+    const { cookie } = await signup(env, "alice");
+    expect((await call(env, "GET", "/api/state/prefs", undefined, cookie)).data).toEqual({ version: 0, updated: null, data: null });
+
+    expect((await call(env, "PATCH", "/api/state/prefs", { journal: { theme: "dark" } }, cookie)).status).toBe(200);
+    await call(env, "PATCH", "/api/state/prefs", { news: { regions: ["eu", "ru"], tz: "ny" } }, cookie);
+    await call(env, "PATCH", "/api/state/prefs", { news: { regions: ["us"], tz: "ny" } }, cookie);
+    const r = await call(env, "GET", "/api/state/prefs", undefined, cookie);
+    expect(r.data.data).toEqual({ journal: { theme: "dark" }, news: { regions: ["us"], tz: "ny" } });
+
+    await call(env, "PATCH", "/api/state/prefs", { journal: null }, cookie);
+    expect((await call(env, "GET", "/api/state/prefs", undefined, cookie)).data.data).toEqual({ news: { regions: ["us"], tz: "ny" } });
+  });
+
+  it("keeps each user's settings apart and refuses guests and bad input", async () => {
+    const env = envWith();
+    const a = await signup(env, "alice");
+    const b = await signup(env, "bob");
+    await call(env, "PATCH", "/api/state/prefs", { journal: { theme: "light" } }, a.cookie);
+    expect((await call(env, "GET", "/api/state/prefs", undefined, b.cookie)).data.data).toBeNull();
+
+    expect((await call(env, "PATCH", "/api/state/prefs", { journal: { theme: "dark" } })).status).toBe(401);
+    expect((await call(env, "PATCH", "/api/state/prefs", { secrets: {} }, a.cookie)).status).toBe(400);
+    expect((await call(env, "PATCH", "/api/state/prefs", { news: [1, 2] }, a.cookie)).status).toBe(400);
+    expect((await call(env, "PATCH", "/api/state/prefs", { news: { x: "y".repeat(5000) } }, a.cookie)).status).toBe(413);
+    expect((await call(env, "PUT", "/api/state/prefs", { version: 0, data: {} }, a.cookie)).status).toBe(405);
+  });
+});

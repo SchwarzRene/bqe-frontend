@@ -381,7 +381,9 @@ function applyUILang() {
 
 document.getElementById('btn-lang').addEventListener('click', () => {
   LANG = LANG === 'de' ? 'en' : 'de';
-  localStorage.setItem('hm-lang', LANG);
+  try { localStorage.setItem('hm-lang', LANG); } catch (_) { /* nur für diesen Besuch */ }
+  // Angemeldet: die Sprache folgt auch dem Konto (session.js).
+  if (window.BQE && window.BQE.prefs) window.BQE.prefs.save('historymap', { lang: LANG });
   applyUILang();
   lastEra = null;                       // Epochen-Panel neu rendern erzwingen
   document.getElementById('sidebar-close').click(); // Sidebar schließen (Inhalt wäre gemischt)
@@ -412,3 +414,12 @@ if (window.innerWidth <= 800) {
 // ===== Start =====
 applyUILang();
 showYear(START_YEAR);
+
+// Angemeldet (irgendwo auf der Seite): die im Konto gespeicherte Sprache gilt.
+if (window.BQE && window.BQE.prefs) {
+  window.BQE.prefs.sync('historymap', { lang: LANG }, (saved) => {
+    if ((saved.lang === 'de' || saved.lang === 'en') && saved.lang !== LANG) {
+      document.getElementById('btn-lang').click();
+    }
+  });
+}

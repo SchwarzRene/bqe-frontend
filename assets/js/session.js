@@ -12,6 +12,7 @@
  *   BQE.logout()
  *   BQE.changePassword(current, next)
  *   BQE.store(app)             -> Store (see below)
+ *   BQE.prefs.sync(section, local, apply)   display settings that follow the account
  *   BQE.mountAccountChip(el, {note})   status + sign-in/out for app pages
  *
  * A plain script, not a module, so every page can load it the same way.
@@ -41,6 +42,7 @@
 
   BQE.login = async (username, password) => {
     const { user } = await call("POST", "/api/auth/login", { username, password });
+    prefsDoc = null;
     BQE.user = Promise.resolve(user);
     return user;
   };
@@ -50,6 +52,7 @@
     return user;
   };
   BQE.logout = async () => {
+    prefsDoc = null;
     await call("POST", "/api/auth/logout").catch(() => {});
     BQE.user = Promise.resolve(null);
   };
@@ -118,6 +121,57 @@
     });
     return store;
   };
+
+  /**
+   * Display preferences (theme, regions, language …), saved to the account
+   * so they follow the user to any device. Each app keeps its own copy in
+   * localStorage as well, so a guest keeps them too and the page can apply
+   * them before the account has answered.
+   *
+   *   BQE.prefs.sync("journal", {theme}, (saved) => apply(saved))
+   *       signed in: the account's settings win and are passed to apply();
+   *       an account without any yet takes this browser's `local` ones.
+   *   BQE.prefs.save("journal", {theme})   debounced; a no-op for a guest
+   */
+  let prefsDoc = null;
+  const prefsTimers = {};
+  const prefsPending = {};
+  const loadPrefs = () => (prefsDoc = prefsDoc || BQE.user.then((user) =>
+    user ? call("GET", "/api/state/prefs").then((r) => r.data || {}, () => null) : null));
+
+  function flushPrefs(keepalive = false) {
+    const body = Object.assign({}, prefsPending);
+    for (const k of Object.keys(prefsPending)) { delete prefsPending[k]; clearTimeout(prefsTimers[k]); }
+    if (!Object.keys(body).length) return;
+    fetch("/api/state/prefs", {
+      method: "PATCH",
+      keepalive,
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  }
+
+  BQE.prefs = {
+    async save(section, value) {
+      if (!(await BQE.user)) return;
+      prefsPending[section] = value;
+      clearTimeout(prefsTimers[section]);
+      prefsTimers[section] = setTimeout(() => flushPrefs(), 600);
+    },
+    async sync(section, local, apply) {
+      const doc = await loadPrefs();
+      if (!doc) return; // guest, or the account could not be read: keep this browser's
+      const saved = doc[section];
+      if (saved && typeof saved === "object") {
+        try { apply(saved); } catch (error) { console.warn("prefs", section, error); }
+      } else if (local && Object.keys(local).length) {
+        BQE.prefs.save(section, local);
+      }
+    },
+  };
+  // A setting changed just before the tab closes is still saved.
+  window.addEventListener("pagehide", () => flushPrefs(true));
 
   // ── Account chip for app pages (which do not carry the site header) ──────
 

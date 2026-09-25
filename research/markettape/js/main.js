@@ -9,7 +9,7 @@ import { globeLabel, mapKeys, renderMap } from './map.js';
 import { analysisOpen, closeAnalysis } from './analysis.js';
 import { companiesCard, handleCompanies, handleCompanySubmit, initCompanies, loadCharts } from './companies.js';
 import { liveCard, nextCard, renderCommodities, renderGeneral, renderStocks } from './pages.js';
-import { allRegions, briefing, data, events, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
+import { allRegions, applyPrefs, briefing, data, events, currentPrefs, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
 
 const $ = (id) => document.getElementById(id);
 const TAB_EMOJI = { general: '📰', stocks: '📈', commodities: '🛢️', calendar: '📅' };
@@ -209,6 +209,10 @@ setInterval(() => {
 }, 60000);
 
 loadPrefs();
+// A signed-in user's settings from the account replace this browser's.
+if (window.BQE && window.BQE.prefs) {
+  window.BQE.prefs.sync('news', currentPrefs(), (saved) => { applyPrefs(saved); savePrefs({ account: false }); render(); });
+}
 initChat();
 initCompanies(renderCompanies);
 route();
