@@ -9,8 +9,8 @@
 // list is kept in the browser, and on the account when signed in
 // (/api/state/news), so it follows the user to other devices.
 
-import { esc } from './format.js';
-import { briefing, data } from './state.js';
+import { ago, esc, hlImp, safeUrl } from './format.js';
+import { briefing, byHeadlineImportance, data, items } from './state.js';
 
 const LIST_KEY = 'bqe:market-news:companies';
 const RANGES = {
@@ -206,6 +206,26 @@ function chart(symbol, w, h, big) {
   </svg>`;
 }
 
+/**
+ * Headlines about a company: those today's briefing based its line on, then
+ * any other from the last 24 hours that carries its ticker or names it.
+ * Most important first.
+ */
+function headlinesAbout(c) {
+  const entry = ((briefing() && briefing().companies) || []).find((x) => x.ticker === c.symbol);
+  const cited = new Set(entry ? entry.ids : []);
+  // The company's name without "Inc", "Group" …; short or generic names only by ticker.
+  const word = String(c.name || '').replace(/\b(inc|corp|corporation|group|holdings?|plc|ag|se|sa|nv|co|ltd|limited|company)\b\.?/gi, '').trim();
+  const nameRe = word.length >= 3 && word.toUpperCase() !== c.symbol ? new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i') : null;
+  // The bare ticker only when it is long enough not to be an ordinary word (SAP, NVDA; not ON or A).
+  const base = c.symbol.split('.')[0];
+  const tickerRe = base.length >= 3 ? new RegExp(`\\b${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`) : null;
+  return items()
+    .filter((i) => cited.has(i.id) || (i.tickers || []).includes(c.symbol) || (nameRe && nameRe.test(i.title)) || (tickerRe && tickerRe.test(i.title)))
+    .sort((a, b) => (cited.has(b.id) - cited.has(a.id)) || byHeadlineImportance(a, b))
+    .slice(0, 3);
+}
+
 function featured(c, news) {
   const q = quotes.get(c.symbol);
   const ch = change(c.symbol);
@@ -219,6 +239,10 @@ function featured(c, news) {
     ${chart(c.symbol, 320, 110, true)}
     ${Array.isArray(bars) && bars.length > 1 ? `<div class="co-axis"><span>${esc(t(bars[0].time))}</span><span>${esc(t(bars[bars.length - 1].time))}</span></div>` : ''}
     ${news ? `<p class="co-line"><span class="co-news" aria-hidden="true"></span><span><b>In today’s news:</b> ${esc(news)}</span></p>` : ''}
+    ${(() => {
+      const heads = headlinesAbout(c);
+      return heads.length ? `<div class="co-heads${news ? '' : ' alone'}">${news ? '' : '<div class="eyebrow">Headlines</div>'}${heads.map((i) => `<a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener"><span class="t">${esc(i.title)}</span><span class="m">${hlImp(i)}${esc(i.source)} · ${esc(ago(i.publishedAt))} ↗</span></a>`).join('')}</div>` : '';
+    })()}
   </div>`;
 }
 
