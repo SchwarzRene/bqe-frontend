@@ -1,5 +1,6 @@
-# Cloudflare Pages reads this file at the site root.
-# https://developers.cloudflare.com/pages/configuration/headers/
+# Cloudflare reads this file at the root of the static assets (Workers
+# static assets honour it the same way Pages does).
+# https://developers.cloudflare.com/workers/static-assets/headers/
 
 /*
   # This site loads no third-party frames and should never be framed itself.
@@ -9,6 +10,11 @@
   # No page here needs a camera, a microphone or a location.
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+  # Scripts only from this site (the libraries are vendored in assets/vendor)
+  # plus Cloudflare Turnstile on sign-up; no inline scripts or handlers. Styles
+  # may be inline (style="" attributes throughout). History Map reads
+  # Wikipedia summaries. Change this together with test/security.test.ts.
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://en.wikipedia.org https://de.wikipedia.org; media-src 'self'; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # Fingerprinted these are not, so a long cache would strand visitors on an
 # old build. An hour at the edge with revalidation is the safe middle.
@@ -29,4 +35,8 @@
 # The Trading Journal's scripts and styles are plain files imported by name:
 # a phone must never keep an old copy after a deploy.
 /research/tradingjournal/*
+  Cache-Control: no-cache
+
+# The same for the Stack page's script, which index.html loads by name.
+/research/stack/stack.js
   Cache-Control: no-cache

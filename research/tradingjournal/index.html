@@ -12,8 +12,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="css/style.css">
-  <!-- Pinned to v4: v5 replaced the series.setMarkers API used in charts.js. -->
-  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- Pinned to v4: v5 replaced the series.setMarkers API used in charts.js.
+       From npm, served from this site: no third-party script runs next to the
+       account session (see assets/vendor/README.md). -->
+  <script src="/assets/vendor/lightweight-charts-4.2.3/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
   <header class="topbar">

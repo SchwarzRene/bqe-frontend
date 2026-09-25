@@ -57,5 +57,15 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Local secrets never reach the published site
+        run: |
+          # A developer's .dev.vars must stay off the CDN even when they
+          # deploy from their own machine (build.sh is an allowlist).
+          printf 'GEMINI_API_KEY=ci-canary\n' > .dev.vars
+          ./build.sh
+          test ! -e _site/.dev.vars
+          ! grep -rl ci-canary _site
+          rm .dev.vars
+
       - name: Bundle the Worker without deploying
         run: ./build.sh && npx wrangler deploy --dry-run --outdir dist
