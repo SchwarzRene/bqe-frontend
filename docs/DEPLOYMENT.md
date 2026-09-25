@@ -135,11 +135,20 @@ everywhere. `ceo` is the admin: the account panel links to the admin terminal
 (`/pages/admin.html`), where new sign-ups get their AI access — they have none
 until you grant it — and where contact messages and the audit log are read.
 
-**Optional but recommended — Turnstile on sign-up.** Dashboard → **Turnstile**
-→ **Add widget** (managed, your domain). Put its site key in `wrangler.toml` as
-`TURNSTILE_SITE_KEY` and its secret in `npx wrangler secret put
-TURNSTILE_SECRET`. Until both are set, sign-up is limited only by the per-visitor
-(5 a day) and site-wide (`SIGNUP_HOURLY_LIMIT`, 30 an hour) limits.
+**Turnstile on sign-up.** The widget's site key is in `wrangler.toml`
+(`TURNSTILE_SITE_KEY`, public). Its secret is a Worker secret: dashboard →
+`bqe-frontend` → **Settings → Variables and Secrets → Add → Secret**, name
+`TURNSTILE_SECRET`, value from Turnstile → your widget → **Settings** (or
+`npx wrangler secret put TURNSTILE_SECRET`). Sign-up asks for the check only
+once the secret is set; until then it is limited only by the per-visitor (5 a
+day) and site-wide (`SIGNUP_HOURLY_LIMIT`, 30 an hour) limits.
+
+The Worker verifies every token with siteverify (`worker/auth.ts`,
+`humanEnough`): it must pass, be unused, be solved for the `signup` action,
+and on the host the request came to. If the site is served from more than one
+hostname and tokens should count across them, set `TURNSTILE_HOSTNAMES`
+(comma-separated). The widget's allowed domains in the Turnstile dashboard must
+include every hostname the site is served from.
 
 **4. Fill the data.** Market News fills itself: the first 15-minute run
 after a deploy fetches headlines and builds the calendar and the first

@@ -142,24 +142,40 @@ export async function breached(password: string, fetcher: typeof fetch = fetch):
   }
 }
 
-/** Cloudflare Turnstile, when TURNSTILE_SECRET is set; otherwise every sign-up passes. */
+/** The `action` the sign-up widget is rendered with (assets/js/session.js); siteverify must echo it. */
+export const TURNSTILE_ACTION = "signup";
+
+/**
+ * Cloudflare Turnstile, when TURNSTILE_SECRET is set; otherwise every sign-up
+ * passes. Canonical siteverify: the token is single-use and checked here on
+ * the server, and a pass only counts when it was solved for the sign-up form
+ * (`action`) on one of this site's hostnames — TURNSTILE_HOSTNAMES, or the
+ * host this request came to, which serves the page as well. Fails closed.
+ */
 async function humanEnough(env: Env, token: unknown, request: Request): Promise<boolean> {
   if (!env.TURNSTILE_SECRET) return true;
   if (typeof token !== "string" || !token || token.length > 2048) return false;
+  const hostnames = new Set(
+    (env.TURNSTILE_HOSTNAMES || new URL(request.url).hostname).split(",").map((h) => h.trim().toLowerCase()).filter(Boolean),
+  );
   try {
-    const form = new FormData();
-    form.append("secret", env.TURNSTILE_SECRET);
-    form.append("response", token);
-    const ip = request.headers.get("CF-Connecting-IP");
-    if (ip) form.append("remoteip", ip);
     const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
-      body: form,
-      signal: AbortSignal.timeout(5000),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        secret: env.TURNSTILE_SECRET,
+        response: token,
+        remoteip: request.headers.get("CF-Connecting-IP") ?? "",
+      }),
+      signal: AbortSignal.timeout(10_000),
     });
-    const out = await res.json<{ success?: boolean }>();
-    return out.success === true;
-  } catch {
+    if (!res.ok) throw new Error(`siteverify ${res.status}`);
+    const out = await res.json<{ success?: boolean; action?: string; hostname?: string; "error-codes"?: string[] }>();
+    const ok = out.success === true && out.action === TURNSTILE_ACTION && hostnames.has(String(out.hostname).toLowerCase());
+    if (!ok) console.warn("turnstile refused", JSON.stringify({ codes: out["error-codes"], action: out.action, hostname: out.hostname }));
+    return ok;
+  } catch (err) {
+    console.warn("turnstile unavailable", err instanceof Error ? err.message : String(err));
     return false; // fail closed: an unverifiable sign-up is refused, the visitor can retry
   }
 }
