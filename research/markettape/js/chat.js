@@ -126,7 +126,7 @@ export function setUser(user) {
   if (!user && chat.open) setChat(false);
 }
 
-async function signIn(note) {
+export async function signIn(note) {
   if (!BQE) return null;
   const user = await BQE.openLogin({ note });
   if (user) setUser(user);

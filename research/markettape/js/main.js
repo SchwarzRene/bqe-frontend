@@ -6,6 +6,7 @@ import { addDays, esc, longDate, todayKey, time, tzLabel } from './format.js';
 import { CATS, renderCalendarPage } from './calendar.js';
 import { chat, initChat, renderSuggest, session, setUser } from './chat.js';
 import { globeLabel, mapKeys, renderMap } from './map.js';
+import { analysisOpen, closeAnalysis } from './analysis.js';
 import { companiesCard, handleCompanies, handleCompanySubmit, initCompanies, loadCharts } from './companies.js';
 import { liveCard, nextCard, renderCommodities, renderGeneral, renderStocks } from './pages.js';
 import { allRegions, briefing, data, events, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
@@ -143,10 +144,11 @@ function shiftMonth(key, n) {
 }
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && analysisOpen()) { closeAnalysis(); return; }
   mapKeys(e);
   const cell = e.target.closest && e.target.closest('.cell[data-cal-day]');
   if (cell && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectDay(cell.dataset.calDay); }
-  const row = e.target.closest && e.target.closest('.co-row[data-co-select]');
+  const row = e.target.closest && e.target.closest('.co-row[data-co-select], .co-feature[data-co-select]');
   if (row && e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); row.click(); }
   if (e.key === 'Escape' && state.mapOpen && !chat.open) { state.mapOpen = false; renderChrome(); $('globe').focus(); }
   if (e.key === 'Escape' && state.settingsOpen && !chat.open) { state.settingsOpen = false; renderChrome(); $('settings').focus(); }

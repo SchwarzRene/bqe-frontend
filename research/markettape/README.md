@@ -34,6 +34,8 @@ worker/news/calendar.ts    the calendar, from calendar.json, Yahoo, Nasdaq and B
 worker/news/gemini.ts      the Gemini client
 worker/news/briefing.ts    the briefing: prompt, response schema, validation, retry, storage
 worker/news/rank.ts        the calendar ranking: one Gemini call a day ranks the events of busy days
+worker/news/analyst.ts     the AI analyst in the company window: POST/GET /api/company/analysis
+worker/profile.ts          company fundamentals from Yahoo quoteSummary: GET /api/market/profile
 worker/news/chat.ts        POST /api/chat: context, tools, sources, daily limit
 worker/news/index.ts       GET /api/news, POST /api/news/refresh, and the 15-minute cron
 worker/news/time.ts        New York / local-time helpers, briefing slots
@@ -42,7 +44,8 @@ research/markettape/index.html   the page's markup
 research/markettape/css/         its styles
 research/markettape/js/          its code, as ES modules: main (loading, controls), pages (General,
                                  Stocks, Commodities), calendar (the Calendar page and agendas),
-                                 map (the region picker), chat (Ask AI, sign-in), state, format
+                                 map (the region picker), chat (Ask AI, sign-in), companies (My
+                                 companies), analysis (the company window), state, format
 research/markettape/worldmap.svg the region map, built by docs/tools/market-news-map.py
 assets/images/market-news/        the page's pictures: page banners, commodity groups, story topics,
                                  calendar category icons (PNG masks, tinted per category), quiet
@@ -56,9 +59,12 @@ assets/images/market-news/        the page's pictures: page banners, commodity g
 | `GET /api/news` | everyone | The latest briefing, the last 24 h of headlines, the calendar from a week back to a week ahead (with the headlines grouped under each event), the AI ranking of busy days (`calendarRanks`), the watchlist, and which sources have been silent for a day. Cached 60 s. No model calls. |
 | `POST /api/news/refresh` | signed in | Fetches now and writes a fresh briefing. At most one per 15 minutes for everyone together; `429` otherwise. |
 | `POST /api/chat` | signed in | See [AI chat](#ai-chat). `401` for guests before anything else runs. |
+| `GET /api/market/profile?ticker=` | everyone | Company fundamentals from Yahoo's quoteSummary: valuation, margins, growth, balance sheet, analyst consensus, targets and recommendation trend, earnings history and next date. Cached 6 h. No model calls. |
+| `GET /api/company/analysis?ticker=` | signed in | The stored AI analyst note for a company if one is less than 6 h old, else `{analysis: null}`. No model calls. |
+| `POST /api/company/analysis` | signed in | Writes the note: one Gemini call from a year of prices (returns, volatility, drawdown, averages, volume), the fundamentals, the week's headlines about the company and upcoming events. Counts against the chat's daily limit; stored 6 h per ticker and shared by everyone. |
 | `POST /api/admin/run/{news,calendar,briefing}` | `ADMIN_TOKEN` | Runs a job now: fetch, calendar, or a forced briefing. |
 
-**Which requests can cause a model call.** Only `POST /api/chat` and `POST /api/news/refresh`, both of which answer `401` to anyone not signed in before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's only model calls are the scheduled briefing and the daily calendar ranking.
+**Which requests can cause a model call.** Only `POST /api/chat`, `POST /api/company/analysis` and `POST /api/news/refresh`, both of which answer `401` to anyone not signed in before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's only model calls are the scheduled briefing and the daily calendar ranking.
 
 **One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything, and `newsTick()` gives each run exactly one job, in New York time: the calendar at 05:00 (economic calendar, meetings, fallbacks, plus the daily clean-up: 7-day retention, old contact messages and sessions) and 05:30 (earnings, dated events, rules); the calendar ranking at 05:45; the briefing at the briefing times; the calendar's results at a quarter past each hour on weekdays; and the headline fetch in every other run. Right after a deploy, the first runs build the calendar (two runs), then fetch, then write the first briefing as soon as there are headlines, instead of waiting for their times.
 
@@ -290,6 +296,7 @@ Three pages share one header and filter row. Each page has the same order: overv
 | General | On now; next up, with the AI's line on today; overview and top 5 stories on macro, central banks and world news; "Elsewhere today" links to the top Stocks and Commodities stories; "Coming up": the next days' key events; headlines (tabs): World, Economy, Central banks |
 | Stocks | Stock market overview and top 5 stories; My companies: a live chart per company (1D, 5D, 1M; price and change from `/api/market`, the Trading Journal's Yahoo endpoints, prices every minute and charts every five), a dot on companies in today's briefing, whose line shows under the big chart when the company is picked (tap, not hover, so it works on phones), with links to the 3 most important headlines about it (the ones the briefing cited, then any carrying its ticker or name); the list is editable (add a Yahoo ticker, remove, reset to the watchlist) and kept in the browser, and on the account via `/api/state/news` when signed in; earnings ahead; headlines (tabs): Markets, Companies, Earnings |
 | Commodities | Overview; one card each for Agriculture (soybeans, corn, wheat, coffee), Energy (crude oil, US gas, EU gas) and Metals (gold, silver, copper), each with a line per commodity, headlines and the next report; upcoming commodity reports (USDA, EIA, OPEC+); commodity headlines (tabs per group) |
+| Company window | Opens when a company in My companies is tapped (full screen on phones; the back button closes it). Price chart for 1D–5Y with 50- and 200-day averages, volume and a crosshair; performance (1W … 1Y) and risk (volatility, max drawdown, distance from the high and the averages, volume vs. average); key figures (valuation, margins, growth, balance sheet) with the 52-week range; Wall Street analysts (recommendation trend, price-target range, as theirs); earnings (EPS actual vs. estimate per quarter, revenue and earnings per year, next date); the AI analyst's note (summary, what to expect, catalysts, risks, what to watch, with sources; signed-in users, on request); the headlines about the company; the business description |
 | Calendar | Month or week grid, Google-Calendar style, events colored by category: Central banks, Speeches, Economic data, Earnings, Commodities (toggle each on or off) and filtered by importance (All, Notable+, Key only). A month cell shows the day's 3 most important events and "+n more"; busy days use the AI ranking and are marked "AI". Clicking a day opens the day panel: the AI's line on the day and the full schedule with results, streams and related headlines |
 
 Times are shown in Vienna time (CET/CEST) with a toggle to New York time. The region filter, time zone and calendar filters stay the same when switching pages, and are remembered in the browser (localStorage) when it allows.

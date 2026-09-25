@@ -310,13 +310,13 @@ const EXCHANGE_TZ: Record<string, string> = {
   MC: "Europe/Madrid", L: "Europe/London", SW: "Europe/Zurich", T: "Asia/Tokyo", TW: "Asia/Taipei", HK: "Asia/Hong_Kong",
 };
 
-interface YahooSession {
+export interface YahooSession {
   cookie: string;
   crumb: string;
 }
 
 /** Yahoo's calendar endpoints want a session cookie and a "crumb" minted for it. */
-function yahooSession(fetcher: typeof fetch): () => Promise<YahooSession> {
+export function yahooSession(fetcher: typeof fetch): () => Promise<YahooSession> {
   let session: Promise<YahooSession> | null = null;
   return () =>
     (session ??= (async () => {
