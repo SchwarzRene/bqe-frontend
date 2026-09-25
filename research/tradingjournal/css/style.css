@@ -59,6 +59,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* No double-tap zoom, no font inflation on rotate. */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -177,7 +179,7 @@ label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); 
 .stars button.on { color: var(--accent); }
 
 /* ---------- Tables ---------- */
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; overscroll-behavior-x: contain; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 td { padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -254,8 +256,12 @@ tbody tr.selected td { background: var(--accent-soft); }
 dialog {
   border: 1px solid var(--border); border-radius: 14px; padding: 0;
   background: var(--surface); color: var(--text); box-shadow: 0 24px 64px rgba(0, 0, 0, .3);
-  width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
+  overscroll-behavior: contain;
 }
+/* The page behind an open modal stays put. */
+html:has(dialog[open]) { overflow: hidden; }
 dialog.wide { width: min(820px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgba(10, 12, 16, .5); backdrop-filter: blur(2px); }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
@@ -278,9 +284,52 @@ dialog::backdrop { background: rgba(10, 12, 16, .5); backdrop-filter: blur(2px);
 @keyframes pulse { 50% { opacity: .35; } }
 
 @media (max-width: 600px) {
-  .topbar { padding: 0 16px; gap: 12px; }
+  .topbar {
+    padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
+    height: calc(56px + env(safe-area-inset-top)); gap: 12px;
+    /* A backdrop-filter would make the bar the containing block of the fixed tab bar inside it. */
+    backdrop-filter: none; background: var(--surface);
+  }
   .brand-text { display: none; }
-  main { padding: 16px; }
+  #account { margin-left: auto; }
+  main { padding: 16px max(16px, env(safe-area-inset-right)) calc(80px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+
+  /* The sections move to a tab bar at the bottom, clear of the home indicator. */
+  .nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
+    padding: 6px max(8px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    overflow: visible;
+  }
+  .nav a { text-align: center; padding: 10px 4px; font-size: 13px; }
+  .nav a.active { box-shadow: inset 0 2px 0 var(--accent); }
+  #toast { bottom: calc(76px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100vw - 32px); }
+
+  /* Modals become full-screen sheets whose buttons stay above the browser's toolbar. */
+  dialog, dialog.wide {
+    width: 100%; max-width: 100%; margin: 0; border: 0; border-radius: 0;
+    height: 100vh; max-height: 100vh; height: 100dvh; max-height: 100dvh;
+  }
+  dialog form { min-height: 100%; display: flex; flex-direction: column; }
+  .modal-content { flex: 1; padding: 16px max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left)); }
+  .modal-head { padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left)); }
+  .modal-foot { padding: 12px max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); flex-wrap: wrap; }
+
+  .chart { height: 280px; }
+  .chart.tall { height: 360px; }
+  .toolbar select, .toolbar input { flex: 1 1 140px; }
+}
+
+/* Finger-sized targets on touch screens. */
+@media (pointer: coarse) {
+  .btn { min-height: 40px; }
+  .btn.small { min-height: 36px; padding: 6px 10px; }
+  .chips button { padding: 8px 12px; }
+  .draw-toolbar .tool { width: 38px; height: 36px; }
+  .draw-toolbar .swatch { width: 26px; height: 26px; }
 }
 
 /* Site integration: account chip, save status, guest note. */

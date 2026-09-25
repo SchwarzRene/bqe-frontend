@@ -40,8 +40,11 @@ export function openFormModal({ title, body, submitLabel = "Save", wide = false,
     }
   });
   dialog.showModal();
-  // showModal focuses the header's close button; start on the first field instead.
-  $(".modal-content :is(input:not([type=hidden]), select, textarea)", dialog)?.focus();
+  // showModal focuses the header's close button; start on the first field instead,
+  // except on touch screens, where that would throw the keyboard over the form.
+  if (!matchMedia("(pointer: coarse)").matches) {
+    $(".modal-content :is(input:not([type=hidden]), select, textarea)", dialog)?.focus();
+  }
   onReady?.(form);
   return form;
 }
