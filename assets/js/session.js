@@ -196,7 +196,7 @@
     dialog.bqe-login .err{color:#f87171;min-height:1.3em;margin:8px 0 0;font-size:13px}
     dialog.bqe-login .note{font-size:12px;opacity:.7;margin:10px 0 0}
     dialog.bqe-login .switch{font-size:12px;opacity:.85;margin:6px 0 0}
-    dialog.bqe-login .switch button{padding:0;border:0;background:none;color:#d4a017;text-decoration:underline}`;
+    dialog.bqe-login .switch button{display:inline;min-height:0;padding:0;border:0;background:none;color:#d4a017;text-decoration:underline;font-weight:600}`;
 
   function injectCss() {
     if (document.getElementById("bqe-chip-css")) return;

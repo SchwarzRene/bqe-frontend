@@ -699,10 +699,16 @@ header {
   margin: 0;
 }
 
+/* Every button is a 44px flex block (see "button, .btn"); this one reads
+   as a link inside the sentence. */
 .login-link {
+  display: inline;
+  min-height: 0;
+  margin-left: 0.25em;
   background: none;
   border: 0;
   padding: 0;
+  font-weight: 600;
   color: var(--color-gold);
   font: inherit;
   text-decoration: underline;
