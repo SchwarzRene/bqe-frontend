@@ -150,6 +150,10 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; border-color: var(--accent); }
 textarea { resize: vertical; min-height: 90px; line-height: 1.55; }
 textarea.tall { min-height: 260px; font-family: var(--mono); font-size: 13px; }
+/* iOS Safari auto-zooms into any focused field whose font-size is below 16px. */
+@media (pointer: coarse) {
+  input, select, textarea, textarea.tall { font-size: 16px; }
+}
 label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
 .field { min-width: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
