@@ -97,17 +97,20 @@ export async function fetchAll(
   fetcher: typeof fetch = fetch,
   known: Known = () => false,
   plan: FetchPlan = { part: 0, of: 1, budget: Infinity },
+  now: number = Date.now(),
 ): Promise<{ items: RawItem[]; health: Record<string, SourceHealth> }> {
   const budget = { left: plan.budget };
+  // Older headlines are skipped right after the parse.
+  const since = now - 26 * 3_600_000;
   const all: { id: string; run: () => Promise<{ items: RawItem[]; seen: number }> }[] = [
-    ...cfg.feeds.map((feed) => ({ id: feed.id, run: () => fetchFeed(feed, cfg, fetcher, known, budget) })),
+    ...cfg.feeds.map((feed) => ({ id: feed.id, run: () => fetchFeed(feed, cfg, fetcher, known, budget, since) })),
     ...cfg.watchlist.map((w) => ({
       id: `yahoo:${w.symbol}`,
-      run: () => fetchYahoo(w.symbol, "company", w.region, cfg, fetcher, known, budget),
+      run: () => fetchYahoo(w.symbol, "company", w.region, cfg, fetcher, known, budget, since),
     })),
     ...cfg.commodities.map((c) => ({
       id: `yahoo:${c.symbol}`,
-      run: () => fetchYahoo(c.symbol, "commodities", "global", cfg, fetcher, known, budget),
+      run: () => fetchYahoo(c.symbol, "commodities", "global", cfg, fetcher, known, budget, since),
     })),
   ];
   const jobs = all.filter((_, i) => i % plan.of === plan.part);
@@ -134,12 +137,11 @@ async function get(url: string, fetcher: typeof fetch, accept: string): Promise<
   return res.text();
 }
 
-async function fetchFeed(feed: Feed, cfg: Config, fetcher: typeof fetch, known: Known, budget: { left: number }): Promise<{ items: RawItem[]; seen: number }> {
+async function fetchFeed(feed: Feed, cfg: Config, fetcher: typeof fetch, known: Known, budget: { left: number }, since: number): Promise<{ items: RawItem[]; seen: number }> {
   const xml = await get(feed.url, fetcher, "application/rss+xml, application/atom+xml, application/xml, text/xml");
   const entries = parseFeed(xml);
   if (!entries.length) throw new Error("no items in the feed");
   const out: RawItem[] = [];
-  const since = Date.now() - 26 * 3_600_000;
   for (const e of entries) {
     // Old and already-stored headlines cost nothing beyond the parse.
     if (known(e.title) || Date.parse(e.date) < since || budget.left <= 0) continue;
@@ -162,6 +164,7 @@ async function fetchYahoo(
   fetcher: typeof fetch,
   known: Known,
   budget: { left: number },
+  since: number,
 ): Promise<{ items: RawItem[]; seen: number }> {
   const url = `${YAHOO_SEARCH}?${new URLSearchParams({ q: symbol, newsCount: "10", quotesCount: "0" })}`;
   const body = JSON.parse(await get(url, fetcher, "application/json"));
@@ -169,7 +172,7 @@ async function fetchYahoo(
   const out: RawItem[] = [];
   for (const n of news) {
     const when = Number(n?.providerPublishTime);
-    if (known(cleanText(String(n?.title ?? ""))) || when * 1000 < Date.now() - 26 * 3_600_000 || budget.left <= 0) continue;
+    if (known(cleanText(String(n?.title ?? ""))) || when * 1000 < since || budget.left <= 0) continue;
     budget.left--;
     const item = toItem(
       {

@@ -200,7 +200,7 @@ export async function ingest(
   }));
   const knownTitles = new Set(known.map((k) => k.title.toLowerCase()));
 
-  const { items, health } = await fetchAll(cfg, fetcher, (title) => knownTitles.has(title.toLowerCase()), plan);
+  const { items, health } = await fetchAll(cfg, fetcher, (title) => knownTitles.has(title.toLowerCase()), plan, now);
   const cutoff = now - DAY_MS;
   const eventWords = await todayEventWords(env, now);
   const fresh = items

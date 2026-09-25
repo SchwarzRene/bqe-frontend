@@ -607,3 +607,35 @@ export function planTradeChart(trade, interval, now = Date.now() / 1000) {
     fallback: INTERVAL_SECONDS[interval] < DAY ? chartWindow(entryTs, exitTs, now, interval, 5 * DAY) : null,
   };
 }
+
+// ─── price at a moment (for trades entered by time only) ────────────────────
+
+/** Which candles hold the price at `ts`: the finest interval Yahoo still serves, from a few days before. */
+export function planPriceAt(ts, now = Date.now() / 1000) {
+  if (ts > now + 60) throw new ValidationError("that time is in the future");
+  const interval = Object.keys(INTERVAL_SECONDS).find((i) => HISTORY_LIMIT[i] == null || now - ts <= HISTORY_LIMIT[i]);
+  const step = INTERVAL_SECONDS[interval];
+  const end = Math.min(ts + step, now);
+  return {
+    interval,
+    window: [ts - 10 * step, end],
+    // Market shut at that time: reach back to the last session before a weekend or holiday.
+    fallback: [ts - Math.max(5 * DAY, 10 * step), end],
+  };
+}
+
+/**
+ * The price at `ts` from candles of `interval`: the open of the candle that
+ * holds it, or the close of the last candle before it when the market was
+ * shut then. Null if no candle starts at or before `ts`.
+ */
+export function priceAt(candles, ts, interval) {
+  const step = INTERVAL_SECONDS[interval];
+  let last = null;
+  for (const c of candles) {
+    if (c.time > ts) break;
+    last = c;
+  }
+  if (!last) return null;
+  return ts < last.time + step ? { price: last.open, time: last.time } : { price: last.close, time: last.time + step };
+}

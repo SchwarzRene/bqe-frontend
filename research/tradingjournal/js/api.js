@@ -141,6 +141,19 @@ export const api = {
     return { interval: plan.interval, available_intervals: plan.available, candles };
   },
 
+  /** The symbol's price at a local wall-clock time ("2024-05-01T14:32"), from its candles. */
+  priceAt: async (symbolId, localTime) => {
+    const symbol = S.getSymbol(db, symbolId);
+    const ts = S.localEpoch(localTime);
+    const plan = S.planPriceAt(ts);
+    const fetchWindow = ([start, end]) =>
+      market("candles", { ticker: symbol.ticker, interval: plan.interval, period1: Math.floor(start), period2: Math.ceil(end) }, 300_000);
+    let hit = S.priceAt((await fetchWindow(plan.window)).candles, ts, plan.interval);
+    if (!hit) hit = S.priceAt((await fetchWindow(plan.fallback)).candles, ts, plan.interval);
+    if (!hit) throw new Error(`No ${symbol.name} price found for ${localTime.replace("T", " ")} — enter it by hand.`);
+    return { ...hit, interval: plan.interval };
+  },
+
   stats: async (filters) => {
     const f = filters || {};
     return S.computeStats(await withMetrics(S.listTrades(db, { date_from: f.date_from, date_to: f.date_to })));
