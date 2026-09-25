@@ -431,7 +431,9 @@ calendar filters, the Trading Journal's light/dark theme and the History
 Map's language: one `prefs` document per user with a section per app
 (`PATCH /api/state/prefs`, merged rather than versioned, via
 `BQE.prefs.sync/save` in `session.js`). Each app also keeps them in
-`localStorage`, so guests keep theirs in the browser.
+`localStorage`, so guests keep theirs in the browser. Market News's Ask
+AI conversations are saved to the account too (`GET/DELETE /api/chats`),
+with a history to reopen or delete them.
 
 Anyone can create an account (Login → *Create one*): a username (3–32
 letters, digits, `. _ -`), a password of at least 8 characters and,

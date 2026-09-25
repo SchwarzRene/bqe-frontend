@@ -9,6 +9,7 @@ import type { Env } from "./env";
 import { json } from "./http";
 import { handleMarket } from "./market";
 import { handleAnalysis, handleChat, handleNews, newsTick } from "./news";
+import { handleConversations } from "./news/conversations";
 import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
 import { ingest } from "./news/store";
@@ -45,6 +46,8 @@ export default {
       if (m) return handleMarket(request, ctx, m[1]);
 
       if (path === "/api/chat") return handleChat(request, env);
+      m = path.match(/^\/api\/chats(?:\/([^/]+))?$/);
+      if (m) return handleConversations(request, env, m[1] ?? null);
       if (path === "/api/company/analysis") return handleAnalysis(request, env);
 
       m = path.match(/^\/api\/news(?:\/([a-z]+))?$/);

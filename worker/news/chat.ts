@@ -1,14 +1,16 @@
 // POST /api/chat — questions about today, answered by Gemini from what the
 // app has collected: the latest briefing, the last 24 h of headlines and the
 // calendar are in the system prompt; older headlines, event results and
-// prices are tools. Signed-in users with AI access only, with a daily limit per user. The
-// conversation lives in the browser tab; nothing of it is stored here.
+// prices are tools. Signed-in users with AI access only, with a daily limit
+// per user. Each question and its answer are saved to the user's account
+// (conversations.ts), so the chat's history follows them to any device.
 
 import { aiDenied, currentUser } from "../auth";
 import type { Env } from "../env";
 import { crossSite, json, readJson, utcDay } from "../http";
 import { latestBriefing, type Briefing } from "./briefing";
 import { type CalendarEvent, readCalendar } from "./calendar";
+import { isConversationId, saveTurn } from "./conversations";
 import { GeminiError, generate, model, textOf } from "./gemini";
 import { eventWordsFor, type Item, recentItems, toItem } from "./store";
 import { iso } from "./time";
@@ -52,7 +54,15 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
   };
   try {
     const out = await answer(env, messages, view);
-    return json({ ...out, remaining: Math.max(0, limit - count) });
+    // Saved to the account; a failed save still returns the answer.
+    let conversationId: string | null = null;
+    try {
+      const asked = isConversationId(body?.conversationId) ? body.conversationId : null;
+      conversationId = await saveTurn(env, user.id, asked, messages[messages.length - 1].text, out.answer, out.sources);
+    } catch (err) {
+      console.warn("chat not saved", err instanceof Error ? err.message : String(err));
+    }
+    return json({ ...out, conversationId, remaining: Math.max(0, limit - count) });
   } catch (err) {
     console.warn("news chat failed", err instanceof Error ? err.stack || err.message : String(err));
     // A question that got no answer does not count against the daily limit.

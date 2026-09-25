@@ -415,7 +415,10 @@ if (window.innerWidth <= 800) {
 applyUILang();
 showYear(START_YEAR);
 
-// Angemeldet (irgendwo auf der Seite): die im Konto gespeicherte Sprache gilt.
+// Angemeldet: die im Konto gespeicherte Sprache gilt.
+if (window.BQE && window.BQE.mountAccountChip) {
+  window.BQE.mountAccountChip(document.getElementById('account'), { note: 'Your language setting is saved to your account.' });
+}
 if (window.BQE && window.BQE.prefs) {
   window.BQE.prefs.sync('historymap', { lang: LANG }, (saved) => {
     if ((saved.lang === 'de' || saved.lang === 'en') && saved.lang !== LANG) {

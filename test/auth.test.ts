@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import worker from "../worker/index";
+import { MAX_CONVERSATIONS, saveTurn } from "../worker/news/conversations";
 import { d1 } from "./d1";
 
 const ORIGIN = "https://site";
@@ -214,5 +215,57 @@ describe("display preferences", () => {
     expect((await call(env, "PATCH", "/api/state/prefs", { news: [1, 2] }, a.cookie)).status).toBe(400);
     expect((await call(env, "PATCH", "/api/state/prefs", { news: { x: "y".repeat(5000) } }, a.cookie)).status).toBe(413);
     expect((await call(env, "PUT", "/api/state/prefs", { version: 0, data: {} }, a.cookie)).status).toBe(405);
+  });
+});
+
+describe("saved AI chats", () => {
+  const idOf = (env: any, name: string) => env.DB.raw.prepare("SELECT id FROM users WHERE username = ?").get(name).id;
+
+  it("continues a conversation, lists, opens and deletes them", async () => {
+    const env = envWith();
+    const { cookie } = await signup(env, "alice");
+    const uid = idOf(env, "alice");
+    const first = await saveTurn(env, uid, null, "What happened today?", "Markets rose.", [{ label: "Wire", url: "https://w" }]);
+    expect(await saveTurn(env, uid, first, "Why?", "Rates fell.", [])).toBe(first);
+    const second = await saveTurn(env, uid, null, "Oil?", "Flat.", []);
+
+    const list = await call(env, "GET", "/api/chats", undefined, cookie);
+    expect(list.data.conversations.map((c: any) => [c.id, c.title, c.messages])).toEqual([
+      [second, "Oil?", 2],
+      [first, "What happened today?", 4],
+    ]);
+    const one = await call(env, "GET", `/api/chats/${first}`, undefined, cookie);
+    expect(one.data.messages.map((m: any) => m.text)).toEqual(["What happened today?", "Markets rose.", "Why?", "Rates fell."]);
+
+    expect((await call(env, "DELETE", `/api/chats/${first}`, undefined, cookie)).data.deleted).toBe(1);
+    expect((await call(env, "GET", `/api/chats/${first}`, undefined, cookie)).status).toBe(404);
+    expect((await call(env, "DELETE", "/api/chats", undefined, cookie)).data.deleted).toBe(1);
+    expect((await call(env, "GET", "/api/chats", undefined, cookie)).data.conversations).toEqual([]);
+  });
+
+  it("keeps each user's chats private", async () => {
+    const env = envWith();
+    const a = await signup(env, "alice");
+    const b = await signup(env, "bob");
+    const mine = await saveTurn(env, idOf(env, "alice"), null, "Secret?", "Yes.", []);
+    expect((await call(env, "GET", `/api/chats/${mine}`, undefined, b.cookie)).status).toBe(404);
+    expect((await call(env, "DELETE", `/api/chats/${mine}`, undefined, b.cookie)).data.deleted).toBe(0);
+    // Naming someone else's conversation starts a new one instead of writing into theirs.
+    const bobs = await saveTurn(env, idOf(env, "bob"), mine, "Hi", "Hello.", []);
+    expect(bobs).not.toBe(mine);
+    expect((await call(env, "GET", `/api/chats/${mine}`, undefined, a.cookie)).data.messages).toHaveLength(2);
+    expect((await call(env, "GET", "/api/chats")).status).toBe(401);
+    expect((await call(env, "GET", "/api/chats/not-an-id", undefined, a.cookie)).status).toBe(404);
+  });
+
+  it("keeps the newest 50 per user", async () => {
+    const env = envWith();
+    const { cookie } = await signup(env, "alice");
+    const uid = idOf(env, "alice");
+    for (let i = 0; i < MAX_CONVERSATIONS + 3; i++) await saveTurn(env, uid, null, `Q${i}`, "A", []);
+    const list = (await call(env, "GET", "/api/chats", undefined, cookie)).data.conversations;
+    expect(list).toHaveLength(MAX_CONVERSATIONS);
+    expect(list[0].title).toBe(`Q${MAX_CONVERSATIONS + 2}`);
+    expect(list.some((c: any) => c.title === "Q0")).toBe(false);
   });
 });

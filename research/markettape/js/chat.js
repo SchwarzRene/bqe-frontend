@@ -1,6 +1,9 @@
 // Ask AI and the sign-in it needs. AI features (the chat, and a fresh
 // briefing on Refresh) are for signed-in users an admin has granted AI
-// access (user.ai); the Worker refuses both otherwise, before any model call. Everyone can read the scheduled
+// access (user.ai); the Worker refuses both otherwise, before any model call.
+// Every question and answer is saved to the account by the Worker, so the
+// chat reopens the latest conversation and lists the earlier ones (History)
+// on any device. Everyone can read the scheduled
 // briefing, the calendar and the headlines.
 
 import { esc, safeUrl } from './format.js';
@@ -14,7 +17,13 @@ const SUGGEST = {
   calendar: ['What are the key events this week?', 'What is expected from the next Fed decision?', 'Which data came in above consensus?'],
 };
 
-export const chat = { open: false, messages: [], remaining: null };
+export const chat = {
+  open: false, messages: [], remaining: null,
+  conversationId: null, // the saved conversation these messages belong to
+  list: null, // the saved conversations, newest first; null until loaded
+  showHistory: false,
+};
+const MAX_SENT = 12; // the Worker reads only the last 12 turns anyway
 export const session = { user: null };
 
 const $ = (id) => document.getElementById(id);
@@ -39,12 +48,32 @@ export function renderSuggest() {
     (chat.remaining != null ? ` ${chat.remaining} question${chat.remaining === 1 ? '' : 's'} left today.` : '');
 }
 
+const when = (iso) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+
+function renderHistory() {
+  const list = chat.list;
+  logEl.innerHTML = `<div class="chat-hist">
+    <div class="chat-hist-h"><strong>Your chats</strong>${list && list.length ? '<button type="button" class="link" data-chat-clear>Delete all</button>' : ''}</div>
+    ${list === null ? '<p class="meta">Loading…</p>' : list.length ? `<ul>${list.map((c) => `
+      <li class="${c.id === chat.conversationId ? 'on' : ''}">
+        <button type="button" class="chat-hist-open" data-chat-open="${esc(c.id)}"><span>${esc(c.title)}</span><small>${esc(when(c.updatedAt))} · ${c.messages / 2 | 0} question${c.messages === 2 ? '' : 's'}</small></button>
+        <button type="button" class="chat-hist-del" data-chat-del="${esc(c.id)}" aria-label="Delete ${esc(c.title)}">×</button>
+      </li>`).join('')}</ul>` : '<p class="meta">No saved chats yet. Your questions and the answers are saved here as you ask.</p>'}
+  </div>`;
+}
+
 function renderLog() {
   inputEl.disabled = !hasAi();
+  $('chat-history').hidden = !hasAi();
+  $('chat-new').hidden = !hasAi();
+  $('chat-history').setAttribute('aria-pressed', String(chat.showHistory));
+  $('chat-form').hidden = chat.showHistory;
+  $('chat-suggest').hidden = chat.showHistory;
   if (!hasAi()) {
     logEl.innerHTML = `<div class="msg bot err"><p>${esc(NO_AI)}</p></div>`;
     return;
   }
+  if (chat.showHistory) return renderHistory();
   logEl.innerHTML = chat.messages.length ? chat.messages.map((m) => {
     if (m.role === 'user') return `<div class="msg user">${esc(m.text)}</div>`;
     if (m.pending) return '<div class="msg bot pending">Reading today’s headlines…</div>';
@@ -61,7 +90,8 @@ async function answer() {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
     body: JSON.stringify({
-      messages: chat.messages.filter((m) => !m.pending && !m.error).map((m) => ({ role: m.role, content: m.text })),
+      messages: chat.messages.filter((m) => !m.pending && !m.error).slice(-MAX_SENT).map((m) => ({ role: m.role, content: m.text })),
+      conversationId: chat.conversationId,
       page: state.page, region: regionParam(), tz: state.tz,
     }),
   });
@@ -70,7 +100,79 @@ async function answer() {
   if (res.status === 403 && data.code === 'ai_access') { setUser({ ...session.user, ai: false }); throw new Error(NO_AI); }
   if (typeof data.remaining === 'number') chat.remaining = data.remaining;
   if (!res.ok) throw new Error(data.error || 'The answer could not be loaded (status ' + res.status + ').');
+  if (data.conversationId) {
+    chat.conversationId = data.conversationId;
+    chat.list = null; // listed again, with this one on top, next time History opens
+  }
   return { text: data.answer, sources: data.sources || [] };
+}
+
+// --------------------------------------------------------------------------
+// saved conversations
+// --------------------------------------------------------------------------
+
+async function api(method, path) {
+  const res = await fetch(path, { method, credentials: 'same-origin' });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) setUser(null);
+  if (!res.ok) throw new Error(data.error || 'status ' + res.status);
+  return data;
+}
+
+async function loadList() {
+  chat.list = (await api('GET', '/api/chats')).conversations;
+  return chat.list;
+}
+
+async function openConversation(id) {
+  const c = await api('GET', `/api/chats/${encodeURIComponent(id)}`);
+  chat.conversationId = c.id;
+  chat.messages = c.messages.map((m) => ({ role: m.role, text: m.text, sources: m.sources || [] }));
+  chat.showHistory = false;
+  renderLog(); renderSuggest();
+}
+
+function newChat() {
+  chat.messages = [];
+  chat.conversationId = null;
+  chat.showHistory = false;
+  renderLog(); renderSuggest();
+  if (!touch.matches) inputEl.focus();
+}
+
+/** First time the chat opens: pick up the latest conversation where it was left. */
+let resumed = false;
+async function resume() {
+  if (resumed || !hasAi()) return;
+  resumed = true;
+  try {
+    const list = await loadList();
+    if (list.length && !chat.messages.length) await openConversation(list[0].id);
+  } catch { resumed = false; }
+}
+
+async function historyClick(e) {
+  const open = e.target.closest('[data-chat-open]');
+  const del = e.target.closest('[data-chat-del]');
+  const clear = e.target.closest('[data-chat-clear]');
+  try {
+    if (open) await openConversation(open.dataset.chatOpen);
+    else if (del) {
+      await api('DELETE', `/api/chats/${encodeURIComponent(del.dataset.chatDel)}`);
+      chat.list = chat.list.filter((c) => c.id !== del.dataset.chatDel);
+      if (chat.conversationId === del.dataset.chatDel) { chat.conversationId = null; chat.messages = []; }
+      renderLog();
+    } else if (clear) {
+      if (!confirm('Delete all your saved chats? This can\'t be undone.')) return;
+      await api('DELETE', '/api/chats');
+      chat.list = [];
+      chat.conversationId = null;
+      chat.messages = [];
+      renderLog();
+    }
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 async function send(question) {
@@ -120,10 +222,15 @@ function setChat(open) {
   document.body.classList.toggle('chat-open', open);
   fitChat();
   // On touch screens the keyboard would hide the suggestions: no autofocus there.
-  if (open) { renderSuggest(); renderLog(); if (!touch.matches) inputEl.focus(); } else { askBtn.focus(); }
+  if (open) { renderSuggest(); renderLog(); resume(); if (!touch.matches) inputEl.focus(); } else { askBtn.focus(); }
 }
 
 export function setUser(user) {
+  // Another account (or none): its chats are not this one's.
+  if ((user && user.username) !== (session.user && session.user.username)) {
+    Object.assign(chat, { messages: [], conversationId: null, list: null, showHistory: false, remaining: null });
+    resumed = false;
+  }
   session.user = user;
   const ai = hasAi();
   // "guest" draws the lock on Ask AI: shown to anyone who can't use it.
@@ -149,7 +256,7 @@ export async function signIn(note) {
 export function initChat() {
   accountEl.addEventListener('click', async (e) => {
     if (!e.target.closest('button')) return;
-    if (session.user) { await BQE.logout(); setUser(null); chat.messages = []; chat.remaining = null; }
+    if (session.user) { await BQE.logout(); setUser(null); }
     else await signIn('Signing in saves your work. Ask AI and fresh briefings need AI access, which an admin grants.');
   });
   askBtn.addEventListener('click', async () => {
@@ -157,6 +264,16 @@ export function initChat() {
     setChat(!chat.open);
   });
   $('chat-close').addEventListener('click', () => setChat(false));
+  $('chat-new').addEventListener('click', newChat);
+  $('chat-history').addEventListener('click', async () => {
+    chat.showHistory = !chat.showHistory;
+    renderLog();
+    if (chat.showHistory && chat.list === null) {
+      try { await loadList(); } catch (err) { chat.list = []; alert(err.message); }
+      renderLog();
+    }
+  });
+  logEl.addEventListener('click', (e) => { if (chat.showHistory) historyClick(e); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && chat.open) setChat(false); });
   $('chat-form').addEventListener('submit', (e) => {
     e.preventDefault();

@@ -73,9 +73,17 @@
       <h2 id="chat-h">Ask about today</h2>
       <p id="chat-context">Knows today's headlines, calendar and results</p>
     </div>
+    <div class="chat-tools">
+    <button type="button" class="icon-btn" id="chat-history" aria-label="Your saved chats" aria-pressed="false" title="Your saved chats" hidden>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
+    </button>
+    <button type="button" class="icon-btn" id="chat-new" aria-label="New chat" title="New chat" hidden>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
     <button type="button" class="icon-btn" id="chat-close" aria-label="Close chat">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
+    </div>
   </div>
   <div class="chat-log" id="chat-log" aria-live="polite"></div>
   <div class="suggest" id="chat-suggest"></div>

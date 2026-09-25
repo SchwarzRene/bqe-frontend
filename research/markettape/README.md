@@ -222,6 +222,14 @@ Gemini (`GEMINI_MODEL`, `gemini-3.5-flash-lite` today, with the `GEMINI_FALLBACK
 
 An "Ask AI" button on every page opens a chat panel for signed-in users; guests see it locked and are asked to sign in. The model answers questions about current events from the same data the app collects, so it knows today's headlines, calendar and results, and it cites the headlines it used.
 
+Conversations are saved to the account (`chat_conversations`, `worker/news/conversations.ts`): after each answer the Worker appends the question and the answer to the conversation the page names, or starts a new one. Opening the chat picks up the latest conversation; the history button lists the others (reopen, delete one, delete all) and + starts a new one — on any device. At most 50 per user, oldest dropped first; they go when the user deletes them or the account is deleted.
+
+| Route | Who | |
+|---|---|---|
+| `GET /api/chats` | signed in | The user's conversations, newest first, without messages |
+| `GET /api/chats/:id` | signed in | One conversation with its messages |
+| `DELETE /api/chats[/:id]` | signed in | Delete one, or all |
+
 **What the model knows**
 
 The Worker builds the context for each question; the model has no other knowledge of today beyond this and, optionally, web search.

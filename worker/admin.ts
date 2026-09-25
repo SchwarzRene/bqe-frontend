@@ -58,6 +58,7 @@ export async function handleAdminUsers(request: Request, env: Env, id: number | 
       env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM user_state WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM news_chat_usage WHERE user_id = ?").bind(target.id),
+      env.DB.prepare("DELETE FROM chat_conversations WHERE user_id = ?").bind(target.id),
       env.DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id),
     ]);
     console.log(`admin ${admin.username} deleted user ${target.username}`);

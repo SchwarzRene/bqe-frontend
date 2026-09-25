@@ -8,6 +8,7 @@ import { buildBriefing, latestBriefing } from "../worker/news/briefing";
 import { CALENDAR, type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
 import type { Config } from "../worker/news/feeds";
 import { handleChat, handleNews, newsTick } from "../worker/news/index";
+import { handleConversations } from "../worker/news/conversations";
 import { handleAnalysis, priceStats } from "../worker/news/analyst";
 import { toProfile } from "../worker/profile";
 import { rankCalendar } from "../worker/news/rank";
@@ -367,6 +368,18 @@ describe("Market News flow", () => {
     expect(body.answer).toBe("Nvidia is up 10% over five days.");
     expect(body.sources).toEqual([{ label: "Wire", url: "https://wire.example/nvda", id: expect.any(String) }]);
     expect(body.remaining).toBe(0);
+
+    // The question and the answer are saved to the account.
+    expect(body.conversationId).toMatch(/^[0-9a-f]{32}$/);
+    const saved: any = await (await handleConversations(new Request(`https://site/api/chats/${body.conversationId}`, {
+      headers: { Cookie: "bqe_session=tok" },
+    }), env, body.conversationId)).json();
+    expect(saved.title).toBe("How is Nvidia doing?");
+    expect(saved.messages.map((m: any) => [m.role, m.text])).toEqual([
+      ["user", "How is Nvidia doing?"],
+      ["assistant", "Nvidia is up 10% over five days."],
+    ]);
+    expect(saved.messages[1].sources).toEqual([{ label: "Wire", url: "https://wire.example/nvda" }]);
 
     const again = await ask();
     expect(again.status).toBe(429);
