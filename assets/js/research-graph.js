@@ -254,10 +254,10 @@
       stack: "Leaflet · GeoJSON", href: "/research/historymap/"
     },
     {
-      id: "markettape", tag: "Interactive", title: "Market Tape",
-      desc: "A broadcast-style rundown for Fed events and earnings calls, assembled by a search-grounded model under a strict JSON contract and rendered with live countdowns.",
-      short: "Live broadcast rundown for Fed events and earnings calls.",
-      stack: "React · Gemini API", href: "/research/markettape/"
+      id: "markettape", tag: "Interactive", title: "Market News",
+      desc: "A daily briefing on markets, stocks and commodities across the US, Europe, Asia and Russia: free headlines ranked and summarised by a model, an on-now calendar of Fed, ECB, data and earnings events, and a chat that answers from the collected headlines.",
+      short: "AI-ranked market briefing with an on-now event calendar.",
+      stack: "RSS · Claude API", href: "/research/markettape/"
     },
     {
       id: "stack", tag: "Interactive", title: "Stack",

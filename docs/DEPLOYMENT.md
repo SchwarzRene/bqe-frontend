@@ -37,7 +37,7 @@ Paid ($5/month)**, which allows 30 s of CPU per invocation (raise
 retried 20 minutes later. The other jobs wait on the network, which
 costs no CPU time, and fit the free plan comfortably.
 
-Gemini's free tier covers Market Tape: 8 grounded requests per run, 2 runs a
+Gemini's free tier covers the Market News calendar job (formerly Market Tape): 8 grounded requests per run, 2 runs a
 day.
 
 ## The files that make it work
@@ -98,7 +98,7 @@ npx wrangler secret put GEMINI_API_KEY   # free key: https://aistudio.google.com
 npx wrangler secret put ADMIN_TOKEN      # any long random string: openssl rand -hex 32
 ```
 
-`GEMINI_API_KEY` is what Market Tape uses; the Worker reads it as
+`GEMINI_API_KEY` is what the Market News calendar job uses; the Worker reads it as
 `env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
 `POST /api/admin/run/{stack,markettape}`, which runs a job on demand. For
 `npm run dev` locally, put the same names in a `.dev.vars` file
@@ -109,8 +109,8 @@ npx wrangler secret put ADMIN_TOKEN      # any long random string: openssl rand 
 public. Sign in on the site → click `ceo` in the header → **Change
 password**.
 
-**4. Fill the data.** Market Tape fills itself: the first visit to
-`/research/markettape/` after a deploy builds the rundown if there is none
+**4. Fill the data.** The Market News calendar fills itself: the first request for
+`/research/markettape/data/schedule.json` after a deploy builds the rundown if there is none
 (about a minute). Stack prices wait for the evening run, or run them now:
 
 ```bash

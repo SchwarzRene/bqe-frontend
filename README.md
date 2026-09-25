@@ -125,8 +125,8 @@ handful of things `build.sh` leaves out.
     ├── marketjepa/         Self-supervised world model
     │   └── index.html
     ├── tradingjournal/     Trade log, chart markup and journal (own README)
-    ├── markettape.html     Write-up for the Market Tape app
-    ├── markettape/         The Market Tape app itself (own README)
+    ├── markettape.html     Write-up for Market News (replaced Market Tape)
+    ├── markettape/         Market News mockup + calendar data (own README)
     ├── historymap/         Interactive history atlas (own README)
     └── stack/              S&P 500 chart feed (own README)
         ├── index.html
@@ -138,7 +138,7 @@ The fetchers and the live-quotes service are in `worker/`; the Python versions
 in [`bqe-backend`](https://github.com/SchwarzRene/bqe-backend) are retired.
 
 **Why the research projects are all folders.** `assets/js/research-graph.js`
-lists BQE-DeComp, MarketJEPA, HistoryMap, Market Tape and Stack as five equal
+lists BQE-DeComp, MarketJEPA, HistoryMap, Market News and Stack as five equal
 projects — the graph, the list and the search treat them the same way, and the
 layout on disk says what the site already said.
 
@@ -435,8 +435,8 @@ shows who is signed in. A new app also needs its name added to `APPS` in
 | Cron (UTC) | Job | Writes to D1 |
 |---|---|---|
 | every 3 min, 22:00–23:59, Mon–Fri | Stack prices: constituents from Wikipedia, bars from Yahoo, 20 tickers a run | `tickers`, `series` |
-| 12:10 and 22:10, Mon–Fri | Market Tape: Fed calendar and earnings via Gemini + Google Search | `documents` |
-| with the Market Tape runs | Deletes contact messages 30 days after they were answered | `contact_messages` |
+| 12:10 and 22:10, Mon–Fri | Market News calendar (the former Market Tape job): Fed events and earnings via Gemini + Google Search | `documents` |
+| with the calendar runs | Deletes contact messages 30 days after they were answered | `contact_messages` |
 
 The Stack job is batched because one Worker invocation may make only a
 limited number of outbound requests: each run takes the next tickers not yet
@@ -474,7 +474,7 @@ npm run dev                                  # → http://localhost:8787
 curl "localhost:8787/__scheduled?cron=*/3+22-23+*+*+1-5"   # fire the Stack job
 ```
 
-For Market Tape locally, put `GEMINI_API_KEY=...` in `.dev.vars` (git-ignored).
+For the Market News calendar job locally, put `GEMINI_API_KEY=...` in `.dev.vars` (git-ignored).
 
 ## Deploying
 
