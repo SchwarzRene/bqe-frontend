@@ -151,11 +151,49 @@ section.research-explorer {
   background: linear-gradient(180deg, #070b15 0%, #0a1220 55%, #050810 100%);
 }
 
-.graph-canvas {
+/* One soft cloud and one category name per cluster, placed by
+   research-graph.js with transform and opacity only, so moving them never
+   repaints anything. */
+.graph-clouds {
   position: absolute;
   inset: 0;
   z-index: 0;
-  display: block;
+  pointer-events: none;
+}
+/* Drawn at a fixed size and scaled to the cluster's radius: 256px is
+   CLOUD_BASE_RADIUS x 2 in research-graph.js, and 0.15 its CLOUD_FULL_ALPHA. */
+.graph-cloud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 256px;
+  height: 256px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    rgba(var(--cloud-rgb), 0.15) 0%,
+    rgba(var(--cloud-rgb), 0.06) 60%,
+    rgba(var(--cloud-rgb), 0) 100%
+  );
+  opacity: 0;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+.graph-cloud-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+  /* centred on the point it is placed at, with its baseline about on it;
+     the independent translate property composes with the script's transform */
+  translate: -50% -70%;
+  opacity: 0;
+  will-change: transform, opacity;
 }
 
 .graph-hint {
@@ -329,18 +367,25 @@ section.research-explorer {
   color: var(--color-white);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  /* moved by script every frame; its own layer keeps that a composite
+     rather than a repaint of the graph */
+  will-change: transform;
   /* without this, touch browsers wait ~300ms after the tap to see if
      it's the start of a double-tap-to-zoom gesture before firing click -
      that wait is exactly the "small but annoying" delay before the pop. */
   touch-action: manipulation;
 }
 
-/* .node-dot owns position, hover scale and the outer glow; the asteroid's
-   own irregular silhouette is drawn as an SVG one level in, so the glow
-   (a drop-shadow, which follows alpha rather than a bounding box) traces
-   the rock's actual outline instead of a phantom circle around it. The
-   slow tumble lives on a further nested layer so it never fights with
-   the hover-scale transform, which also animates "transform". */
+/* .node-dot owns position, hover scale and the hover glow; the asteroid's
+   own irregular silhouette is an SVG image one level in, so the glow (a
+   drop-shadow, which follows alpha rather than a bounding box) traces the
+   rock's actual outline instead of a phantom circle around it. The slow
+   tumble lives on a further nested layer so it never fights with the
+   hover-scale transform, which also animates "transform".
+
+   At rest the dot has no filter: the soft shadow under the rock is baked
+   into the image. A filter here would sit on top of the spinning layer and
+   be recomputed on every frame of the spin. */
 .node-dot {
   position: absolute;
   top: 0;
@@ -348,18 +393,35 @@ section.research-explorer {
   width: 40px;
   height: 40px;
   transform: translate(-50%, -50%);
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
   transition: transform 0.25s ease, filter 0.25s ease;
 }
 .asteroid-spin {
+  position: relative;
   display: block;
   width: 100%;
   height: 100%;
   animation: asteroid-spin var(--spin-duration, 60s) linear infinite;
   animation-direction: var(--spin-dir, normal);
   transform-origin: 50% 50%;
+  /* the rock is rasterised once; the spin only rotates that bitmap */
+  will-change: transform;
 }
-.asteroid-spin svg { display: block; width: 100%; height: 100%; overflow: visible; }
+/* The image's viewBox (-13..53) is wider than the 46-unit box the rock was
+   laid out in (-3..43), so it is drawn 66/46 the size of the dot and pulled
+   back by 10/46 of it: the rock lands exactly where it would at 40px, with
+   room around it for the stretched ones and the shadow. Keep in step with
+   ASTEROID_VIEWBOX in research-graph.js. */
+.asteroid-img {
+  position: absolute;
+  top: calc(-100% * 10 / 46);
+  left: calc(-100% * 10 / 46);
+  width: calc(100% * 66 / 46);
+  height: calc(100% * 66 / 46);
+  max-width: none;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
 @keyframes asteroid-spin {
   to { transform: rotate(360deg); }
 }
@@ -464,8 +526,7 @@ section.research-explorer {
 .node:hover .node-dot,
 .node:focus-visible .node-dot {
   transform: translate(-50%, -50%) scale(1.2);
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6))
-          drop-shadow(0 0 14px rgba(var(--node-rgb, var(--rgb-gold)), 0.75));
+  filter: drop-shadow(0 0 14px rgba(var(--node-rgb, var(--rgb-gold)), 0.75));
 }
 .node:hover .node-label,
 .node:focus-visible .node-label {
@@ -501,8 +562,7 @@ section.research-explorer {
    opens - separate timing from hover/focus rather than reusing it. */
 .node.is-clicked .node-dot {
   transform: translate(-50%, -50%) scale(1.55);
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6))
-          drop-shadow(0 0 20px rgba(var(--node-rgb, var(--rgb-gold)), 0.9));
+  filter: drop-shadow(0 0 20px rgba(var(--node-rgb, var(--rgb-gold)), 0.9));
   transition: transform 0.05s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.05s ease;
 }
 .node.is-clicked .node-label { color: var(--color-white); }

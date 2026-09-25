@@ -2,11 +2,13 @@
  * Research Graph - the project explorer on research/index.html.
  *
  * Every project is a node: a procedurally drawn asteroid (deterministic per
- * id, so the same project is the same rock on every reload) sitting on a
- * canvas that draws one soft cloud per category behind them. The nodes
- * themselves are real anchors in the DOM, not canvas paint, so they stay
- * focusable, linkable and readable by assistive technology; only the clouds
- * and the category names are drawn.
+ * id, so the same project is the same rock on every reload) sitting on one
+ * soft cloud per category. The nodes are real anchors in the DOM, so they
+ * stay focusable, linkable and readable by assistive technology; the clouds
+ * and the category names behind them are decorative layers.
+ *
+ * Everything that moves per frame is moved with transform and opacity
+ * only, so the animation is composited rather than repainted.
  *
  * Graph and list are the same nodes in two layouts, not two renderings.
  * Each node is a small physics body - a spring pull toward wherever its
@@ -92,18 +94,16 @@
     return d + "Z";
   }
 
-  // One shared radial-fade gradient, reused by every crater on every rock:
-  // SVG's default gradientUnits (objectBoundingBox) maps a gradient onto
-  // whatever element references it using *that element's own* bounding
-  // box - so a single definition, referenced by circles of wildly
-  // different sizes, gives each one its own correctly-scaled radial fade
-  // for free. fill-opacity then scales that fade's overall strength per
-  // crater without needing a separate gradient per crater.
-  var CRATER_GRADIENT_ID = "crater-fade-shared";
-  var craterGradientDefsInjected = false;
-  function ensureCraterGradientDefs() {
-    if (craterGradientDefsInjected) return "";
-    craterGradientDefsInjected = true;
+  // One radial-fade gradient, reused by every crater on the rock: SVG's
+  // default gradientUnits (objectBoundingBox) maps a gradient onto whatever
+  // element references it using *that element's own* bounding box - so a
+  // single definition, referenced by circles of wildly different sizes,
+  // gives each one its own correctly-scaled radial fade for free.
+  // fill-opacity then scales that fade's overall strength per crater
+  // without needing a separate gradient per crater. Each rock is its own
+  // image document (see asteroidImage), so each carries its own copy.
+  var CRATER_GRADIENT_ID = "crater-fade";
+  function craterGradientDefs() {
     return (
       '<radialGradient id="' + CRATER_GRADIENT_ID + '">' +
         '<stop offset="0%" stop-color="#03050a" stop-opacity="0.95" />' +
@@ -197,9 +197,16 @@
       '<rect x="-3" y="-3" width="46" height="46" filter="url(#' + grainId + ')" ' +
         'style="mix-blend-mode:overlay;opacity:0.5" />';
 
+    // The baked-in shadow replaces a CSS drop-shadow on the node: a filter
+    // on the parent of a spinning layer has to be recomputed every frame.
+    var shadowId = "shadow-" + p.id;
+
     return (
-      '<svg viewBox="-3 -3 46 46" aria-hidden="true">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + ASTEROID_VIEWBOX + '">' +
         '<defs>' +
+          '<filter id="' + shadowId + '" x="-30%" y="-30%" width="160%" height="160%">' +
+            '<feDropShadow dx="0" dy="1" stdDeviation="1.7" flood-color="#000" flood-opacity="0.6" />' +
+          '</filter>' +
           '<linearGradient id="' + gradId + '" x1="0.05" y1="0" x2="0.95" y2="1">' +
             '<stop offset="0%" stop-color="' + color.light + '" />' +
             '<stop offset="32%" stop-color="' + color.hex + '" />' +
@@ -210,12 +217,32 @@
             '<stop offset="0%" stop-color="#ffffff" stop-opacity="0.4" />' +
             '<stop offset="100%" stop-color="#ffffff" stop-opacity="0" />' +
           '</radialGradient>' +
-          ensureCraterGradientDefs() +
+          craterGradientDefs() +
           '<clipPath id="' + clipId + '"><path d="' + d + '" /></clipPath>' +
         '</defs>' +
-        '<path d="' + d + '" fill="url(#' + gradId + ')" stroke="' + color.hex + '" stroke-width="0.9" stroke-opacity="0.8" />' +
-        '<g clip-path="url(#' + clipId + ')">' + marks + grain + '</g>' +
+        '<g filter="url(#' + shadowId + ')">' +
+          '<path d="' + d + '" fill="url(#' + gradId + ')" stroke="' + color.hex + '" stroke-width="0.9" stroke-opacity="0.8" />' +
+          '<g clip-path="url(#' + clipId + ')">' + marks + grain + '</g>' +
+        '</g>' +
       '</svg>'
+    );
+  }
+
+  // The rock is handed to the page as an <img>, not inline SVG. Inline, its
+  // noise filter, blend mode and clip path were repainted on every frame of
+  // the spin - six feTurbulence passes a frame, which is what made the
+  // graph stutter. As an image it is rasterised once, and the spin is a
+  // compositor-only rotation of that bitmap.
+  //
+  // The viewBox leaves a wide margin around the 0-40 rock: an image clips to
+  // its viewBox, where the inline SVG used to overflow it, and the most
+  // stretched rocks reach past the old -3..43 box. research.css sizes and
+  // offsets the image by the same numbers so the rock lands where it did.
+  var ASTEROID_VIEWBOX = "-13 -13 66 66";
+  function asteroidImage(p, color) {
+    return (
+      '<img class="asteroid-img" alt="" draggable="false" decoding="async" src="data:image/svg+xml;charset=utf-8,' +
+        encodeURIComponent(asteroidSVG(p, color)) + '" />'
     );
   }
   // ---------------------------------------------------------------------
@@ -303,14 +330,12 @@
   })();
 
   var wrap = document.getElementById("graphWrap");
-  var canvas = document.getElementById("graphCanvas");
-  if (!wrap || !canvas || !canvas.getContext) return;
+  var cloudLayer = document.getElementById("graphClouds");
+  if (!wrap || !cloudLayer) return;
 
-  var ctx = canvas.getContext("2d");
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var nodeEls = [];
   var t = 0;
-  var dpr = Math.min(window.devicePixelRatio || 1, 2);
   var query = "";
 
   var searchInput = document.getElementById("searchInput");
@@ -358,12 +383,11 @@
 
   searchInput.addEventListener("input", applySearch);
 
-  function fitCanvas() {
+  // The graph's size in CSS pixels, read on resize rather than per frame.
+  var graphW = 0, graphH = 0;
+  function measure() {
     var r = wrap.getBoundingClientRect();
-    canvas.width = r.width * dpr;
-    canvas.height = r.height * dpr;
-    canvas.style.width = r.width + "px";
-    canvas.style.height = r.height + "px";
+    graphW = r.width; graphH = r.height;
   }
 
   function buildNodes() {
@@ -381,7 +405,7 @@
       a.innerHTML =
         '<span class="node-dot" aria-hidden="true">' +
           '<span class="asteroid-spin" style="--spin-duration:' + spinDuration + 's;--spin-dir:' + spinDir + '">' +
-            asteroidSVG(p, color) +
+            asteroidImage(p, color) +
           '</span>' +
         '</span>' +
         '<span class="node-label">' +
@@ -433,7 +457,7 @@
     if (reduceMotion) {
       // no orbiting, no bouncing - just land exactly where the new mode
       // wants each node, instantly
-      var w = canvas.width / dpr, h = canvas.height / dpr;
+      var w = graphW, h = graphH;
       nodeEls.forEach(function (p) {
         var target = computeForMode(viewMode, p, w, h);
         p.physX = target.x; p.physY = target.y;
@@ -516,7 +540,7 @@
   var COLLISION_RESTITUTION = 0.7;
 
   function updatePhysics(dt) {
-    var w = canvas.width / dpr, h = canvas.height / dpr;
+    var w = graphW, h = graphH;
 
     nodeEls.forEach(function (p) {
       var target = computeForMode(viewMode, p, w, h);
@@ -565,11 +589,31 @@
     return pts.some(function (item) { return item.p.tag === tag && item.p.matched; });
   }
 
-  function draw() {
-    var w = canvas.width / dpr, h = canvas.height / dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+  // The clouds and the category names are DOM layers rather than canvas
+  // paint. They only ever move, grow and fade, which the compositor does
+  // on its own; the canvas they used to be drawn on was a full-width
+  // surface at devicePixelRatio, cleared and repainted every frame, and it
+  // was most of what this page cost to animate. Each cloud is a fixed-size
+  // gradient (research.css) scaled to its radius and faded with opacity.
+  var CLOUD_BASE_RADIUS = 128; // half of .graph-cloud's size in research.css
+  var CLOUD_FULL_ALPHA = 0.15; // the gradient's centre alpha in research.css
+  var clouds = {};
+  function buildClouds() {
+    CLUSTER_ORDER.forEach(function (tag) {
+      var cloud = document.createElement("div");
+      cloud.className = "graph-cloud";
+      cloud.style.setProperty("--cloud-rgb", COLORS[tag].rgb);
+      var label = document.createElement("div");
+      label.className = "graph-cloud-label";
+      label.style.color = COLORS[tag].hex;
+      label.textContent = tag;
+      cloudLayer.appendChild(cloud);
+      cloudLayer.appendChild(label);
+      clouds[tag] = { cloud: cloud, label: label };
+    });
+  }
 
+  function draw() {
     var pts = nodeEls.map(function (p) { return { p: p, pt: { x: p.physX, y: p.physY } }; });
     var byTag = {};
     pts.forEach(function (item) {
@@ -577,43 +621,39 @@
     });
 
 
-    // one soft "cloud" per cluster, drawn first so everything else sits on
-    // top of it - this is what reads the group as one thing at a glance
-    // before you even look at the edges. It fades out as list view takes
-    // over, since clustering no longer means anything once nodes are a
-    // plain column.
-    var centroids = {};
+    // one soft "cloud" per cluster, sitting behind everything else - this
+    // is what reads the group as one thing at a glance. It fades out as
+    // list view takes over, since clustering no longer means anything once
+    // nodes are a plain column.
     CLUSTER_ORDER.forEach(function (tag) {
       var members = byTag[tag] || [];
-      if (!members.length || graphWeight <= 0.01) return;
+      var layer = clouds[tag];
+      if (!members.length || graphWeight <= 0.01) {
+        layer.cloud.style.opacity = "0";
+        layer.label.style.opacity = "0";
+        return;
+      }
       var cx = 0, cy = 0;
       members.forEach(function (m) { cx += m.pt.x; cy += m.pt.y; });
       cx /= members.length; cy /= members.length;
-      centroids[tag] = { x: cx, y: cy };
 
       var spread = 0;
       members.forEach(function (m) {
         spread = Math.max(spread, Math.hypot(m.pt.x - cx, m.pt.y - cy));
       });
       var radius = spread + 54;
-      var color = COLORS[tag].rgb;
       var hasMatch = clusterHasMatch(tag, pts);
       var glowAlpha = (hasMatch ? 0.15 : 0.045) * graphWeight;
 
-      var gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      gradient.addColorStop(0, "rgba(" + color + ", " + glowAlpha + ")");
-      gradient.addColorStop(0.6, "rgba(" + color + ", " + (glowAlpha * 0.4) + ")");
-      gradient.addColorStop(1, "rgba(" + color + ", 0)");
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fill();
+      layer.cloud.style.transform =
+        "translate3d(" + (cx - CLOUD_BASE_RADIUS) + "px," + (cy - CLOUD_BASE_RADIUS) + "px,0) " +
+        "scale(" + (radius / CLOUD_BASE_RADIUS) + ")";
+      layer.cloud.style.opacity = String(glowAlpha / CLOUD_FULL_ALPHA);
 
-      // the category name, floating above its own cloud
-      ctx.font = "600 11px " + getComputedStyle(document.body).fontFamily;
-      ctx.textAlign = "center";
-      ctx.fillStyle = "rgba(" + color + ", " + ((hasMatch ? 0.85 : 0.35) * graphWeight) + ")";
-      ctx.fillText(tag.toUpperCase(), cx, cy - radius + 18);
+      // the category name, floating above its own cloud (research.css
+      // centres it on x and puts its baseline on y)
+      layer.label.style.transform = "translate3d(" + cx + "px," + (cy - radius + 18) + "px,0)";
+      layer.label.style.opacity = String((hasMatch ? 0.85 : 0.35) * graphWeight);
     });
 
     // within a cluster, members no longer draw lines to each other - the
@@ -624,11 +664,16 @@
     // anchor exactly on the vertex the edges are drawn to; the dot then
     // centers itself on that same point in its own CSS.
     pts.forEach(function (item) {
-      item.p.el.style.transform = "translate(" + item.pt.x + "px," + item.pt.y + "px)";
+      item.p.el.style.transform = "translate3d(" + item.pt.x + "px," + item.pt.y + "px,0)";
     });
   }
 
+  // The loop only runs while the graph is on screen and the tab is in
+  // front, like the intro band above it. It used to run for the life of the
+  // page, spending every frame on a graph scrolled out of view.
   var lastFrameTime = null;
+  var rafId = null;
+  var onScreen = true;
   function loop(now) {
     var dt = 0.016;
     if (lastFrameTime !== null) dt = Math.min(0.05, (now - lastFrameTime) / 1000);
@@ -636,25 +681,60 @@
     t += dt;
     updatePhysics(dt);
     draw();
-    if (!reduceMotion) requestAnimationFrame(loop);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function play() {
+    if (rafId !== null || reduceMotion) return;
+    // a fresh clock, so the first frame back doesn't integrate the whole
+    // time the loop was paused as one step
+    lastFrameTime = null;
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function pause() {
+    if (rafId === null) return;
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+
+  function updateRunning() {
+    if (onScreen && !document.hidden) play(); else pause();
   }
 
   function init() {
+    buildClouds();
     buildNodes();
-    fitCanvas();
+    measure();
 
     // start every node already sitting at its graph position rather than
     // (0,0), so the very first frame doesn't show them flying in from the
     // corner before anything has been clicked
-    var w = canvas.width / dpr, h = canvas.height / dpr;
+    var w = graphW, h = graphH;
     nodeEls.forEach(function (p) {
       var start = computeForMode(viewMode, p, w, h);
       p.physX = start.x; p.physY = start.y;
     });
 
     draw();
-    if (!reduceMotion) requestAnimationFrame(loop);
-    window.addEventListener("resize", function () { fitCanvas(); draw(); });
+    updateRunning();
+
+    function onResize() { measure(); draw(); }
+    if (window.ResizeObserver) new ResizeObserver(onResize).observe(wrap);
+    else window.addEventListener("resize", onResize);
+
+    if (window.IntersectionObserver) {
+      new IntersectionObserver(function (entries) {
+        onScreen = entries[0].isIntersecting;
+        updateRunning();
+      }, { threshold: 0 }).observe(wrap);
+    }
+    document.addEventListener("visibilitychange", updateRunning);
+    // Coming back from a project with the browser's back button restores
+    // this page from the back/forward cache; start from a clean clock.
+    window.addEventListener("pageshow", function (e) {
+      if (e.persisted) { pause(); updateRunning(); }
+    });
   }
 
   init();

@@ -528,13 +528,21 @@
       if (j === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       lastX = x; lastY = y;
     }
+    // The glow is a few wide, faint strokes under the line rather than
+    // shadowBlur: a blurred shadow on a path the width of the hero is a
+    // full Gaussian pass every frame, and it was the costliest thing here.
     ctx.save();
-    ctx.shadowColor = 'rgba(89,192,255,0.85)';
-    ctx.shadowBlur = 10;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(89,192,255,0.07)';
+    ctx.lineWidth = 12;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(89,192,255,0.12)';
+    ctx.lineWidth = 6;
+    ctx.stroke();
     ctx.strokeStyle = 'rgba(120,205,255,0.75)';
     ctx.lineWidth = 1.6;
     ctx.stroke();
-    ctx.shadowBlur = 0;
     ctx.restore();
 
     // leading dot at the live edge
@@ -553,14 +561,10 @@
   }
 
   function paint(dt, t) {
+    // The section's own CSS background is this same gradient, so the canvas
+    // only needs clearing. Refilling it every frame was a full-surface paint
+    // at devicePixelRatio for a picture that never changes.
     ctx.clearRect(0, 0, W, H);
-
-    var grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#070b15');
-    grad.addColorStop(0.55, '#0a1220');
-    grad.addColorStop(1, '#050810');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
 
     drawPriceLine(dt);
 

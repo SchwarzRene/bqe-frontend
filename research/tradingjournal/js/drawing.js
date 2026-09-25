@@ -21,9 +21,14 @@ let overlayCount = 0;
  *
  * Anchors are stored as (real epoch seconds, price) rather than bar indexes, so a
  * drawing made on 5m candles lands in the same place on 1h or daily candles.
+ *
+ * `marks` are fixed points the user can't edit or erase — a trade's entry and
+ * exit — each drawn as a vertical line at its time. Crossing the price line the
+ * chart already draws at its price, it marks the exact spot with a cross; the
+ * price itself is on that line's axis label. `{ t: epoch seconds, p: price, color, dashed }`.
  */
-export async function attachDrawings({ toolbar, container, chart, series, data, intervalSeconds, digits, scope }) {
-  const state = { tool: "cursor", color: COLORS[0], drawings: [], draft: null, version: 0 };
+export async function attachDrawings({ toolbar, container, chart, series, data, intervalSeconds, digits, scope, marks = [] }) {
+  const state = { tool: "cursor", color: COLORS[0], drawings: [], draft: null, version: 0, marks };
   state.drawings = await api.drawings(scope).catch(() => []);
   if (!isChartActive(chart)) return;
 
@@ -235,7 +240,8 @@ function startRenderLoop({ chart, svg, container, state, mapper, digits }) {
 }
 
 function renderShapes(state, mapper, width, height, digits, clipId) {
-  const shapes = state.drawings.map((d, i) => shape(d, i, mapper, width, digits));
+  const shapes = state.marks.map((m) => markShape(m, mapper, height));
+  shapes.push(...state.drawings.map((d, i) => shape(d, i, mapper, width, digits)));
   if (state.draft) shapes.push(shape(state.draft, null, mapper, width, digits));
   return `<defs><clipPath id="${clipId}"><rect x="0" y="0" width="${width}" height="${Math.max(height, 0)}"/></clipPath></defs>
     <g clip-path="url(#${clipId})">${shapes.join("")}</g>`;
@@ -269,6 +275,18 @@ function shape(d, index, mapper, width, digits) {
     <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="transparent" stroke-width="${HIT_WIDTH}"/>
     <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
     <circle cx="${a.x}" cy="${a.y}" r="2.5" fill="${color}"/><circle cx="${b.x}" cy="${b.y}" r="2.5" fill="${color}"/></g>`;
+}
+
+function markShape(mark, mapper, height) {
+  const x = mapper.x(mark.t);
+  const y = mapper.y(mark.p);
+  if (x == null) return "";
+  const color = esc(mark.color);
+  const dash = mark.dashed ? ` stroke-dasharray="4 3"` : "";
+  const dot = y == null ? "" : `<circle cx="${x}" cy="${y}" r="3" fill="${color}"/>`;
+  return `<g class="trade-mark" pointer-events="none">
+    <line x1="${x}" x2="${x}" y1="0" y2="${height}" stroke="${color}" stroke-width="1"${dash}/>
+    ${dot}</g>`;
 }
 
 function project(point, mapper) {

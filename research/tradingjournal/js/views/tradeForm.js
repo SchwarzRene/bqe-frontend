@@ -1,12 +1,12 @@
 import { api } from "../api.js";
 import { money, nowLocalInput } from "../format.js";
-import { $, $$, debounce, esc, formValues, openFormModal, toast } from "../ui.js";
+import { $, $$, esc, formValues, openFormModal, toast } from "../ui.js";
 
 /**
  * Open the create/edit trade dialog. With `closing: true` the exit fields are
  * pre-filled with the live price and current time, for one-click closing.
  * Entry and exit prices left empty are looked up from the symbol's chart at
- * the entry and exit times.
+ * the entry and exit times when the trade is saved.
  */
 export async function openTradeForm({ trade = null, closing = false, onSaved }) {
   const [symbols, setups] = await Promise.all([api.symbols(), api.setups()]);
@@ -104,70 +104,40 @@ function wireForm(form, symbols, closing) {
 }
 
 /**
- * An empty price follows its time: it is looked up from the symbol's candles
- * whenever the time or the symbol changes. A price the user typed stays.
+ * An empty price is taken from the symbol's candles at its time, but only when
+ * the trade is saved. Looking it up while the form was being edited put a
+ * price straight back into a field the user had just cleared to type their own.
  */
 function wireAutoPrices(form, symbolFor, updatePreview) {
   const sides = ["entry", "exit"];
-  const auto = Object.fromEntries(sides.map((w) => [w, !form[`${w}_price`].value]));
-  const pending = {}; // the latest lookup per side
-  const inFlight = {};
-  const lookedUp = {}; // symbol and time of the latest lookup per side
+  const EMPTY_HINT = "Leave empty to take it from the chart at this time when you save.";
   const hint = (which, text) => { $(`[data-price-hint=${which}]`, form).textContent = text; };
-
-  function lookup(which) {
-    const time = form[`${which}_time`].value;
-    const symbol = symbolFor();
-    if (!auto[which] || !time || !symbol) {
-      if (auto[which]) { form[`${which}_price`].value = ""; hint(which, ""); }
-      inFlight[which] = false;
-      return (pending[which] = null);
-    }
-    const key = `${symbol.id}|${time}`;
-    if (key === lookedUp[which] && (inFlight[which] || form[`${which}_price`].value)) return pending[which];
-    lookedUp[which] = key;
-    hint(which, "Looking up the price…");
-    const request = api.priceAt(symbol.id, time).then(
-      ({ price, interval }) => {
-        if (pending[which] !== request || !auto[which]) return;
-        form[`${which}_price`].value = Number(price.toFixed(symbol.digits ?? 2));
-        hint(which, `From the ${interval} chart — type a price to override.`);
-        updatePreview();
-      },
-      (error) => {
-        if (pending[which] !== request || !auto[which]) return;
-        form[`${which}_price`].value = "";
-        lookedUp[which] = null; // a later try may succeed
-        hint(which, error.message);
-        throw error;
-      },
-    );
-    request.catch(() => {}).finally(() => { if (pending[which] === request) inFlight[which] = false; });
-    inFlight[which] = true;
-    return (pending[which] = request);
-  }
+  const showEmptyHint = (which) => hint(which, form[`${which}_price`].value ? "" : EMPTY_HINT);
 
   for (const which of sides) {
-    form[`${which}_price`].addEventListener("input", () => {
-      auto[which] = !form[`${which}_price`].value;
-      hint(which, "");
-      if (auto[which]) lookup(which);
-    });
-    // Browsers differ in which of these a date picker fires (iOS may fire
-    // only one, and only on closing), so listen to all three.
-    const later = debounce(() => lookup(which), 400);
-    for (const type of ["input", "change", "blur"]) form[`${which}_time`].addEventListener(type, later);
+    form[`${which}_price`].addEventListener("input", () => showEmptyHint(which));
+    showEmptyHint(which);
   }
-  form.symbol_id.addEventListener("change", () => sides.forEach(lookup));
-  sides.forEach(lookup);
 
   return {
-    /** Before saving: wait for lookups in flight and start any still missing. */
+    /** Before saving: look up every price that is still empty but has a time. */
     async fillMissing() {
-      for (const which of sides) {
-        if (!auto[which] || !form[`${which}_time`].value) continue;
-        if (!form[`${which}_price`].value || inFlight[which]) await lookup(which);
-      }
+      const symbol = symbolFor();
+      await Promise.all(sides.map(async (which) => {
+        const field = form[`${which}_price`];
+        const time = form[`${which}_time`].value;
+        if (field.value || !time || !symbol) return;
+        hint(which, "Looking up the price…");
+        try {
+          const { price, interval } = await api.priceAt(symbol.id, time);
+          field.value = Number(price.toFixed(symbol.digits ?? 2));
+          hint(which, `From the ${interval} chart.`);
+          updatePreview();
+        } catch (error) {
+          hint(which, error.message);
+          throw new Error(`${which === "entry" ? "Entry" : "Exit"} price: ${error.message}`);
+        }
+      }));
     },
   };
 }
@@ -178,7 +148,7 @@ async function fillLivePrice(form, symbol, which) {
     const quote = await api.quote(symbol.ticker);
     if (!form[`${which}_time`].value || which === "exit") form[`${which}_time`].value = nowLocalInput();
     form[`${which}_price`].value = quote.price;
-    // A live price is the user's choice, like a typed one: it no longer follows the time.
+    // Let the form see it as typed (preview, hint).
     form[`${which}_price`].dispatchEvent(new Event("input", { bubbles: true }));
   } catch (error) {
     toast(error.message, "error");

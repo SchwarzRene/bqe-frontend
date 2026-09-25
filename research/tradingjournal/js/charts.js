@@ -53,7 +53,8 @@ export function showChartMessage(container, message) {
 }
 
 /** Render candles; returns `{chart, series, data}` (data in chart time) or undefined if nothing was drawn. */
-export function candleChart(container, candles, { digits = 2, lines = [], markers = [], showDaysOnly = false } = {}) {
+/** `showLastPrice: false` hides the latest price's line and axis label (a closed trade doesn't need it). */
+export function candleChart(container, candles, { digits = 2, lines = [], markers = [], showDaysOnly = false, showLastPrice = true } = {}) {
   if (!candles.length) return showChartMessage(container, "No candles available for this period.");
   const chart = createChart(container, { timeScale: { borderColor: cssVar("--border"), timeVisible: !showDaysOnly } });
   if (!chart) return;
@@ -62,6 +63,7 @@ export function candleChart(container, candles, { digits = 2, lines = [], marker
     borderUpColor: cssVar("--profit"), borderDownColor: cssVar("--loss"),
     wickUpColor: cssVar("--profit"), wickDownColor: cssVar("--loss"),
     priceFormat: priceFormat(digits),
+    lastValueVisible: showLastPrice, priceLineVisible: showLastPrice,
   });
   const data = candles.map((c) => ({ ...c, time: toChartTime(c.time) }));
   series.setData(data);

@@ -46,6 +46,7 @@
     canvas.width = Math.floor(W * DPR);
     canvas.height = Math.floor(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    paintBackground();
     measureDensity();
     netBuildNodes();
   }
@@ -614,21 +615,23 @@
   }
 
   // ── background ────────────────────────────────────────────────────────────
-  function drawBackground() {
-    // Starts on the hero's own ground (#050810) and climbs to the lighter
-    // blue, so the band reads as the hero's world opening up rather than a
-    // separate slab. Mirrored by the .formula-network fallback in home.css.
-    var g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#050810');
-    g.addColorStop(1, '#0b1730');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+  // The ground never changes between frames, so it is the section's CSS
+  // background rather than canvas paint: repainting two full-surface
+  // gradients at devicePixelRatio every frame was most of this band's cost.
+  // It starts on the hero's own ground (#050810) and climbs to the lighter
+  // blue, so the band reads as the hero's world opening up rather than a
+  // separate slab; home.css carries the same linear gradient as the
+  // fallback. The glow's radius is half the band's width, which CSS can't
+  // say for a circle, so it is set here on every resize.
+  function paintBackground() {
+    section.style.backgroundImage =
+      'radial-gradient(circle ' + (W * 0.5).toFixed(1) + 'px at 20% 75%, ' +
+        'rgba(90,150,200,0.06), rgba(90,150,200,0)), ' +
+      'linear-gradient(180deg, #050810 0%, #0b1730 100%)';
+  }
 
-    var glow2 = ctx.createRadialGradient(W * 0.2, H * 0.75, 0, W * 0.2, H * 0.75, W * 0.5);
-    glow2.addColorStop(0, 'rgba(90,150,200,0.06)');
-    glow2.addColorStop(1, 'rgba(90,150,200,0)');
-    ctx.fillStyle = glow2;
-    ctx.fillRect(0, 0, W, H);
+  function drawBackground() {
+    ctx.clearRect(0, 0, W, H);
   }
 
   function drawGrid(t) {

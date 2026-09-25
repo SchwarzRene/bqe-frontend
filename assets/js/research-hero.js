@@ -402,13 +402,10 @@
   }
 
   function paint(dt, t) {
+    // The section's own CSS background is this same gradient, so the canvas
+    // only needs clearing. Refilling it every frame was a full-surface paint
+    // at devicePixelRatio for a picture that never changes.
     ctx.clearRect(0, 0, W, H);
-    var grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#070b15');
-    grad.addColorStop(0.55, '#0a1220');
-    grad.addColorStop(1, '#050810');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
     var cam = camOffset(t);
     lastCam = cam;
     ctx.save();
