@@ -23,6 +23,8 @@ export const state = {
   tz: 'vie',
   mapOpen: false,
   hlTab: { general: 0, stocks: 0, commodities: 0 },
+  hlSort: 'top', // top: by importance | new: newest first
+  settingsOpen: false,
   cal: {
     view: 'month', // month | week
     cursor: null, // a YYYY-MM-DD inside the month or week shown
@@ -43,6 +45,7 @@ export function loadPrefs() {
     if (Array.isArray(p.regions)) setRegions(p.regions);
     else if (typeof p.region === 'string') setRegions([p.region]); // saved before regions combined
     if (TZ_ID[p.tz]) state.tz = p.tz;
+    if (p.hlSort === 'top' || p.hlSort === 'new') state.hlSort = p.hlSort;
     if (p.cal) {
       if (p.cal.view === 'month' || p.cal.view === 'week') state.cal.view = p.cal.view;
       if (Array.isArray(p.cal.cats)) state.cal.cats = p.cal.cats.filter((c) => typeof c === 'string');
@@ -54,7 +57,7 @@ export function loadPrefs() {
 export function savePrefs() {
   try {
     localStorage.setItem(PREFS_KEY, JSON.stringify({
-      regions: state.regions, tz: state.tz,
+      regions: state.regions, tz: state.tz, hlSort: state.hlSort,
       cal: { view: state.cal.view, cats: state.cal.cats, minImp: state.cal.minImp },
     }));
   } catch { /* not stored: fine */ }
@@ -85,3 +88,20 @@ export const briefing = () => (data.D && data.D.briefing) || null;
 export const items = () => (data.D ? data.D.items : []);
 export const events = () => (data.D ? data.D.events : []);
 export const ranks = () => (data.D && data.D.calendarRanks) || null;
+
+/**
+ * A headline's importance, 1–5: the model's, from the latest briefing, or,
+ * for headlines that arrived after it, an estimate from the stored score
+ * (source weight, other sources, followed tickers, today's events).
+ */
+export function headlineImportance(i) {
+  const b = briefing();
+  const ai = b && b.headlineRanks && b.headlineRanks[i.id];
+  if (ai) return { value: ai, ai: true };
+  const s = i.score || 0;
+  return { value: s >= 75 ? 4 : s >= 60 ? 3 : s >= 45 ? 2 : 1, ai: false };
+}
+
+/** Most important first, then newest. */
+export const byHeadlineImportance = (a, b) =>
+  (headlineImportance(b).value - headlineImportance(a).value) || b.publishedAt.localeCompare(a.publishedAt);

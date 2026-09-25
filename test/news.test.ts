@@ -297,6 +297,11 @@ describe("news briefing", () => {
     expect(b.commodityGroups[0].rows).toEqual([{ name: "Soybeans", line: null }]);
   });
 
+  it("keeps the model's importance per headline, for input ids and 1-5 only", () => {
+    const b = validateBriefing({ ...good, headlines: [{ id: "a1", i: 5 }, { id: "b2", i: 2 }, { id: "zz", i: 4 }, { id: "c3", i: 9 }] }, ids, new Set(), cfg)!;
+    expect(b.headlineRanks).toEqual({ a1: 5, b2: 2 });
+  });
+
   it("rejects a briefing without a usable general page", () => {
     expect(validateBriefing({ ...good, general: page({ ids: ["zz"], summary: "x" }) }, ids, new Set(), cfg)).toBeNull();
     expect(validateBriefing("nope", ids, new Set(), cfg)).toBeNull();

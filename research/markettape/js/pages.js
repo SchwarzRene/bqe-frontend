@@ -4,7 +4,7 @@
 import { agenda, byImportance, catOf, impOf } from './calendar.js';
 import { companiesCard } from './companies.js';
 import { countdown, esc, hl, impDots, itemSources, keyLabel, safeUrl, time, todayKey, tzLabel, dayKey } from './format.js';
-import { allRegions, briefing, CODE, data, events, items, keep, OVERVIEW_KEY, R_NAME, ranks, regionOf, state } from './state.js';
+import { allRegions, briefing, byHeadlineImportance, CODE, data, events, items, keep, OVERVIEW_KEY, R_NAME, ranks, regionOf, state } from './state.js';
 
 const GROUP_WORDS = {
   Agriculture: /\b(soy|soybeans?|corn|wheat|coffee|grains?|crop|harvest|usda|wasde)\b/i,
@@ -87,12 +87,15 @@ function headlineCats(page) {
 }
 
 function headlines(page) {
-  const cats = headlineCats(page).map((c) => ({ ...c, items: c.items.filter((h) => keep(regionOf(h))) }));
+  const sort = state.hlSort === 'top' ? byHeadlineImportance : (a, b) => b.publishedAt.localeCompare(a.publishedAt);
+  const cats = headlineCats(page).map((c) => ({ ...c, items: c.items.filter((h) => keep(regionOf(h))).sort(sort) }));
   const tab = Math.min(state.hlTab[page] || 0, cats.length - 1);
   const list = cats[tab].items;
   const first = list.slice(0, 16), rest = list.slice(16);
   return `<section class="card" id="headlines" aria-labelledby="hl-h">
-    <div class="card-head"><h2 class="h2" id="hl-h">Headlines</h2><span class="meta">Last 24 hours, newest first</span></div>
+    <div class="card-head"><h2 class="h2" id="hl-h">Headlines</h2>
+      <div class="seg small" role="group" aria-label="Order">${[['top', 'Most important'], ['new', 'Newest']].map(([v, l]) => `<button type="button" data-hl-sort="${v}" aria-pressed="${state.hlSort === v}">${l}</button>`).join('')}</div>
+    </div>
     <div class="htabs" role="tablist" aria-label="Headline sections">
       ${cats.map((c, i) => `<button type="button" role="tab" data-hl-tab="${i}" aria-selected="${i === tab}">${esc(c.name)}<span>${c.items.length}</span></button>`).join('')}
     </div>
@@ -189,7 +192,7 @@ export function renderCommodities() {
       ${groups.map((g) => {
         const own = g.ids.map((id) => data.byId.get(id)).filter(Boolean);
         const more = commodityItems.filter((i) => GROUP_WORDS[g.name].test(i.title) && !g.ids.includes(i.id));
-        const list = own.concat(more).filter((h) => keep(regionOf(h))).slice(0, 4);
+        const list = own.concat(more).filter((h) => keep(regionOf(h))).sort(byHeadlineImportance).slice(0, 4);
         const next = events().find((e) => e.id === g.nextEventId && Date.parse(e.start) > now) ||
           events().find((e) => catOf(e) === 'commodities' && Date.parse(e.start) > now && GROUP_WORDS[g.name].test(e.title));
         return `<div class="card group">
@@ -197,7 +200,7 @@ export function renderCommodities() {
           <p class="sum">${esc(g.summary || (b ? 'No notable news today.' : 'The summary appears with the first briefing.'))}</p>
           ${g.rows.length ? `<div>${g.rows.map((r) => `<div class="line-row"><span class="k">${esc(r.name)}</span><span>${esc(r.line || 'No notable news today')}</span></div>`).join('')}</div>` : ''}
           <div>
-            <div class="eyebrow" style="padding-bottom:2px">Headlines</div>
+            <div class="eyebrow" style="padding-bottom:2px">Top headlines</div>
             ${list.length ? list.map(hl).join('') : '<p class="empty">Nothing for the selected regions.</p>'}
           </div>
           ${next ? `<div class="nextbox"><span class="eyebrow">Next</span> <b>${esc(next.title)}</b> · ${esc(keyLabel(dayKey(Date.parse(next.start)), { weekday: 'short', day: 'numeric' }))} ${time(next.start)}</div>` : ''}
