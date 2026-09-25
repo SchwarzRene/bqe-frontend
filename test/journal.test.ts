@@ -127,4 +127,22 @@ describe("trading journal store", () => {
     expect(older.available).toEqual(["1d", "1wk"]);
     expect(() => S.planTradeChart({ entry_time: "2025-01-06T10:00", exit_time: null }, "1m", now)).toThrow(/no longer available/);
   });
+
+  it("looks up the price at a moment from candles", () => {
+    const now = S.localEpoch("2026-09-24T12:00");
+    const recent = S.planPriceAt(S.localEpoch("2026-09-24T10:30"), now);
+    expect(recent.interval).toBe("1m");
+    expect(S.planPriceAt(S.localEpoch("2025-01-06T10:00"), now).interval).toBe("1h");
+    expect(S.planPriceAt(S.localEpoch("2023-09-04T10:00"), now).interval).toBe("1d");
+    expect(() => S.planPriceAt(now + 3600, now)).toThrow(/future/);
+
+    const candles = [
+      { time: 1000, open: 10, close: 11 },
+      { time: 1060, open: 11, close: 12 },
+      { time: 5000, open: 20, close: 21 },
+    ];
+    expect(S.priceAt(candles, 1070, "1m")).toEqual({ price: 11, time: 1060 }); // inside a candle: its open
+    expect(S.priceAt(candles, 3000, "1m")).toEqual({ price: 12, time: 1120 }); // market shut: last close
+    expect(S.priceAt(candles, 500, "1m")).toBeNull();
+  });
 });

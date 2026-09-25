@@ -284,29 +284,22 @@ dialog::backdrop { background: rgba(10, 12, 16, .5); backdrop-filter: blur(2px);
 @keyframes pulse { 50% { opacity: .35; } }
 
 @media (max-width: 600px) {
+  /* Two rows: brand, account and theme; then the sections, full width. */
   .topbar {
+    flex-wrap: wrap; height: auto; gap: 0 12px;
     padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
-    height: calc(56px + env(safe-area-inset-top)); gap: 12px;
-    /* A backdrop-filter would make the bar the containing block of the fixed tab bar inside it. */
-    backdrop-filter: none; background: var(--surface);
   }
+  .brand { height: 52px; }
   .brand-text { display: none; }
   #account { margin-left: auto; }
-  main { padding: 16px max(16px, env(safe-area-inset-right)) calc(80px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-
-  /* The sections move to a tab bar at the bottom, clear of the home indicator. */
   .nav {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    order: 1; flex: 1 0 100%;
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
-    padding: 6px max(8px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
-    background: color-mix(in srgb, var(--surface) 94%, transparent);
-    backdrop-filter: blur(10px);
-    border-top: 1px solid var(--border);
-    overflow: visible;
+    padding-bottom: 8px; overflow: visible;
   }
-  .nav a { text-align: center; padding: 10px 4px; font-size: 13px; }
-  .nav a.active { box-shadow: inset 0 2px 0 var(--accent); }
-  #toast { bottom: calc(76px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100vw - 32px); }
+  .nav a { text-align: center; padding: 8px 4px; font-size: 13px; }
+  main { padding: 16px max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  #toast { bottom: calc(20px + env(safe-area-inset-bottom)); width: max-content; max-width: calc(100vw - 32px); }
 
   /* Modals become full-screen sheets whose buttons stay above the browser's toolbar. */
   dialog, dialog.wide {
