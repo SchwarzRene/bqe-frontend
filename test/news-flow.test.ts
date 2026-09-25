@@ -9,6 +9,7 @@ import { buildBriefing, latestBriefing } from "../worker/news/briefing";
 import { CALENDAR, type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
 import type { Config } from "../worker/news/feeds";
 import { handleChat, handleNews, newsTick } from "../worker/news/index";
+import { rankCalendar } from "../worker/news/rank";
 import { ingest as ingestPart, pruneNews } from "../worker/news/store";
 
 // Every source in one run: the rotation over runs is tested on its own.
@@ -79,7 +80,7 @@ function rss(items: [string, string, number][]): string {
 const gemini = (text: string) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }));
 
 /** Stubbed internet: two feeds, Yahoo, and a Gemini that answers by what it is asked. */
-function internet(opts: { briefing?: (prompt: string) => unknown; chat?: (body: any) => Response; econ?: () => unknown[][] } = {}) {
+function internet(opts: { briefing?: (prompt: string) => unknown; rank?: (prompt: string) => unknown; chat?: (body: any) => Response; econ?: () => unknown[][] } = {}) {
   const calls: { url: string; body: any }[] = [];
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : null;
@@ -129,7 +130,9 @@ function internet(opts: { briefing?: (prompt: string) => unknown; chat?: (body: 
     }
     if (url.includes("generativelanguage")) {
       if (body?.generationConfig?.responseMimeType === "application/json") {
-        return gemini(JSON.stringify(opts.briefing ? opts.briefing(body.contents[0].parts[0].text) : null));
+        const prompt: string = body.contents[0].parts[0].text;
+        if (prompt.startsWith("Days: ")) return gemini(JSON.stringify(opts.rank ? opts.rank(prompt) : null));
+        return gemini(JSON.stringify(opts.briefing ? opts.briefing(prompt) : null));
       }
       if (opts.chat) return opts.chat(body);
     }
@@ -292,6 +295,55 @@ describe("Market News flow", () => {
     expect(await latestBriefing(env)).toBeNull();
   });
 
+  it("ranks the events of busy days with one model call and serves the ranking", async () => {
+    const env = envWith();
+    const insert = (id: string, start: string, importance = 2) =>
+      env.DB.raw.prepare(`INSERT INTO news_events (id, type, title, start_at, region, importance, origin, updated)
+        VALUES (?, 'us-data', ?, ?, 'us', ?, 'test', '2026-09-24')`).run(id, id, start, importance);
+    // Friday: six events (busy). Monday: two (quiet, not asked about).
+    for (let i = 0; i < 6; i++) insert(`fri-${i}`, `2026-09-25T1${i}:30:00Z`);
+    insert("mon-0", "2026-09-28T12:30:00Z");
+    insert("mon-1", "2026-09-28T14:00:00Z");
+    let asked = "";
+    const calls = internet({
+      rank: (prompt) => {
+        asked = prompt;
+        return {
+          days: [
+            {
+              date: "2026-09-25",
+              summary: "PCE inflation is the day's main release.",
+              key: ["fri-3", "fri-0", "made-up"],
+              events: [{ id: "fri-3", importance: 3 }, { id: "fri-0", importance: 2 }, { id: "fri-1", importance: 1 }, { id: "mon-0", importance: 3 }],
+            },
+            { date: "2026-09-28", summary: "Not asked", key: ["mon-0"], events: [{ id: "mon-0", importance: 3 }] },
+          ],
+        };
+      },
+    });
+    expect(await rankCalendar(env, NOW)).toBe("1 busy day ranked");
+    expect(calls.filter((c) => c.url.includes("generativelanguage")).length).toBe(1);
+    expect(asked).toContain('"date":"2026-09-25"');
+    expect(asked).not.toContain("mon-0");
+
+    const res = await handleNews(new Request("https://site/api/news"), env, "");
+    const { calendarRanks } = await res.json<any>();
+    expect(calendarRanks.days).toEqual({ "2026-09-25": "PCE inflation is the day's main release." });
+    // Ids from another day or made up are dropped; key events are flagged.
+    expect(calendarRanks.events).toEqual({
+      "fri-3": { importance: 3, key: true },
+      "fri-0": { importance: 2, key: true },
+      "fri-1": { importance: 1, key: false },
+    });
+  });
+
+  it("skips the model when no day is busy", async () => {
+    const calls = internet();
+    const env = envWith();
+    expect(await rankCalendar(env, NOW)).toBe("no busy days");
+    expect(calls.some((c) => c.url.includes("generativelanguage"))).toBe(false);
+  });
+
   it("runs one job per tick: calendar, then headlines, then the first briefing, after a deploy", async () => {
     const calls = internet({ briefing: briefingFrom });
     const env = envWith();
@@ -311,9 +363,12 @@ describe("Market News flow", () => {
     // Now the first briefing, in a run of its own.
     report = await tick("2026-09-24T15:00:00Z");
     expect(report).toBe("briefing (first): briefing written from 5 headlines");
-    // From then on: results at :15, fetch otherwise.
+    // Results at :15, then the first calendar ranking, then fetch otherwise.
     expect(await tick("2026-09-24T15:15:00Z")).toMatch(/^calendar results: /);
-    expect(await tick("2026-09-24T15:30:00Z")).toMatch(/^fetch: /);
+    expect(await tick("2026-09-24T15:30:00Z")).toMatch(/^calendar ranks \(first\): /);
+    expect(await tick("2026-09-24T15:45:00Z")).toMatch(/^fetch: /);
+    // The daily ranking at 05:45 New York.
+    expect(await tick("2026-09-25T09:45:00Z")).toMatch(/^calendar ranks: /);
   });
 
   it("answers signed-in users with sources, counts the limit, and refuses past it", async () => {
