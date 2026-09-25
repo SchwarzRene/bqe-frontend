@@ -44,7 +44,7 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
   }
 
   const view = {
-    page: ["general", "stocks", "commodities"].includes(body?.page) ? body.page : "general",
+    page: ["general", "stocks", "commodities", "calendar"].includes(body?.page) ? body.page : "general",
     region: ["all", "us", "eu", "asia", "ru"].includes(body?.region) ? body.region : "all",
     tz: body?.tz === "ny" ? "New York" : "Vienna",
   };

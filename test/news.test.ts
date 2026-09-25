@@ -7,7 +7,7 @@ import { GeminiError, generate, RETRY_DELAYS_MS } from "../worker/news/gemini";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
 import { dedupe, eventWordsFor, isBlocked, isPromo, sameStory, scoreItem, staleSources, titleWords } from "../worker/news/store";
-import { briefingSlot, calendarRun, isCalendarRun, isResultsRun, wallClock, zonedToUtc } from "../worker/news/time";
+import { briefingSlot, calendarRun, isCalendarRun, isRankRun, isResultsRun, wallClock, zonedToUtc } from "../worker/news/time";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -179,6 +179,9 @@ describe("news time", () => {
     expect(calendarRun(Date.parse("2026-09-24T09:00:00Z"))).toBe(1);
     expect(calendarRun(Date.parse("2026-09-24T09:30:00Z"))).toBe(2);
     expect(calendarRun(Date.parse("2026-09-24T09:45:00Z"))).toBeNull();
+    // The calendar ranking follows at 05:45 New York.
+    expect(isRankRun(Date.parse("2026-09-24T09:45:00Z"))).toBe(true);
+    expect(isRankRun(Date.parse("2026-09-24T09:30:00Z"))).toBe(false);
     expect(wallClock(Date.parse("2026-09-24T03:00:00Z"), "America/New_York").date).toBe("2026-09-23");
   });
 });

@@ -137,3 +137,12 @@ export function calendarRun(ms: number): 1 | 2 | null {
 export function isCalendarRun(ms: number): boolean {
   return calendarRun(ms) !== null;
 }
+
+/**
+ * The calendar ranking (one model call), New York time: 05:45, after both
+ * calendar runs have written the day's events.
+ */
+export function isRankRun(ms: number): boolean {
+  const w = wallClock(ms, ET);
+  return w.hour === 5 && w.minute >= 45;
+}

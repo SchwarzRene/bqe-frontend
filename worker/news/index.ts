@@ -10,6 +10,7 @@
 //   briefing (Gemini)      02:30, 08:00, 12:30, 16:30 New York time on weekdays, Sat 10:00
 //   calendar + pruning     05:00 and 05:30 New York time (no model calls)
 //   calendar results       hourly on weekdays, yesterday to tomorrow (no model calls)
+//   calendar ranking       05:45 New York time: Gemini ranks the events of busy days
 
 import { currentUser, pruneAuth } from "../auth";
 import { pruneContact } from "../contact";
@@ -23,7 +24,8 @@ const CALENDAR_FIRST_HALF = ["meetings", "yahoo-economic", "fallback-rules", ...
 const CALENDAR_SECOND_HALF = ["dated", "rules", "nasdaq", "yahoo"];
 import { CONFIG, type FetchPlan } from "./feeds";
 import { type Item, eventWordsFor, FETCH_PARTS, ingest, itemsById, MAX_NEW_PER_RUN, pruneNews, readHealth, recentItems, staleSources } from "./store";
-import { briefingSlot, calendarRun, isResultsRun, iso } from "./time";
+import { latestRanks, rankCalendar } from "./rank";
+import { briefingSlot, calendarRun, isRankRun, isResultsRun, iso } from "./time";
 
 export { handleChat } from "./chat";
 
@@ -44,11 +46,12 @@ export async function handleNews(request: Request, env: Env, action: string): Pr
 
 async function news(env: Env): Promise<Response> {
   const now = Date.now();
-  const [briefing, recent, events, health] = await Promise.all([
+  const [briefing, recent, events, health, ranks] = await Promise.all([
     latestBriefing(env),
     recentItems(env, now, 24, 250),
     readCalendar(env, now - 8 * 86_400_000, now + 9 * 86_400_000),
     readHealth(env),
+    latestRanks(env),
   ]);
   // A briefing can cite headlines that have since dropped out of the 24 h window.
   const have = new Set(recent.map((i) => i.id));
@@ -81,6 +84,8 @@ async function news(env: Env): Promise<Response> {
       briefing,
       items,
       events: withHeadlines(events, recent),
+      // The model's ranking of busy calendar days (see rank.ts); null until it has run.
+      calendarRanks: ranks ? { generatedAt: ranks.generatedAt, events: ranks.events, days: ranks.days } : null,
       watchlist: CONFIG.watchlist,
       commodities: CONFIG.commodities,
       stale: [...new Set(stale)],
@@ -197,8 +202,9 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: F
     return report.join(" · ");
   }
 
-  // The briefing: the only model call the cron makes. At the briefing times,
-  // and after a fresh deploy as soon as there are headlines to write about.
+  // The briefing and the calendar ranking: the cron's only model calls. The
+  // briefing at the briefing times, and after a fresh deploy as soon as there
+  // are headlines to write about.
   if (env.GEMINI_API_KEY) {
     const slot = briefingSlot(ms);
     if (slot) {
@@ -209,6 +215,11 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: F
       await record("briefing (first)", () => buildBriefing(env, "first", { force: true, now: ms, cfg }));
       return report.join(" · ");
     }
+    // The ranking of busy calendar days, once the day's calendar is written.
+    if (isRankRun(ms)) {
+      await record("calendar ranks", () => rankCalendar(env, ms));
+      return report.join(" · ");
+    }
   }
 
   if (isResultsRun(ms)) {
@@ -216,6 +227,12 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: F
     // decisions) appear once they are published.
     await record("calendar results", () =>
       refreshCalendar(env, ms, { cfg, back: 1, ahead: 1, only: ["meetings", "yahoo-economic", "nasdaq"] }));
+    return report.join(" · ");
+  }
+
+  // After a deploy, the first ranking does not wait for 05:45 (but for the first briefing).
+  if (env.GEMINI_API_KEY && !(await latestRanks(env)) && (await latestBriefing(env)) && (await claim(env, "news:ranks-first", 60 * 60_000))) {
+    await record("calendar ranks (first)", () => rankCalendar(env, ms));
     return report.join(" · ");
   }
 
