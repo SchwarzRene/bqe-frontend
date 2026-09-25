@@ -460,3 +460,7 @@ body dialog.bqe-login .err { color: var(--red); }
 }
 .tabs .tab-emoji { font-size: 15px; line-height: 1; filter: saturate(.85); }
 .tabs a:not([aria-current="page"]) .tab-emoji { opacity: .75; }
+.co-line { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.5; color: var(--fg); }
+.co-line b { color: var(--ink); font-weight: 600; }
+.co-line .co-news { flex: none; transform: translateY(-1px); cursor: default; }
+.co-row .co-news { cursor: pointer; }
