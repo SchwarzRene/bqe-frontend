@@ -152,6 +152,16 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; border-color: var(--accent); }
 textarea { resize: vertical; min-height: 90px; line-height: 1.55; }
 textarea.tall { min-height: 260px; font-family: var(--mono); font-size: 13px; }
+/* iOS Safari draws date and time fields natively, at an intrinsic width that
+   ignores width: 100%. On a phone that made the form wider than the screen and
+   the whole sheet could be dragged sideways. Without the native appearance they
+   are ordinary boxes; the min-height keeps an empty one from collapsing. */
+input[type="date"], input[type="datetime-local"] {
+  -webkit-appearance: none; appearance: none;
+  min-width: 0; max-width: 100%;
+  min-height: 36px; text-align: left;
+}
+input::-webkit-date-and-time-value { text-align: left; }
 /* iOS Safari auto-zooms into any focused field whose font-size is below 16px. */
 @media (pointer: coarse) {
   input, select, textarea, textarea.tall { font-size: 16px; }
@@ -260,8 +270,9 @@ dialog {
   max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
   overscroll-behavior: contain;
 }
-/* The page behind an open modal stays put. */
-html:has(dialog[open]) { overflow: hidden; }
+/* The page behind an open modal stays put, and a drag that reaches the end of
+   the form does not carry on into it. */
+html:has(dialog[open]) { overflow: hidden; overscroll-behavior: none; }
 dialog.wide { width: min(820px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgba(10, 12, 16, .5); backdrop-filter: blur(2px); }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
@@ -305,6 +316,13 @@ dialog::backdrop { background: rgba(10, 12, 16, .5); backdrop-filter: blur(2px);
   dialog, dialog.wide {
     width: 100%; max-width: 100%; margin: 0; border: 0; border-radius: 0;
     height: 100vh; max-height: 100vh; height: 100dvh; max-height: 100dvh;
+    /* A sheet, not a window: it scrolls up and down only, and without the
+       rubber-band that let it be pulled around. ui.js pins it to the visible
+       viewport while the keyboard is up (--sheet-top / --sheet-height). */
+    top: var(--sheet-top, 0); bottom: auto;
+    height: var(--sheet-height, 100dvh); max-height: var(--sheet-height, 100dvh);
+    overflow-x: hidden; overflow-y: auto; overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
   dialog form { min-height: 100%; display: flex; flex-direction: column; }
   .modal-content { flex: 1; padding: 16px max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left)); }

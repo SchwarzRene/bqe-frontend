@@ -40,6 +40,7 @@ export function openFormModal({ title, body, submitLabel = "Save", wide = false,
     }
   });
   dialog.showModal();
+  fitSheet();
   // showModal focuses the header's close button; start on the first field instead,
   // except on touch screens, where that would throw the keyboard over the form.
   if (!matchMedia("(pointer: coarse)").matches) {
@@ -48,6 +49,32 @@ export function openFormModal({ title, body, submitLabel = "Save", wide = false,
   onReady?.(form);
   return form;
 }
+
+// On a phone the dialog is a full-screen sheet. When the keyboard opens, iOS
+// doesn't shrink the layout viewport; it scrolls the visible part of it, so a
+// sheet sized to the screen slid up under the header and could be panned
+// around. Pinning the sheet to window.visualViewport keeps it exactly on the
+// visible area, with only its own content scrolling (as the Market News chat).
+const phone = matchMedia("(max-width: 600px)");
+
+function fitSheet() {
+  const dialog = $("#modal");
+  const vv = window.visualViewport;
+  if (!dialog?.open || !vv || !phone.matches) {
+    dialog?.style.removeProperty("--sheet-top");
+    dialog?.style.removeProperty("--sheet-height");
+    return;
+  }
+  dialog.style.setProperty("--sheet-top", `${vv.offsetTop}px`);
+  dialog.style.setProperty("--sheet-height", `${vv.height}px`);
+}
+
+if (window.visualViewport) {
+  visualViewport.addEventListener("resize", fitSheet);
+  visualViewport.addEventListener("scroll", fitSheet);
+}
+phone.addEventListener("change", fitSheet);
+$("#modal")?.addEventListener("close", fitSheet);
 
 export function formValues(form) {
   const values = {};
