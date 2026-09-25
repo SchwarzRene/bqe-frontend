@@ -6,6 +6,7 @@ import { addDays, esc, longDate, todayKey, time, tzLabel } from './format.js';
 import { CATS, renderCalendarPage } from './calendar.js';
 import { chat, initChat, renderSuggest, session, setUser } from './chat.js';
 import { globeLabel, mapKeys, renderMap } from './map.js';
+import { companiesCard, handleCompanies, handleCompanySubmit, initCompanies, loadCharts } from './companies.js';
 import { liveCard, nextCard, renderCommodities, renderGeneral, renderStocks } from './pages.js';
 import { allRegions, briefing, data, events, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
 
@@ -64,6 +65,7 @@ async function load() {
     if (!data.D) data.loadError = 'Market News could not be loaded (' + err.message + '). Check the connection and press Refresh.';
   }
   render();
+  if (state.page === 'stocks') loadCharts();
 }
 
 // ---------- Controls ----------
@@ -75,7 +77,16 @@ function selectDay(k) {
   if (panel && window.matchMedia('(max-width: 1180px)').matches) panel.scrollIntoView({ block: 'start' });
 }
 
+/** Redraw only the companies card, e.g. when its prices arrive. */
+function renderCompanies() {
+  const el = $('companies');
+  if (el) el.innerHTML = companiesCard();
+}
+
+document.addEventListener('submit', (e) => { handleCompanySubmit(e); });
+
 document.addEventListener('click', (e) => {
+  if (handleCompanies(e)) return;
   const t = e.target.closest('[data-region], [data-tz], [data-hl-tab], [data-cal-day], [data-cal-step], [data-cal-today], [data-cal-view], [data-cal-imp], [data-cal-cat], [data-cal-open]');
   if (!t) return;
   const ds = t.dataset;
@@ -128,6 +139,8 @@ document.addEventListener('keydown', (e) => {
   mapKeys(e);
   const cell = e.target.closest && e.target.closest('.cell[data-cal-day]');
   if (cell && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectDay(cell.dataset.calDay); }
+  const row = e.target.closest && e.target.closest('.co-row[data-co-select]');
+  if (row && e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); row.click(); }
   if (e.key === 'Escape' && state.mapOpen && !chat.open) { state.mapOpen = false; renderChrome(); $('globe').focus(); }
 });
 
@@ -139,6 +152,7 @@ function route() {
   if (PAGES.some((p) => p[0] === h)) {
     state.page = h;
     render();
+    if (h === 'stocks') loadCharts();
     window.scrollTo(0, 0);
   }
 }
@@ -174,9 +188,17 @@ setInterval(() => {
   if (next) next.innerHTML = nextCard();
 }, 30000);
 setInterval(load, 5 * 60000);
+// The company charts: the price every minute, the chart itself every five.
+let chartTicks = 0;
+setInterval(() => {
+  if (state.page !== 'stocks' || document.hidden) return;
+  chartTicks++;
+  loadCharts({ fresh: chartTicks % 5 === 0, quotesOnly: chartTicks % 5 !== 0 });
+}, 60000);
 
 loadPrefs();
 initChat();
+initCompanies(renderCompanies);
 route();
 render();
 load();

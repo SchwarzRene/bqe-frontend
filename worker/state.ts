@@ -11,7 +11,8 @@ import { currentUser } from "./auth";
 import type { Env } from "./env";
 import { crossSite, isoNow, json, jsonText, readJson } from "./http";
 
-export const APPS = new Set(["stack", "journal"]);
+// news: the companies a user follows on Market News.
+export const APPS = new Set(["stack", "journal", "news"]);
 // D1 rows top out at 2 MB; the JSON envelope needs a little room.
 const MAX_BYTES = 1_800_000;
 

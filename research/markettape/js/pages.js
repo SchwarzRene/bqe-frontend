@@ -2,6 +2,7 @@
 // overview, the top stories with a side column, then the headlines.
 
 import { agenda, byImportance, catOf, impOf } from './calendar.js';
+import { companiesCard } from './companies.js';
 import { countdown, esc, hl, impDots, itemSources, keyLabel, safeUrl, time, todayKey, tzLabel, dayKey } from './format.js';
 import { allRegions, briefing, CODE, data, events, items, keep, OVERVIEW_KEY, R_NAME, ranks, regionOf, state } from './state.js';
 
@@ -120,30 +121,20 @@ export function liveCard() {
 
 export function nextCard(filter = () => true) {
   const now = Date.now();
-  const next = events().filter((e) => keep(regionOf(e)) && filter(e) && Date.parse(e.start) > now).slice(0, 4);
-  return `<div class="card-head"><span class="eyebrow">Next up</span><a class="more-link" href="#calendar" data-cal-open="${todayKey()}">Calendar →</a></div>
-    ${next.length ? `<div class="nextlist">${next.map((e) => `
-      <div class="row"><span class="tm">${dayKey(Date.parse(e.start)) === todayKey() ? time(e.start) : esc(keyLabel(dayKey(Date.parse(e.start)), { weekday: 'short' }))}</span><span class="t">${esc(e.title)}</span><span class="cd">${countdown(Date.parse(e.start) - now)}</span></div>`).join('')}</div>`
-      : '<p class="empty">No more events scheduled for the selected regions.</p>'}`;
-}
-
-function todayCard() {
-  const k = todayKey();
+  const next = events().filter((e) => keep(regionOf(e)) && filter(e) && Date.parse(e.start) > now).slice(0, 5);
   const r = ranks();
-  const list = events().filter((e) => keep(regionOf(e)) && dayKey(Date.parse(e.start)) === k).sort(byImportance);
-  const key = list.slice(0, 3);
-  return `<section class="card tight" aria-labelledby="td-h">
-    <div class="card-head"><h2 class="eyebrow" id="td-h">Today on the calendar</h2><span class="meta">${list.length} event${list.length === 1 ? '' : 's'}</span></div>
-    ${r && r.days[k] ? `<p class="daysum"><span class="spark" aria-hidden="true">✦</span>${esc(r.days[k])}</p>` : ''}
-    ${key.length ? `<div class="nextlist">${key.map((e) => `<div class="row"><span class="tm">${time(e.start)}</span><span class="t">${esc(e.title)}</span><span class="cd" style="color:var(--muted)">${impDots(impOf(e))}</span></div>`).join('')}</div>` : '<p class="empty">A quiet day.</p>'}
-  </section>`;
+  const day = r && r.days[todayKey()];
+  return `<div class="card-head"><span class="eyebrow">Next up</span><a class="more-link" href="#calendar" data-cal-open="${todayKey()}">Calendar →</a></div>
+    ${day ? `<p class="daysum"><span class="spark" aria-hidden="true">✦</span><span><b>Today:</b> ${esc(day)}</span></p>` : ''}
+    ${next.length ? `<div class="nextlist">${next.map((e) => `
+      <div class="row"><span class="tm">${dayKey(Date.parse(e.start)) === todayKey() ? time(e.start) : esc(keyLabel(dayKey(Date.parse(e.start)), { weekday: 'short' }))}</span><span class="t">${esc(e.title)} ${impDots(impOf(e))}</span><span class="cd">${countdown(Date.parse(e.start) - now)}</span></div>`).join('')}</div>`
+      : '<p class="empty">No more events scheduled for the selected regions.</p>'}`;
 }
 
 function pulse() {
   return `<section class="pulse" aria-label="Calendar at a glance">
     <div class="card tight live" id="live-now">${liveCard()}</div>
     <div class="card tight" id="next-up">${nextCard()}</div>
-    ${todayCard()}
   </section>`;
 }
 
@@ -173,24 +164,11 @@ export function renderGeneral() {
 }
 
 export function renderStocks() {
-  const b = briefing();
-  const D = data.D;
-  const companies = b ? b.companies : [];
-  const regionOfTicker = (t) => CODE[((D.watchlist || []).find((w) => w.symbol === t) || {}).region] || 'us';
-  const shown = companies.filter((c) => c.line && keep(regionOfTicker(c.ticker)));
-  const hidden = companies.filter((c) => c.line && !keep(regionOfTicker(c.ticker))).map((c) => c.ticker);
-  const quiet = companies.filter((c) => !c.line).map((c) => c.ticker);
-  const note = !D.yahooOk ? 'Company news from Yahoo is unavailable right now; these lines come from the other feeds.'
-    : (hidden.length ? hidden.join(', ') + ' hidden by the region filter. ' : '') + (quiet.length ? quiet.join(', ') + ': nothing notable today.' : '');
   return `
     <div class="grid-main">
       <div class="stack">${overview('stocks', 'Stocks today')}${storyList('stocks')}</div>
       <aside class="stack">
-        <section class="card" aria-labelledby="co-h">
-          <div class="card-head"><h2 class="h2" id="co-h">My companies</h2></div>
-          ${shown.length ? shown.map((c) => `<div class="line-row"><span class="k">${esc(c.ticker)}</span><span>${esc(c.line)}</span></div>`).join('') : `<p class="empty">${b ? 'No watchlist news in the selected regions.' : 'Company lines appear with the first briefing.'}</p>`}
-          ${note ? `<div class="note">${esc(note)}</div>` : ''}
-        </section>
+        <section class="card companies" id="companies" aria-labelledby="co-h">${companiesCard()}</section>
         ${agenda({ title: 'Earnings ahead', cats: ['earnings'], calLink: 'earnings' })}
       </aside>
     </div>
