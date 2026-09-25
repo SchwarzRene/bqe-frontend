@@ -9,7 +9,7 @@ import { d1 } from "./d1";
 const ORIGIN = "https://site";
 
 function envWith() {
-  return { DB: d1(), ASSETS: { fetch: async () => new Response("asset") } } as any;
+  return { DB: d1(), ASSETS: { fetch: async () => new Response("asset") }, PASSWORD_BREACH_CHECK: "off" } as any;
 }
 
 async function call(env: any, method: string, path: string, body?: unknown, cookie = "", ip = "1.2.3.4") {
@@ -167,7 +167,7 @@ describe("admin terminal API", () => {
     const id = env.DB.raw.prepare("SELECT id FROM users WHERE username = 'alice'").get().id;
 
     const reset = await call(env, "POST", `/api/admin/users/${id}/password`, undefined, boss);
-    expect(reset.data.password).toHaveLength(12);
+    expect(reset.data.password).toHaveLength(16);
     expect((await call(env, "POST", "/api/auth/login", { username: "alice", password: "correct horse" })).status).toBe(401);
     expect((await call(env, "POST", "/api/auth/login", { username: "alice", password: reset.data.password })).status).toBe(200);
 

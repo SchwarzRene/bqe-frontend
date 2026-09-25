@@ -23,6 +23,9 @@ import { crossSite, isoNow, json, jsonText, readJson } from "./http";
 export const APPS = new Set(["stack", "journal", "news"]);
 // D1 rows top out at 2 MB; the JSON envelope needs a little room.
 const MAX_BYTES = 1_800_000;
+// Everything one account may keep, across its apps. With open sign-up the
+// database's size is shared by everyone, so no single account gets to fill it.
+export const MAX_USER_BYTES = 4_000_000;
 
 // Sections of the prefs document, one per app that has settings.
 export const PREF_SECTIONS = new Set(["news", "journal", "historymap"]);
@@ -53,6 +56,13 @@ export async function handleState(request: Request, env: Env, app: string): Prom
   }
   const body = JSON.stringify(payload.data);
   if (body.length > MAX_BYTES) return json({ error: "This is too much data to save in one document." }, 413);
+
+  const others = await env.DB.prepare("SELECT COALESCE(SUM(LENGTH(body)), 0) AS n FROM user_state WHERE user_id = ? AND app != ?")
+    .bind(user.id, app)
+    .first<{ n: number }>();
+  if ((others?.n ?? 0) + body.length > MAX_USER_BYTES) {
+    return json({ error: "Your account is full (4 MB across the apps). Delete old entries to save more." }, 413);
+  }
 
   const now = isoNow();
   const next = payload.version + 1;

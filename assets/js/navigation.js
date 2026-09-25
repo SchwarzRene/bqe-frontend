@@ -284,6 +284,7 @@ async function wireAccount(loginBtn, loginModal, loginForm) {
         username: signupForm.username.value,
         password: signupForm.password.value,
         email: signupForm.email.value,
+        host: signupForm,
       });
       signupForm.reset();
       show(user);
@@ -314,6 +315,30 @@ async function wireAccount(loginBtn, loginModal, loginForm) {
     await BQE.logout();
     show(null);
     showForm('login');
+  });
+
+  document.getElementById('export-btn').addEventListener('click', async () => {
+    try {
+      await BQE.exportAccount();
+    } catch (err) {
+      passwordStatus.textContent = err.message;
+    }
+  });
+
+  const deleteForm = document.getElementById('delete-form');
+  const deleteStatus = document.getElementById('delete-status');
+  deleteForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    deleteStatus.textContent = '';
+    if (!confirm('Delete your account and everything saved to it? This cannot be undone.')) return;
+    try {
+      await BQE.deleteAccount(deleteForm.password.value);
+      deleteForm.reset();
+      show(null);
+      showForm('login');
+    } catch (err) {
+      deleteStatus.textContent = err.message;
+    }
   });
 }
 

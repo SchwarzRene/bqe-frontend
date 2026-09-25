@@ -23,7 +23,33 @@ export const TIMEFRAME_RANGES: Record<string, string> = {
   "1m": "5d", "5m": "1mo", "15m": "1mo", "30m": "1mo", "1h": "6mo", "1d": "2y", "1wk": "10y",
 };
 
-export class MarketError extends Error {}
+// Seconds per bar, and the longest span one request may ask for. A custom
+// range is rounded to whole bars and clamped to the span, so a script
+// cycling through ranges cannot make every request a fresh Yahoo fetch.
+const STEP: Record<string, number> = { "1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "1d": 86_400, "1wk": 86_400 };
+const MAX_SPAN: Record<string, number> = {
+  "1m": 8 * 86_400, "5m": 60 * 86_400, "15m": 60 * 86_400, "30m": 60 * 86_400,
+  "1h": 730 * 86_400, "1d": 40 * 365 * 86_400, "1wk": 40 * 365 * 86_400,
+};
+// An unknown ticker is remembered this long, so it is not asked again on every request.
+const NOT_FOUND_TTL = 600;
+
+export class MarketError extends Error {
+  constructor(message: string, readonly notFound = false) {
+    super(message);
+  }
+}
+
+/** A custom candle range, rounded to whole bars and clamped; null when it is not a usable range. */
+export function candleRange(interval: string, p1: number, p2: number, now = Date.now() / 1000): { period1: string; period2: string } | null {
+  if (!Number.isFinite(p1) || !Number.isFinite(p2) || p1 <= 0 || p2 <= p1) return null;
+  const step = STEP[interval];
+  let end = Math.ceil(Math.min(p2, now + step) / step) * step;
+  let start = Math.floor(p1 / step) * step;
+  start = Math.max(start, end - MAX_SPAN[interval]);
+  if (start >= end) end = start + step;
+  return { period1: String(start), period2: String(end) };
+}
 
 export async function handleMarket(request: Request, ctx: ExecutionContext, what: string): Promise<Response> {
   if (request.method !== "GET") return json({ error: "method not allowed" }, 405, { Allow: "GET" });
@@ -43,12 +69,9 @@ export async function handleMarket(request: Request, ctx: ExecutionContext, what
     if (!(interval in TIMEFRAME_RANGES)) {
       return json({ error: `timeframe must be one of: ${Object.keys(TIMEFRAME_RANGES).join(", ")}` }, 400);
     }
-    const p1 = Number(url.searchParams.get("period1"));
-    const p2 = Number(url.searchParams.get("period2"));
-    // Rounded to the minute, so repeated views of an open trade share a fetch.
-    params = Number.isFinite(p1) && Number.isFinite(p2) && p1 > 0 && p2 > p1
-      ? { period1: String(Math.floor(p1 / 60) * 60), period2: String(Math.ceil(p2 / 60) * 60), interval }
-      : { range: TIMEFRAME_RANGES[interval], interval };
+    // Rounded to whole bars, so repeated views of an open trade share a fetch.
+    const range = candleRange(interval, Number(url.searchParams.get("period1")), Number(url.searchParams.get("period2")));
+    params = range ? { ...range, interval } : { range: TIMEFRAME_RANGES[interval], interval };
     ttl = CANDLE_TTL;
   } else {
     return json({ error: "not found" }, 404);
@@ -67,6 +90,11 @@ export async function handleMarket(request: Request, ctx: ExecutionContext, what
     return res;
   } catch (err) {
     const message = err instanceof MarketError ? err.message : "Could not reach the market data provider";
+    if (err instanceof MarketError && err.notFound) {
+      const res = json({ error: message }, 404, { "Cache-Control": `public, max-age=${NOT_FOUND_TTL}` });
+      ctx.waitUntil(cache.put(key, res.clone()));
+      return res;
+    }
     return json({ error: message }, 502);
   }
 }
@@ -96,7 +124,9 @@ export async function fetchChart(ticker: string, params: Record<string, string>)
   // Yahoo answers an unknown ticker with a 404 whose JSON says why.
   const body = await res.json<any>().catch(() => null);
   const chart = body?.chart;
-  if (chart?.error) throw new MarketError(`${ticker}: ${chart.error.description || chart.error.code || "unknown error"}`);
+  if (chart?.error) {
+    throw new MarketError(`${ticker}: ${chart.error.description || chart.error.code || "unknown error"}`, res.status === 404 || chart.error.code === "Not Found");
+  }
   if (!res.ok) throw new MarketError(`${ticker}: HTTP ${res.status}`);
   const result = chart?.result?.[0];
   if (!result) throw new MarketError(`No market data found for ${ticker}`);

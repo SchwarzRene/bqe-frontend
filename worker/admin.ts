@@ -5,11 +5,16 @@
 //   PATCH  /api/admin/users/:id  {ai?, disabled?, role?}
 //   POST   /api/admin/users/:id/password         -> {password}: a new temporary one
 //   DELETE /api/admin/users/:id                  the account and everything it saved
+//   GET    /api/admin/messages                   contact-form messages, unanswered first
+//   POST   /api/admin/messages/:id/answered      mark one answered (starts the 30-day deletion)
+//   GET    /api/admin/audit                      the last 200 admin actions
+//
+// Every change is written to admin_audit in the same batch as the change.
 //
 // An admin cannot suspend, demote or delete their own account, so the site
 // can never be left without one by accident.
 
-import { currentUser, derive, ITERATIONS, randomToken, type User } from "./auth";
+import { currentUser, deleteUserStatements, derive, iterations, randomToken, type User } from "./auth";
 import type { Env } from "./env";
 import { crossSite, hex, isoNow, json, readJson, utcDay } from "./http";
 
@@ -26,12 +31,25 @@ export interface AccountRow {
   aiToday: number;
 }
 
-export async function handleAdminUsers(request: Request, env: Env, id: number | null, sub: string): Promise<Response> {
-  const method = request.method;
-  if (method !== "GET" && crossSite(request)) return json({ error: "forbidden" }, 403);
+/** The signed-in admin, or the response that refuses the request. */
+async function requireAdmin(request: Request, env: Env): Promise<User | Response> {
+  if (request.method !== "GET" && crossSite(request)) return json({ error: "forbidden" }, 403);
   const admin = await currentUser(request, env);
   if (!admin) return json({ error: "Sign in first." }, 401);
   if (admin.role !== "admin") return json({ error: "Admins only." }, 403);
+  return admin;
+}
+
+/** A row for admin_audit, to go in the same batch as the change it records. */
+export function audit(env: Env, admin: User, action: string, target: string, detail = ""): D1PreparedStatement {
+  return env.DB.prepare("INSERT INTO admin_audit (at, admin, action, target, detail) VALUES (?, ?, ?, ?, ?)")
+    .bind(isoNow(), admin.username, action, target, detail.slice(0, 500));
+}
+
+export async function handleAdminUsers(request: Request, env: Env, id: number | null, sub: string): Promise<Response> {
+  const method = request.method;
+  const admin = await requireAdmin(request, env);
+  if (admin instanceof Response) return admin;
 
   if (id === null) {
     if (method !== "GET") return json({ error: "method not allowed" }, 405, { Allow: "GET" });
@@ -49,18 +67,10 @@ export async function handleAdminUsers(request: Request, env: Env, id: number | 
   }
   if (sub) return json({ error: "not found" }, 404);
 
-  if (method === "PATCH") return update(request, env, admin, target.id);
+  if (method === "PATCH") return update(request, env, admin, target);
   if (method === "DELETE") {
     if (target.id === admin.id) return json({ error: "You can't delete your own account here." }, 400);
-    await env.DB.batch([
-      // D1 enforces foreign keys, but the cascade is spelled out so it does
-      // not depend on that.
-      env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(target.id),
-      env.DB.prepare("DELETE FROM user_state WHERE user_id = ?").bind(target.id),
-      env.DB.prepare("DELETE FROM news_chat_usage WHERE user_id = ?").bind(target.id),
-      env.DB.prepare("DELETE FROM chat_conversations WHERE user_id = ?").bind(target.id),
-      env.DB.prepare("DELETE FROM users WHERE id = ?").bind(target.id),
-    ]);
+    await env.DB.batch([...deleteUserStatements(env, target.id), audit(env, admin, "delete", target.username)]);
     console.log(`admin ${admin.username} deleted user ${target.username}`);
     return json({ ok: true });
   }
@@ -90,7 +100,8 @@ export async function listUsers(env: Env): Promise<AccountRow[]> {
   }));
 }
 
-async function update(request: Request, env: Env, admin: User, id: number): Promise<Response> {
+async function update(request: Request, env: Env, admin: User, target: { id: number; username: string }): Promise<Response> {
+  const id = target.id;
   const body = await readJson(request, 1024);
   if (!body) return json({ error: "Send the changes as JSON." }, 400);
   const sets: string[] = [];
@@ -115,26 +126,76 @@ async function update(request: Request, env: Env, admin: User, id: number): Prom
   }
   if (!sets.length) return json({ error: "Nothing to change." }, 400);
 
-  const statements = [env.DB.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).bind(...args, id)];
+  const changes = JSON.stringify({ ai: body.ai, disabled: body.disabled, role: body.role });
+  const statements = [
+    env.DB.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).bind(...args, id),
+    audit(env, admin, "update", target.username, changes),
+  ];
   // A suspended account is signed out everywhere, not just refused next time.
   if (body.disabled === true) statements.push(env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(id));
   await env.DB.batch(statements);
-  console.log(`admin ${admin.username} updated user ${id}: ${JSON.stringify(body)}`);
+  console.log(`admin ${admin.username} updated user ${id}: ${changes}`);
 
   const user = (await listUsers(env)).find((u) => u.id === id);
   return json({ user });
 }
 
 async function resetPassword(env: Env, admin: User, target: { id: number; username: string }): Promise<Response> {
-  // 12 URL-safe characters: easy to pass on, and changed by the user after signing in.
-  const password = randomToken().slice(0, 12);
+  // 16 URL-safe characters: easy to pass on, and changed by the user after signing in.
+  const password = randomToken().slice(0, 16);
   const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+  const rounds = iterations(env);
   await env.DB.batch([
     env.DB.prepare("UPDATE users SET password_hash = ?, password_salt = ?, password_iterations = ? WHERE id = ?").bind(
-      await derive(password, salt, ITERATIONS), salt, ITERATIONS, target.id,
+      await derive(password, salt, rounds), salt, rounds, target.id,
     ),
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ? AND user_id != ?").bind(target.id, admin.id),
+    audit(env, admin, "password", target.username),
   ]);
   console.log(`admin ${admin.username} reset the password of ${target.username}`);
   return json({ password });
+}
+
+// --------------------------------------------------------------------------
+// contact messages and the audit log
+// --------------------------------------------------------------------------
+
+export async function handleAdminMessages(request: Request, env: Env, id: number | null, sub: string): Promise<Response> {
+  const admin = await requireAdmin(request, env);
+  if (admin instanceof Response) return admin;
+
+  if (id === null) {
+    if (request.method !== "GET") return json({ error: "method not allowed" }, 405, { Allow: "GET" });
+    const rows = await env.DB.prepare(
+      `SELECT id, created_at, name, email, phone, subject, message, answered_at FROM contact_messages
+        ORDER BY answered_at IS NOT NULL, created_at DESC LIMIT 200`,
+    ).all<any>();
+    return json({
+      messages: (rows.results ?? []).map((r) => ({
+        id: r.id, createdAt: r.created_at, name: r.name, email: r.email, phone: r.phone ?? null,
+        subject: r.subject, message: r.message, answeredAt: r.answered_at ?? null,
+      })),
+    });
+  }
+  if (sub !== "answered") return json({ error: "not found" }, 404);
+  if (request.method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
+  const result = await env.DB.prepare("UPDATE contact_messages SET answered_at = ? WHERE id = ? AND answered_at IS NULL")
+    .bind(isoNow(), id)
+    .run();
+  if (!result.meta.changes) return json({ error: "No such unanswered message." }, 404);
+  await audit(env, admin, "message", String(id), "answered").run();
+  return json({ ok: true });
+}
+
+export async function handleAdminAudit(request: Request, env: Env): Promise<Response> {
+  const admin = await requireAdmin(request, env);
+  if (admin instanceof Response) return admin;
+  if (request.method !== "GET") return json({ error: "method not allowed" }, 405, { Allow: "GET" });
+  const rows = await env.DB.prepare("SELECT at, admin, action, target, detail FROM admin_audit ORDER BY id DESC LIMIT 200").all<any>();
+  return json({ entries: rows.results ?? [] });
+}
+
+/** The audit log is kept a year. Run daily by cron. */
+export async function pruneAudit(env: Env): Promise<void> {
+  await env.DB.prepare("DELETE FROM admin_audit WHERE at < ?").bind(new Date(Date.now() - 365 * 86_400_000).toISOString()).run();
 }

@@ -31,8 +31,14 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
   if (denied) return denied;
 
   const body = await readJson(request, 64 * 1024);
-  const messages = cleanMessages(body?.messages);
-  if (!messages) return json({ error: "Send a question." }, 400);
+  const sent = cleanMessages(body?.messages);
+  if (!sent) return json({ error: "Send a question." }, 400);
+  // Only the new question is taken from the page. What came before is read
+  // back from the saved conversation, so earlier "assistant" turns cannot be
+  // made up by the client to steer the model.
+  const asked = isConversationId(body?.conversationId) ? body.conversationId : null;
+  const question = sent[sent.length - 1];
+  const messages = [...(await storedHistory(env, user.id, asked)), question];
   if (!env.GEMINI_API_KEY) return json({ error: "The chat is not set up yet (GEMINI_API_KEY is missing)." }, 503);
 
   const limit = Number(env.NEWS_CHAT_DAILY_LIMIT) || DEFAULT_DAILY_LIMIT;
@@ -57,8 +63,7 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
     // Saved to the account; a failed save still returns the answer.
     let conversationId: string | null = null;
     try {
-      const asked = isConversationId(body?.conversationId) ? body.conversationId : null;
-      conversationId = await saveTurn(env, user.id, asked, messages[messages.length - 1].text, out.answer, out.sources);
+      conversationId = await saveTurn(env, user.id, asked, question.text, out.answer, out.sources);
     } catch (err) {
       console.warn("chat not saved", err instanceof Error ? err.message : String(err));
     }
@@ -87,6 +92,29 @@ export function chatError(err: unknown): { error: string } {
     return { error: `The model could not answer: ${err.message.slice(0, 300)}` };
   }
   return { error: `The chat failed on the server: ${String(err instanceof Error ? err.message : err).slice(0, 300)}` };
+}
+
+/** The last turns of the user's saved conversation, as model input; empty for a new one. */
+export async function storedHistory(env: Env, userId: number, id: string | null): Promise<{ role: "user" | "model"; text: string }[]> {
+  if (!id) return [];
+  const row = await env.DB.prepare("SELECT messages FROM chat_conversations WHERE id = ? AND user_id = ?")
+    .bind(id, userId)
+    .first<{ messages: string }>();
+  if (!row) return [];
+  let stored: { role?: string; text?: string }[];
+  try {
+    stored = JSON.parse(row.messages);
+  } catch {
+    return [];
+  }
+  const list = (Array.isArray(stored) ? stored : [])
+    .filter((m) => (m?.role === "user" || m?.role === "assistant") && typeof m.text === "string" && m.text.trim())
+    .slice(-(MAX_TURNS - 1))
+    .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("model" as const), text: String(m.text).trim().slice(0, MAX_CHARS) }));
+  while (list.length && list[0].role !== "user") list.shift();
+  // The next turn is the user's, so the history must end with the model's.
+  while (list.length && list[list.length - 1].role !== "model") list.pop();
+  return list;
 }
 
 export function cleanMessages(raw: unknown): { role: "user" | "model"; text: string }[] | null {

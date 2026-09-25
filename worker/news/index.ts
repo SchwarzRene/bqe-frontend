@@ -16,6 +16,7 @@
 //   calendar ranking       05:45 New York time: Gemini ranks the events of busy days
 
 import { aiDenied, currentUser, pruneAuth } from "../auth";
+import { pruneAudit } from "../admin";
 import { pruneContact } from "../contact";
 import type { Env } from "../env";
 import { crossSite, isoNow, json } from "../http";
@@ -187,7 +188,7 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: F
     // 05:00 New York: the economic calendar, meetings and fallbacks, and the daily clean-up.
     await record("calendar", () => refreshCalendar(env, ms, { cfg, only: CALENDAR_FIRST_HALF }));
     await record("prune", async () => {
-      await Promise.all([pruneNews(env, ms), pruneContact(env), pruneAuth(env)]);
+      await Promise.all([pruneNews(env, ms), pruneContact(env), pruneAuth(env), pruneAudit(env)]);
       return "done";
     });
     return report.join(" · ");
