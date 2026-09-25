@@ -44,6 +44,9 @@ research/markettape/js/          its code, as ES modules: main (loading, control
                                  Stocks, Commodities), calendar (the Calendar page and agendas),
                                  map (the region picker), chat (Ask AI, sign-in), state, format
 research/markettape/worldmap.svg the region map, built by docs/tools/market-news-map.py
+assets/images/market-news/        the page's pictures: page banners, commodity groups, story topics,
+                                 calendar category icons (PNG masks, tinted per category), quiet
+                                 state, link preview; prompts in docs/market-news-image-prompts.md
 ```
 
 **Endpoints**
@@ -167,6 +170,7 @@ Three objects: a headline item per story, a briefing per run, and a calendar eve
 | generatedAt | ISO time | when the model ran |
 | general / stocks / commodities | object per page | overview (3–5 sentences), themes (max 4), topStories (max 5) |
 | topStories[] | array | item ids, one-line summary, why it matters, importance 1–3, region, topic, new or continuing |
+| headlineRanks | object | headline id → importance 1–5, for every headline the model saw |
 | companies | array | ticker, one line, or null if nothing notable |
 | commodityGroups | array, 3 groups | Energy, Metals, Agriculture: one-line summary, one line per commodity, item ids, next scheduled report |
 
@@ -176,11 +180,11 @@ Every top story, company line and commodity line references item ids, so the pag
 
 ## AI briefing
 
-The model gets headlines only and returns strict JSON for all three pages in one call: an overview, the 5 most important stories per page, one line per watchlist company, and the commodity groups.
+The model gets headlines only and returns strict JSON for all three pages in one call: an overview, the 5 most important stories per page, one line per watchlist company, the commodity groups, and an importance from 1 to 5 for every headline it was given. The page orders headline lists and the commodity boxes by that importance ("Most important", or "Newest"); headlines that arrived after the briefing get an estimate from their stored score, drawn hollow.
 
 **Input per run**
 
-- Up to ~60 pre-scored headlines: id, title, source, alsoIn, time, category, region, tickers
+- Up to 100 pre-scored headlines: id, title, source, alsoIn, time, category, region, tickers
 - The watchlist tickers and company names, and the commodity list
 - The previous briefing's top stories, so it can mark what is new vs. continuing
 - Today's calendar (Fed, ECB, data, earnings, commodity reports), so it can connect news to events
@@ -281,10 +285,10 @@ Three pages share one header and filter row. Each page has the same order: overv
 
 | Part | Content |
 | --- | --- |
-| Shared header | "Updated" time, Vienna / New York toggle, Ask AI button (locked for guests), refresh button, account (Guest · Sign in, or name · Sign out); tabs General · Stocks · Commodities · Calendar; a 🌍 region button (All, US, Europe, Asia, Russia) that folds open a world map to click the region on, with headline and event counts per region |
+| Shared header | Ask AI button (locked for guests), account (Guest · Sign in, or name · Sign out); a ⚙ settings chip next to the region chip that folds open the Vienna / New York toggle, the "updated" times and the refresh button; tabs General · Stocks · Commodities · Calendar; a 🌍 region button (All, US, Europe, Asia, Russia, or any combination, e.g. Europe + Russia) that folds open a world map to click regions on and off, with headline and event counts per region |
 | Chat panel | Opens from the right on any page; suggested questions for the current page; answers with source links; closes with Esc |
-| General | On now, next up and today's key events (with the AI's line on the day); overview and top 5 stories on macro, central banks and world news; "Elsewhere today" links to the top Stocks and Commodities stories; "Coming up": the next days' key events; headlines (tabs): World, Economy, Central banks |
-| Stocks | Stock market overview and top 5 stories; My companies (one line per ticker, hidden if no news); earnings ahead; headlines (tabs): Markets, Companies, Earnings |
+| General | On now; next up, with the AI's line on today; overview and top 5 stories on macro, central banks and world news; "Elsewhere today" links to the top Stocks and Commodities stories; "Coming up": the next days' key events; headlines (tabs): World, Economy, Central banks |
+| Stocks | Stock market overview and top 5 stories; My companies: a live chart per company (1D, 5D, 1M; price and change from `/api/market`, the Trading Journal's Yahoo endpoints, prices every minute and charts every five), a dot on companies in today's briefing; the list is editable (add a Yahoo ticker, remove, reset to the watchlist) and kept in the browser, and on the account via `/api/state/news` when signed in; earnings ahead; headlines (tabs): Markets, Companies, Earnings |
 | Commodities | Overview; one card each for Agriculture (soybeans, corn, wheat, coffee), Energy (crude oil, US gas, EU gas) and Metals (gold, silver, copper), each with a line per commodity, headlines and the next report; upcoming commodity reports (USDA, EIA, OPEC+); commodity headlines (tabs per group) |
 | Calendar | Month or week grid, Google-Calendar style, events colored by category: Central banks, Speeches, Economic data, Earnings, Commodities (toggle each on or off) and filtered by importance (All, Notable+, Key only). A month cell shows the day's 3 most important events and "+n more"; busy days use the AI ranking and are marked "AI". Clicking a day opens the day panel: the AI's line on the day and the full schedule with results, streams and related headlines |
 

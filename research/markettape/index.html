@@ -6,6 +6,15 @@
 <meta name="description" content="Market News — a daily briefing on markets, stocks and commodities: AI-ranked top stories from free headlines, an event calendar ranked by importance, a world map to pick a region, and a chat that answers from the collected headlines.">
 <title>Market News</title>
 <link rel="icon" href="/assets/images/logo.png" type="image/png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Market News — Black Quant Empire">
+<meta property="og:description" content="AI-ranked market news, an event calendar ranked by importance, and live charts for the companies you follow.">
+<meta property="og:url" content="https://bqe-frontend.pages.dev/research/markettape/">
+<meta property="og:image" content="https://bqe-frontend.pages.dev/assets/images/market-news/og-market-news.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" as="image" href="/assets/images/market-news/banner-general.webp">
 <link rel="stylesheet" href="/research/markettape/css/market-news.css">
 </head>
 <body>
@@ -21,12 +30,6 @@
         </div>
       </div>
       <div class="tools">
-        <span class="updated" id="updated"></span>
-        <div class="seg" role="group" aria-label="Time zone" id="tz"></div>
-        <button type="button" class="btn" id="refresh">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
-          Refresh
-        </button>
         <button type="button" class="btn primary ask" id="ask" aria-expanded="false" aria-controls="chat">
           <svg class="ico-chat" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>
           <svg class="ico-lock" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
@@ -37,9 +40,26 @@
     </header>
     <nav class="navrow" aria-label="Pages and region">
       <div class="tabs" id="tabs"></div>
-      <button type="button" class="globe" id="globe" aria-expanded="false" aria-controls="mapbox" title="Pick a region on the map"></button>
+      <div class="chips">
+        <button type="button" class="globe" id="globe" aria-expanded="false" aria-controls="mapbox" title="Pick regions on the map"></button>
+        <button type="button" class="globe" id="settings" aria-expanded="false" aria-controls="setbox" title="Time zone and refresh"></button>
+      </div>
     </nav>
     <section class="mapbox" id="mapbox" aria-label="Region map" hidden></section>
+    <section class="setbox" id="setbox" aria-label="Settings" hidden>
+      <div class="setrow">
+        <span class="setlbl">Time zone</span>
+        <div class="seg" role="group" aria-label="Time zone" id="tz"></div>
+      </div>
+      <div class="setrow">
+        <span class="setlbl">Data</span>
+        <span class="updated" id="updated"></span>
+        <button type="button" class="btn" id="refresh">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
+          Refresh
+        </button>
+      </div>
+    </section>
   </div>
 
   <main id="page" class="stack" style="gap:24px" aria-live="polite"></main>

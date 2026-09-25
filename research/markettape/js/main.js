@@ -6,8 +6,9 @@ import { addDays, esc, longDate, todayKey, time, tzLabel } from './format.js';
 import { CATS, renderCalendarPage } from './calendar.js';
 import { chat, initChat, renderSuggest, session, setUser } from './chat.js';
 import { globeLabel, mapKeys, renderMap } from './map.js';
+import { companiesCard, handleCompanies, handleCompanySubmit, initCompanies, loadCharts } from './companies.js';
 import { liveCard, nextCard, renderCommodities, renderGeneral, renderStocks } from './pages.js';
-import { briefing, data, events, loadPrefs, PAGES, savePrefs, state, TZS } from './state.js';
+import { allRegions, briefing, data, events, loadPrefs, PAGES, savePrefs, state, toggleRegion, TZS } from './state.js';
 
 const $ = (id) => document.getElementById(id);
 const ICON_CAL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
@@ -18,7 +19,12 @@ function renderChrome() {
   const parts = [];
   if (b) parts.push(`Briefing ${time(b.generatedAt)}`);
   if (data.D && data.D.fetchedAt) parts.push(`headlines ${time(data.D.fetchedAt)}`);
-  $('updated').textContent = parts.length ? `${parts.join(' · ')} ${tzLabel()}` : '';
+  $('updated').textContent = parts.length ? `${parts.join(' · ')} ${tzLabel()}` : 'Not loaded yet';
+  const set = $('settings');
+  set.innerHTML = `<span class="emoji" aria-hidden="true">⚙</span><span class="lbl">Time</span>${tzLabel()}
+    <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+  set.setAttribute('aria-expanded', String(state.settingsOpen));
+  $('setbox').hidden = !state.settingsOpen;
   $('today').textContent = longDate(Date.now());
   $('tz').innerHTML = TZS.map(([id, label]) => `<button type="button" data-tz="${id}" aria-pressed="${state.tz === id}">${label}</button>`).join('');
   const upcoming = events().filter((e) => Date.parse(e.start) > Date.now()).length;
@@ -27,7 +33,7 @@ function renderChrome() {
   const globe = $('globe');
   globe.innerHTML = globeLabel();
   globe.setAttribute('aria-expanded', String(state.mapOpen));
-  globe.classList.toggle('filtered', state.region !== 'all');
+  globe.classList.toggle('filtered', !allRegions());
   renderMap($('mapbox'), renderChrome);
 }
 
@@ -64,6 +70,7 @@ async function load() {
     if (!data.D) data.loadError = 'Market News could not be loaded (' + err.message + '). Check the connection and press Refresh.';
   }
   render();
+  if (state.page === 'stocks') loadCharts();
 }
 
 // ---------- Controls ----------
@@ -75,16 +82,27 @@ function selectDay(k) {
   if (panel && window.matchMedia('(max-width: 1180px)').matches) panel.scrollIntoView({ block: 'start' });
 }
 
+/** Redraw only the companies card, e.g. when its prices arrive. */
+function renderCompanies() {
+  const el = $('companies');
+  if (el) el.innerHTML = companiesCard();
+}
+
+document.addEventListener('submit', (e) => { handleCompanySubmit(e); });
+
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-region], [data-tz], [data-hl-tab], [data-cal-day], [data-cal-step], [data-cal-today], [data-cal-view], [data-cal-imp], [data-cal-cat], [data-cal-open]');
+  if (handleCompanies(e)) return;
+  const t = e.target.closest('[data-region], [data-tz], [data-hl-tab], [data-hl-sort], [data-cal-day], [data-cal-step], [data-cal-today], [data-cal-view], [data-cal-imp], [data-cal-cat], [data-cal-open]');
   if (!t) return;
   const ds = t.dataset;
   if (ds.region) {
-    // Clicking the selected region again goes back to all.
-    state.region = ds.region === state.region && ds.region !== 'all' && t.closest('svg') ? 'all' : ds.region;
+    // Regions combine: a click adds or removes one; "All regions" clears the filter.
+    toggleRegion(ds.region);
     savePrefs(); render();
   } else if (ds.tz) {
     state.tz = ds.tz; savePrefs(); render();
+  } else if (ds.hlSort) {
+    state.hlSort = ds.hlSort; savePrefs(); render();
   } else if (ds.hlTab) {
     state.hlTab[state.page] = Number(ds.hlTab); render();
   } else if (ds.calOpen) {
@@ -128,10 +146,15 @@ document.addEventListener('keydown', (e) => {
   mapKeys(e);
   const cell = e.target.closest && e.target.closest('.cell[data-cal-day]');
   if (cell && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectDay(cell.dataset.calDay); }
+  const row = e.target.closest && e.target.closest('.co-row[data-co-select]');
+  if (row && e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); row.click(); }
   if (e.key === 'Escape' && state.mapOpen && !chat.open) { state.mapOpen = false; renderChrome(); $('globe').focus(); }
+  if (e.key === 'Escape' && state.settingsOpen && !chat.open) { state.settingsOpen = false; renderChrome(); $('settings').focus(); }
 });
 
-$('globe').addEventListener('click', () => { state.mapOpen = !state.mapOpen; renderChrome(); });
+// The region map and the settings fold open one at a time.
+$('globe').addEventListener('click', () => { state.mapOpen = !state.mapOpen; state.settingsOpen = false; renderChrome(); });
+$('settings').addEventListener('click', () => { state.settingsOpen = !state.settingsOpen; state.mapOpen = false; renderChrome(); });
 
 // Page routing via the URL hash; in-page anchors (#headlines) keep the current page.
 function route() {
@@ -139,6 +162,7 @@ function route() {
   if (PAGES.some((p) => p[0] === h)) {
     state.page = h;
     render();
+    if (h === 'stocks') loadCharts();
     window.scrollTo(0, 0);
   }
 }
@@ -174,9 +198,17 @@ setInterval(() => {
   if (next) next.innerHTML = nextCard();
 }, 30000);
 setInterval(load, 5 * 60000);
+// The company charts: the price every minute, the chart itself every five.
+let chartTicks = 0;
+setInterval(() => {
+  if (state.page !== 'stocks' || document.hidden) return;
+  chartTicks++;
+  loadCharts({ fresh: chartTicks % 5 === 0, quotesOnly: chartTicks % 5 !== 0 });
+}, 60000);
 
 loadPrefs();
 initChat();
+initCompanies(renderCompanies);
 route();
 render();
 load();

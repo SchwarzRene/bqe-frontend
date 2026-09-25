@@ -11,7 +11,7 @@ import { askJson, model } from "./gemini";
 import { type Item, recentItems } from "./store";
 import { SLOT_LABEL, type Slot } from "./time";
 
-const MAX_INPUT = 60;
+const MAX_INPUT = 100;
 const NEW_ENOUGH = 40; // a fresh item at or above this score is worth a new briefing
 
 const OVERVIEW_REGIONS = ["all", "us", "europe", "asia", "russia"] as const;
@@ -47,6 +47,8 @@ export interface Briefing {
     ids: string[];
     rows: { name: string; line: string | null }[];
   }[];
+  /** Headline id → importance, 5 market-moving … 1 minor; every headline the model saw. */
+  headlineRanks: Record<string, number>;
 }
 
 // --------------------------------------------------------------------------
@@ -126,9 +128,19 @@ export const BRIEFING_SCHEMA = {
         required: ["name", "summary", "nextEventId", "ids", "rows"],
       },
     },
+    headlines: {
+      type: "ARRAY",
+      description: "every input headline, with its importance",
+      items: {
+        type: "OBJECT",
+        properties: { id: STR, i: { type: "INTEGER", description: "5 moves the whole market … 1 minor" } },
+        required: ["id", "i"],
+        propertyOrdering: ["id", "i"],
+      },
+    },
   },
-  required: ["general", "stocks", "commodities", "companies", "commodityGroups"],
-  propertyOrdering: ["general", "stocks", "commodities", "companies", "commodityGroups"],
+  required: ["general", "stocks", "commodities", "companies", "commodityGroups", "headlines"],
+  propertyOrdering: ["general", "stocks", "commodities", "companies", "commodityGroups", "headlines"],
 };
 
 // --------------------------------------------------------------------------
@@ -154,7 +166,8 @@ Pages:
 - commodities: energy, metals, agriculture. Up to 5 top stories.
 Each page has an overview for all regions (3-5 sentences) and one per region: us, europe, asia, russia (1-2 sentences each; say plainly if there is little news for that region). Up to 4 themes per page, one or two words each.
 Mark each story "continuing" if it matches one of the previous briefing's stories, else "new".
-companies: one entry per watchlist ticker, in the order given. commodityGroups: Agriculture, Energy, Metals, with one row per commodity of that group (in the order given) and nextEventId set to the id of that group's next calendar event, or null.`;
+companies: one entry per watchlist ticker, in the order given. commodityGroups: Agriculture, Energy, Metals, with one row per commodity of that group (in the order given) and nextEventId set to the id of that group's next calendar event, or null.
+headlines: every input headline id with its importance "i", using the same ranking rules: 5 moves the whole market, 4 important for a sector, region or followed commodity, 3 notable, 2 minor, 1 noise (opinion, listicles, tips). Use the whole scale.`;
 
 export function buildPrompt(input: {
   items: Item[];
@@ -266,7 +279,13 @@ export function validateBriefing(
       rows,
     };
   });
-  return { pages, companies, commodityGroups };
+  const headlineRanks: Record<string, number> = {};
+  for (const h of Array.isArray(raw.headlines) ? raw.headlines : []) {
+    const id = String(h?.id ?? "");
+    const i = Math.round(Number(h?.i));
+    if (itemIds.has(id) && i >= 1 && i <= 5) headlineRanks[id] = i;
+  }
+  return { pages, companies, commodityGroups, headlineRanks };
 }
 
 // --------------------------------------------------------------------------

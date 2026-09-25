@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateBriefing, pickInput } from "../worker/news/briefing";
 import { type CalendarConfig, fixedEvents, mergeMeetingResults, nasdaqEvent, parseEconomic, parseIcs, pickNasdaq } from "../worker/news/calendar";
 import { describeGeminiError } from "../worker/news/gemini";
-import { chatError, cleanMessages, handleChat, splitSources } from "../worker/news/chat";
+import { chatError, chatRegion, cleanMessages, handleChat, splitSources } from "../worker/news/chat";
 import { GeminiError, generate, RETRY_DELAYS_MS } from "../worker/news/gemini";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
@@ -297,6 +297,11 @@ describe("news briefing", () => {
     expect(b.commodityGroups[0].rows).toEqual([{ name: "Soybeans", line: null }]);
   });
 
+  it("keeps the model's importance per headline, for input ids and 1-5 only", () => {
+    const b = validateBriefing({ ...good, headlines: [{ id: "a1", i: 5 }, { id: "b2", i: 2 }, { id: "zz", i: 4 }, { id: "c3", i: 9 }] }, ids, new Set(), cfg)!;
+    expect(b.headlineRanks).toEqual({ a1: 5, b2: 2 });
+  });
+
   it("rejects a briefing without a usable general page", () => {
     expect(validateBriefing({ ...good, general: page({ ids: ["zz"], summary: "x" }) }, ids, new Set(), cfg)).toBeNull();
     expect(validateBriefing("nope", ids, new Set(), cfg)).toBeNull();
@@ -356,6 +361,12 @@ describe("Gemini overload", () => {
     expect((await generate(env, "gemini-3.5-flash-lite", {}, "t")).candidates[0].content.parts[0].text).toBe("from 3.6");
     expect(calls).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]);
 
+    // Another main model at its limit falls back to 3.5 Flash-Lite first.
+    calls.length = 0;
+    vi.stubGlobal("fetch", async (url: string) => (calls.push(url.split("/models/")[1].split(":")[0]), url.includes("gemini-3.5-flash-lite") ? ok("from 3.5") : overloaded()));
+    expect((await generate(env, "gemini-3.6-flash", {}, "t")).candidates[0].content.parts[0].text).toBe("from 3.5");
+    expect(calls).toEqual(["gemini-3.6-flash", "gemini-3.6-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"]);
+
     vi.stubGlobal("fetch", async () => overloaded());
     await expect(generate({ ...env, GEMINI_FALLBACK_MODEL: "off" }, "gemini-3.7-flash", {}, "t")).rejects.toMatchObject({ status: 503 });
   });
@@ -404,5 +415,15 @@ describe("news chat", () => {
     const res = await handleChat(new Request("https://site/api/chat", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }) }), env);
     expect(res.status).toBe(401);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat view", () => {
+  it("takes one region, a combination, or all", () => {
+    expect(chatRegion("eu")).toBe("eu");
+    expect(chatRegion("ru,eu")).toBe("eu,ru");
+    expect(chatRegion("eu,mars")).toBe("eu");
+    expect(chatRegion(undefined)).toBe("all");
+    expect(chatRegion("all")).toBe("all");
   });
 });

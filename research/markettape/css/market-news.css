@@ -135,7 +135,7 @@ body { background: transparent; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
 /* ── Pulse row: on now · next up · today ── */
-.pulse { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.2fr); gap: 16px; }
+.pulse { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; }
 @media (max-width: 1080px) { .pulse { grid-template-columns: minmax(0, 1fr); } }
 .live { border-left: 3px solid var(--red); }
 .live .eyebrow { color: var(--red); display: flex; align-items: center; gap: 7px; }
@@ -347,3 +347,92 @@ body dialog.bqe-login .err { color: var(--red); }
 .chat-form button:hover { background: var(--accent-light); }
 .chat-note { padding: 0 20px 14px; font-size: 11px; color: var(--muted); }
 @media (max-width: 640px) { .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .tabs a { flex: none; } }
+
+/* ── My companies: live charts ── */
+.co-tools { display: flex; gap: 6px; align-items: center; }
+.seg.small button, .btn.small { min-height: 28px; padding: 0 9px; font-size: 12px; }
+.co-feature { padding: 12px; margin-bottom: 8px; border-radius: 8px; background: var(--inset); }
+.co-fhead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.co-fhead b { color: var(--ink); font-family: var(--mono); }
+.co-price { font-family: var(--mono); font-size: 14px; color: var(--ink); }
+.co-feature .spark { width: 100%; height: 110px; }
+.co-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.spark { display: block; color: var(--muted); overflow: visible; }
+.spark.up { color: var(--green); }
+.spark.down { color: var(--red); }
+.spark .base { stroke: var(--line-strong); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.spark .loading { fill: var(--line); }
+.nochart { font-size: 11px; color: var(--muted); text-align: center; }
+.co-list { display: flex; flex-direction: column; }
+.co-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px 86px 18px; gap: 10px; align-items: center; padding: 7px 6px; border-top: 1px solid var(--line); cursor: pointer; border-radius: 6px; }
+.co-row:first-child { border-top: 0; }
+.co-row:hover { background: rgba(168,182,201,.04); }
+.co-row.sel { background: var(--accent-soft); }
+.co-row .spark { width: 96px; height: 30px; }
+.co-id { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.co-id b { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.co-id span { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.co-q { display: flex; flex-direction: column; align-items: flex-end; font-family: var(--mono); font-size: 12.5px; color: var(--ink); line-height: 1.3; }
+.co-q .pos, .co-price .pos { color: var(--green); font-size: 12px; }
+.co-q .neg, .co-price .neg { color: var(--red); font-size: 12px; }
+.co-news { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); justify-self: center; cursor: help; }
+.co-del { width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0; }
+.co-del:hover { color: var(--red); border-color: var(--red); }
+.co-add { display: flex; gap: 6px; margin-top: 10px; }
+.co-add input { flex: 1; min-width: 0; min-height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--inset); color: var(--ink); font: 13px var(--mono); text-transform: uppercase; }
+.co-add input::placeholder { text-transform: none; font-family: var(--sans); color: var(--muted); }
+.co-err { font-size: 12px; color: var(--red); margin-top: 6px; }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; }
+
+/* ── Settings chip (time zone, refresh), next to the region chip ── */
+.chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.setbox { border-top: 1px solid var(--line); padding: 12px 28px 14px; display: flex; justify-content: flex-end; gap: 24px; flex-wrap: wrap; align-items: center; }
+.setbox[hidden] { display: none; }
+@media (max-width: 640px) { .setbox { padding: 12px 16px; justify-content: flex-start; } }
+.setrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.setlbl { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+/* Headline importance: five bars; hollow when estimated */
+.hbars { display: inline-flex; gap: 2px; margin-right: 7px; vertical-align: 1px; }
+.hbars i { width: 3px; height: 9px; border-radius: 1px; background: var(--line-strong); }
+.hbars i.on { background: var(--accent); }
+.hbars.est i.on { background: transparent; box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ── Images (assets/images/market-news) ── */
+/* Overview: the page's banner fades in behind the right side of the card. */
+.card.has-art { position: relative; overflow: hidden; }
+.card.has-art > :not(.ov-art) { position: relative; z-index: 1; }
+.ov-art { position: absolute; top: 0; right: 0; height: 100%; width: 68%; object-fit: cover; object-position: right center; opacity: .55; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%); mask-image: linear-gradient(to right, transparent 0%, #000 55%); }
+@media (max-width: 640px) { .ov-art { width: 100%; opacity: .22; } }
+/* Top stories: a picture for the story's topic */
+.story { grid-template-columns: 28px minmax(0, 1fr) 148px; }
+.story-art { width: 148px; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); align-self: start; margin-top: 4px; }
+@media (max-width: 640px) { .story { grid-template-columns: 28px minmax(0, 1fr); } .story-art { display: none; } }
+/* Commodity groups: a picture strip on top, the name over it */
+.group { border-top: 0; padding-top: 0; overflow: hidden; }
+.group-art { position: relative; margin: 0 -20px; height: 128px; border-bottom: 3px solid var(--c-commodities); }
+.group-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.group-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,8,16,0) 35%, rgba(5,8,16,.85) 100%); }
+.group-art .h2 { position: absolute; left: 20px; bottom: 10px; z-index: 1; font-size: 20px; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+/* Calendar: the banner behind the toolbar */
+.cal-hero { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 20px; background: var(--surface); }
+.cal-hero > :not(.hero-art) { position: relative; z-index: 1; }
+.hero-art { position: absolute; top: 0; right: 0; width: 70%; height: 100%; object-fit: cover; object-position: right center; opacity: .6; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 60%); mask-image: linear-gradient(to right, transparent 0%, #000 60%); }
+/* Quiet states */
+.live { position: relative; overflow: hidden; }
+.live > :not(.quiet-art) { position: relative; z-index: 1; }
+.quiet-art { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 70%; object-fit: cover; opacity: .55; pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 60%); mask-image: linear-gradient(180deg, transparent, #000 60%); }
+.quiet { position: relative; text-align: center; }
+.quiet img { width: 100%; height: 140px; object-fit: cover; border-radius: 8px; opacity: .7; display: block; }
+.quiet .empty { position: absolute; left: 0; right: 0; bottom: 8px; }
+/* Category icons: the PNG is a mask, filled with the category's color */
+.cicon { display: inline-block; flex: none; background: var(--c); -webkit-mask: var(--i) center / contain no-repeat; mask: var(--i) center / contain no-repeat; vertical-align: -3px; margin-right: 2px; }
+.cats button[aria-pressed="false"] .cicon { background: var(--muted); }
+/* Controls and text stay readable over the pictures. */
+.seg { background: var(--surface); }
+.btn, .icon-btn { background-color: var(--surface); }
+.btn.primary { background-color: var(--accent); }
+@media (min-width: 900px) { .overview.has-art p { max-width: min(72ch, 60%); } }

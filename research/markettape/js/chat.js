@@ -4,7 +4,7 @@
 // briefing, the calendar and the headlines.
 
 import { esc, safeUrl } from './format.js';
-import { PAGES, REGIONS, state } from './state.js';
+import { allRegions, PAGES, R_NAME, regionParam, state } from './state.js';
 
 const CHAT_ENDPOINT = '/api/chat';
 const SUGGEST = {
@@ -28,7 +28,7 @@ const BQE = window.BQE;
 
 export function renderSuggest() {
   const page = PAGES.find((p) => p[0] === state.page)[1];
-  $('chat-context').textContent = `Knows today’s headlines, calendar and results · on ${page}, ${REGIONS.find((r) => r[0] === state.region)[1]}`;
+  $('chat-context').textContent = `Knows today’s headlines, calendar and results · on ${page}, ${allRegions() ? 'all regions' : state.regions.map((c) => R_NAME[c]).join(' + ')}`;
   $('chat-suggest').innerHTML = chat.messages.length > 6 ? '' :
     SUGGEST[state.page].map((q) => `<button type="button" data-ask="${esc(q)}">${esc(q)}</button>`).join('');
   $('chat-note').textContent = 'Answers come from the collected headlines and may miss context. Not investment advice.' +
@@ -53,7 +53,7 @@ async function answer() {
     credentials: 'same-origin',
     body: JSON.stringify({
       messages: chat.messages.filter((m) => !m.pending && !m.error).map((m) => ({ role: m.role, content: m.text })),
-      page: state.page, region: state.region, tz: state.tz,
+      page: state.page, region: regionParam(), tz: state.tz,
     }),
   });
   const data = await res.json().catch(() => ({}));

@@ -21,7 +21,10 @@ export function model(env: Env, purpose: "briefing" | "chat" = "briefing"): stri
 
 // Waits before retrying an overloaded model (HTTP 500/503). Exported for tests.
 export const RETRY_DELAYS_MS = [1500, 4000];
-export const DEFAULT_FALLBACK_MODELS = "gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash";
+// 3.5 Flash-Lite first: the usual main model, so a different main model (the
+// chat's, or one set in the dashboard) still falls back to it. When it is the
+// main model itself, it is not asked twice.
+export const DEFAULT_FALLBACK_MODELS = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash";
 
 // Worth another model: overloaded, over its own quota, or not available on this key.
 const TRY_FALLBACK = new Set([404, 429, 500, 503]);

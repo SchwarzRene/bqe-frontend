@@ -1,7 +1,7 @@
 // Escaping and time formatting. Times are shown in the viewer's chosen zone
 // (Vienna or New York); days are YYYY-MM-DD strings in that zone.
 
-import { data, R_NAME, regionOf, state, TZ_ID } from './state.js';
+import { data, headlineImportance, R_NAME, regionOf, state, TZ_ID } from './state.js';
 
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const safeUrl = (u) => (/^https?:\/\//.test(u || '') ? u : '#');
@@ -60,8 +60,34 @@ export function itemSources(ids) {
   return out.slice(0, 5);
 }
 
+/** A headline's importance as five bars; hollow when it is an estimate, not the model's. */
+export function hlImp(i) {
+  const { value, ai } = headlineImportance(i);
+  return `<span class="hbars${ai ? '' : ' est'}" title="Importance ${value} of 5${ai ? ', ranked by AI' : ', estimated (arrived after the last briefing)'}">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= value ? 'on' : ''}"></i>`).join('')}</span>`;
+}
+
 /** One headline row. */
-export const hl = (i) => `<div class="hl"><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener">${esc(i.title)}</a><span>${esc(i.source)}${(i.alsoIn || []).length ? ' +' + i.alsoIn.length : ''} · ${esc(ago(i.publishedAt))} · ${R_NAME[regionOf(i)]}</span></div>`;
+export const hl = (i) => `<div class="hl"><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener">${esc(i.title)}</a><span>${hlImp(i)}${esc(i.source)}${(i.alsoIn || []).length ? ' +' + i.alsoIn.length : ''} · ${esc(ago(i.publishedAt))} · ${R_NAME[regionOf(i)]}</span></div>`;
 
 /** Importance as three dots. */
 export const impDots = (n) => `<span class="imp" aria-label="Importance ${n} of 3">${[1, 2, 3].map((k) => `<i class="${k <= n ? 'on' : ''}"></i>`).join('')}</span>`;
+
+// --------------------------------------------------------------------------
+// images (assets/images/market-news, prompts in docs/market-news-image-prompts.md)
+// --------------------------------------------------------------------------
+
+export const IMG = '/assets/images/market-news/';
+
+// A story's picture, from its topic (the model's one or two words) and summary.
+const TOPIC_IMAGES = [
+  ['policy', /\b(policy|central bank|fed|fomc|ecb|boj|boe|pboc|rates?|monetary|yields?|bonds?)\b/i],
+  ['chips', /\b(chips?|semis?|semiconductors?|tech|ai|nvidia|tsmc|asml|software)\b/i],
+  ['energy', /\b(energy|oil|crude|gas|lng|opec|power|brent|wti)\b/i],
+  ['earnings', /\b(earnings|results|profit|revenue|guidance|quarter|eps)\b/i],
+  ['geopolitics', /\b(geopolitics?|war|sanctions?|conflict|tariffs?|trade war|election|politics|diplomacy|military|russia|ukraine|kremlin)\b/i],
+  ['macro', /\b(macro|economy|economic|inflation|cpi|jobs|gdp|growth|recession|labor|labour|pmi|stimulus)\b/i],
+];
+export function topicImage(topic, summary = '') {
+  const hit = TOPIC_IMAGES.find(([, re]) => re.test(topic)) || TOPIC_IMAGES.find(([, re]) => re.test(summary));
+  return `${IMG}topic-${hit ? hit[0] : 'markets'}.webp`;
+}
