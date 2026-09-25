@@ -6,7 +6,7 @@
 import type { Env } from "../env";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-export const DEFAULT_MODEL = "gemini-3.7-flash";
+export const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 
 export class GeminiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -21,7 +21,7 @@ export function model(env: Env, purpose: "briefing" | "chat" = "briefing"): stri
 
 // Waits before retrying an overloaded model (HTTP 500/503). Exported for tests.
 export const RETRY_DELAYS_MS = [1500, 4000];
-export const DEFAULT_FALLBACK_MODEL = "gemini-flash-latest";
+export const DEFAULT_FALLBACK_MODELS = "gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash";
 
 // Worth another model: overloaded, over its own quota, or not available on this key.
 const TRY_FALLBACK = new Set([404, 429, 500, 503]);
@@ -29,13 +29,15 @@ const TRY_FALLBACK = new Set([404, 429, 500, 503]);
 /**
  * POST generateContent and return the parsed body. An overloaded model is
  * retried twice, a short per-minute rate limit is waited out once, and if the
- * model still cannot answer, the fallback model (GEMINI_FALLBACK_MODEL,
- * "off" for none) gets the same request. Anything else throws.
+ * model still cannot answer, the fallback models (GEMINI_FALLBACK_MODEL, a
+ * comma-separated list tried in order; "off" for none) get the same request.
+ * Anything else throws.
  */
 export async function generate(env: Env, modelName: string, body: unknown, label: string): Promise<any> {
   if (!env.GEMINI_API_KEY) throw new GeminiError("GEMINI_API_KEY is not set", 503);
-  const fallback = env.GEMINI_FALLBACK_MODEL ?? DEFAULT_FALLBACK_MODEL;
-  const models = [modelName, ...(fallback && fallback !== "off" && fallback !== modelName ? [fallback] : [])];
+  const fallback = (env.GEMINI_FALLBACK_MODEL ?? DEFAULT_FALLBACK_MODELS).trim();
+  const listed = fallback === "off" ? [] : fallback.split(",").map((m) => m.trim()).filter(Boolean);
+  const models = [...new Set([modelName, ...listed])];
   let last: unknown;
   for (const m of models) {
     try {

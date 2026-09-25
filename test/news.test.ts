@@ -337,12 +337,16 @@ describe("Gemini overload", () => {
     expect(calls.map((u) => u.split("/models/")[1])).toEqual(Array(3).fill("gemini-3.7-flash:generateContent"));
   });
 
-  it("falls back to the second model when the first stays overloaded, and gives up after it", async () => {
+  it("goes down the fallback list while models stay overloaded or do not exist, and gives up after it", async () => {
     RETRY_DELAYS_MS.splice(0, 2, 0, 0);
     const calls: string[] = [];
-    vi.stubGlobal("fetch", async (url: string) => (calls.push(url), url.includes("gemini-flash-latest") ? ok("from fallback") : overloaded()));
-    expect((await generate(env, "gemini-3.7-flash", {}, "t")).candidates[0].content.parts[0].text).toBe("from fallback");
-    expect(calls.filter((u) => u.includes("gemini-3.7-flash"))).toHaveLength(3);
+    const missing = () => new Response(JSON.stringify({ error: { code: 404, status: "NOT_FOUND", message: "not found" } }), { status: 404 });
+    vi.stubGlobal("fetch", async (url: string) => (
+      calls.push(url.split("/models/")[1].split(":")[0]),
+      url.includes("gemini-3.6-flash") ? ok("from 3.6") : url.includes("gemini-3.1-flash-lite") ? missing() : overloaded()
+    ));
+    expect((await generate(env, "gemini-3.5-flash-lite", {}, "t")).candidates[0].content.parts[0].text).toBe("from 3.6");
+    expect(calls).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"]);
 
     vi.stubGlobal("fetch", async () => overloaded());
     await expect(generate({ ...env, GEMINI_FALLBACK_MODEL: "off" }, "gemini-3.7-flash", {}, "t")).rejects.toMatchObject({ status: 503 });

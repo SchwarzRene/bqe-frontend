@@ -314,7 +314,7 @@ company, and the commodity groups.</p>
 </ul>
 
 <h3>Model choice</h3>
-<p>Gemini, through <code>GEMINI_API_KEY</code> and <code>GEMINI_MODEL</code> (<code>gemini-3.7-flash</code> today), with Gemini's structured output (a response schema). The briefing uses no web search. A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k, and the briefing needs no search grounding, so it does not use up the grounded-request limit the calendar job relies on.</p>
+<p>Gemini, through <code>GEMINI_API_KEY</code> and <code>GEMINI_MODEL</code> (<code>gemini-3.5-flash-lite</code> today, with <code>GEMINI_FALLBACK_MODEL</code>'s models taking over when it is overloaded), with Gemini's structured output (a response schema). The briefing uses no web search. A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k, and the briefing needs no search grounding, so it does not use up the grounded-request limit the calendar job relies on.</p>
 
 <h2 id="chat"><span class="num">6</span> AI chat</h2>
 <p class="lead">Ask about today, get an answer with the headlines it came from.</p>
