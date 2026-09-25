@@ -99,15 +99,16 @@ async function drawChart(container, t, requestedInterval = null) {
     $("[data-ticker]", card).textContent = `· ${t.ticker}`;
     renderTimeframes($("[data-timeframes]", card), available_intervals, interval, (next) => drawChart(container, t, next));
     const entryColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
-    const isLong = t.direction === "long";
-    const markers = [{ iso: t.entry_time, position: isLong ? "belowBar" : "aboveBar", color: entryColor, shape: isLong ? "arrowUp" : "arrowDown", text: `Entry ${price(t.entry_price, t.digits)}` }];
+    // Entry and exit are crosses rather than arrows: a vertical line at the
+    // time (drawn by the drawing layer) through the price line at the price.
+    const epoch = (iso) => Math.floor(new Date(iso).getTime() / 1000);
+    const marks = [{ t: epoch(t.entry_time), p: t.entry_price, color: entryColor, label: `Entry ${price(t.entry_price, t.digits)}` }];
     if (t.exit_time) {
-      markers.push({ iso: t.exit_time, position: isLong ? "aboveBar" : "belowBar", color: "#8b909b", shape: isLong ? "arrowDown" : "arrowUp", text: `Exit ${price(t.exit_price, t.digits)}` });
+      marks.push({ t: epoch(t.exit_time), p: t.exit_price, color: "#8b909b", dashed: true, label: `Exit ${price(t.exit_price, t.digits)}` });
     }
     const rendered = candleChart(container, candles, {
       digits: t.digits,
       showDaysOnly: interval === "1d" || interval === "1wk",
-      markers,
       lines: [
         { price: t.entry_price, color: entryColor, title: "Entry" },
         { price: t.exit_price, color: "#8b909b", title: "Exit" },
@@ -118,7 +119,7 @@ async function drawChart(container, t, requestedInterval = null) {
     if (rendered) {
       await attachDrawings({
         ...rendered, container, toolbar: $("[data-draw-toolbar]", card),
-        intervalSeconds: INTERVAL_SECONDS[interval], digits: t.digits, scope: `trade:${t.id}`,
+        intervalSeconds: INTERVAL_SECONDS[interval], digits: t.digits, scope: `trade:${t.id}`, marks,
       });
     }
   } catch (error) {
