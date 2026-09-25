@@ -103,9 +103,13 @@ PASSWORD_BREACH_CHECK = "on"
 # at the next sign-in. 50000 fits the free plan's 10 ms CPU; on Workers Paid
 # set 600000 (OWASP's figure for PBKDF2-SHA256).
 # PBKDF2_ITERATIONS = "600000"
-# Cloudflare Turnstile on sign-up: set the widget's site key here and its
-# secret with `npx wrangler secret put TURNSTILE_SECRET`. Off until both are set.
-# TURNSTILE_SITE_KEY = "0x4AAAAAAA…"
+# Cloudflare Turnstile on sign-up. The site key is public; the widget's
+# secret is a Worker secret: `npx wrangler secret put TURNSTILE_SECRET` (or
+# dashboard → Settings → Variables and Secrets). Sign-up asks for Turnstile
+# only once the secret is set. A token counts only when solved for the
+# "signup" action on the host the request came to; to accept other hosts set
+# TURNSTILE_HOSTNAMES (comma-separated, never localhost in production).
+TURNSTILE_SITE_KEY = "0x4AAAAAAFDkYVxRdLA47hLh"
 
 [observability]
 enabled = true

@@ -207,18 +207,65 @@ describe("SEC-07: password strength", () => {
 });
 
 describe("Turnstile on sign-up", () => {
-  it("is required once TURNSTILE_SECRET is set", async () => {
-    let verified = false;
+  // A stand-in for siteverify: tokens are single-use, and each one records
+  // the action and hostname it was solved for, as the real service does.
+  function siteverify(tokens: Record<string, { action: string; hostname: string }>, status = 200) {
+    const used = new Set<string>();
+    const calls: URLSearchParams[] = [];
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
       expect(url).toBe("https://challenges.cloudflare.com/turnstile/v0/siteverify");
-      verified = (init!.body as FormData).get("response") === "good";
-      return new Response(JSON.stringify({ success: verified }));
+      const form = new URLSearchParams(String(init!.body));
+      calls.push(form);
+      if (status !== 200) return new Response("unavailable", { status });
+      const token = form.get("response")!;
+      const known = tokens[token];
+      if (!known) return new Response(JSON.stringify({ success: false, "error-codes": ["invalid-input-response"] }));
+      if (used.has(token)) return new Response(JSON.stringify({ success: false, "error-codes": ["timeout-or-duplicate"] }));
+      used.add(token);
+      return new Response(JSON.stringify({ success: true, ...known }));
     });
-    const env = envWith({ TURNSTILE_SECRET: "s", TURNSTILE_SITE_KEY: "site" });
-    expect((await call(env, "GET", "/api/auth/config")).data.turnstileSiteKey).toBe("site");
-    expect((await signup(env, "alice")).status).toBe(403);
-    expect((await signup(env, "alice", "5.5.5.5", { turnstile: "bad" })).status).toBe(403);
+    return calls;
+  }
+
+  it("is required once TURNSTILE_SECRET is set, and a token works once", async () => {
+    const calls = siteverify({ good: { action: "signup", hostname: "site" } });
+    const env = envWith({ TURNSTILE_SECRET: "s3cret", TURNSTILE_SITE_KEY: "0x4AAAAAAFDkYVxRdLA47hLh" });
+    expect((await call(env, "GET", "/api/auth/config")).data.turnstileSiteKey).toBe("0x4AAAAAAFDkYVxRdLA47hLh");
+    expect((await signup(env, "alice")).status).toBe(403); // no token: siteverify is not even asked
+    expect(calls).toHaveLength(0);
+    expect((await signup(env, "alice", "5.5.5.5", { turnstile: "forged" })).status).toBe(403);
     expect((await signup(env, "alice", "5.5.5.5", { turnstile: "good" })).status).toBe(201);
+    // The same token again — a replay — is refused.
+    expect((await signup(env, "bob", "5.5.5.6", { turnstile: "good" })).data).toMatchObject({ code: "turnstile" });
+    expect(calls[1].get("secret")).toBe("s3cret");
+    expect(calls[1].get("remoteip")).toBe("5.5.5.5");
+  });
+
+  it("refuses a token solved for another action or on another host", async () => {
+    siteverify({ login: { action: "login", hostname: "site" }, elsewhere: { action: "signup", hostname: "evil.example" } });
+    const env = envWith({ TURNSTILE_SECRET: "s", TURNSTILE_SITE_KEY: "k" });
+    expect((await signup(env, "alice", "5.5.5.5", { turnstile: "login" })).status).toBe(403);
+    expect((await signup(env, "alice", "5.5.5.5", { turnstile: "elsewhere" })).status).toBe(403);
+  });
+
+  it("accepts the hosts in TURNSTILE_HOSTNAMES instead of the request's own", async () => {
+    siteverify({ a: { action: "signup", hostname: "www.example.com" }, b: { action: "signup", hostname: "site" } });
+    const env = envWith({ TURNSTILE_SECRET: "s", TURNSTILE_SITE_KEY: "k", TURNSTILE_HOSTNAMES: "example.com, www.example.com" });
+    expect((await signup(env, "alice", "5.5.5.5", { turnstile: "a" })).status).toBe(201);
+    expect((await signup(env, "bob", "5.5.5.6", { turnstile: "b" })).status).toBe(403);
+  });
+
+  it("fails closed when siteverify is down", async () => {
+    siteverify({ good: { action: "signup", hostname: "site" } }, 503);
+    const env = envWith({ TURNSTILE_SECRET: "s", TURNSTILE_SITE_KEY: "k" });
+    expect((await signup(env, "alice", "5.5.5.5", { turnstile: "good" })).status).toBe(403);
+    expect(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM users WHERE username = 'alice'").get()).toEqual({ n: 0 });
+  });
+
+  it("stays off without the secret, even with a site key", async () => {
+    const env = envWith({ TURNSTILE_SITE_KEY: "k" });
+    expect((await call(env, "GET", "/api/auth/config")).data.turnstileSiteKey).toBeNull();
+    expect((await signup(env, "alice")).status).toBe(201);
   });
 });
 

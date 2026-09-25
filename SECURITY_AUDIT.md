@@ -27,7 +27,7 @@ Every finding below has a fix in the code, with a regression test in `test/secur
 | SEC-01 | `migrations/0006_security.sql` disables the seeded `ceo` hash if it was never changed. `scripts/set-password.mjs` sets a password without committing it. | If `ceo` still had the seeded hash, set a new password after deploying (docs/DEPLOYMENT.md). |
 | SEC-02 | Failures are counted per visitor **and** per account. A success clears only that account's failures. | — |
 | SEC-03 | `build.sh` is an allowlist and refuses to publish hidden files. A CI step checks that a canary `.dev.vars` never reaches `_site/`. | — |
-| SCL-01 | Accounts are capped at 4 MB, with a site-wide limit of 30 sign-ups per hour. Turnstile is checked when configured. | Create a Turnstile widget and set `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET`. |
+| SCL-01 | Accounts are capped at 4 MB, with a site-wide limit of 30 sign-ups per hour. Turnstile is wired in: the site key is in `wrangler.toml`, and siteverify checks success, single use, the `signup` action and the hostname. | Set the `TURNSTILE_SECRET` Worker secret. |
 | SEC-04 | Attempts are inserted before they are counted, so parallel requests can't slip past. IPv6 is counted per /64. The `AUTH_LIMITER` rate-limit binding is added. | — |
 | SEC-05 | The analysis takes the company name from Yahoo or the watchlist, never from the client. | — |
 | SEC-06 | Leaflet and Lightweight Charts are vendored from npm into `assets/vendor/`. A CSP (`script-src 'self'` + Turnstile) is on every page, and the inline scripts and handlers were moved to files. Headless Chromium over every page shows no violations. | — |

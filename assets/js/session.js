@@ -80,6 +80,8 @@
       };
       id = turnstile.render(box, {
         sitekey: turnstileSiteKey,
+        // The Worker accepts a token only for this action (TURNSTILE_ACTION in worker/auth.ts).
+        action: "signup",
         appearance: "interaction-only",
         callback: finish(resolve),
         "error-callback": finish(() => reject(new Error("The anti-bot check failed — please try again."))),

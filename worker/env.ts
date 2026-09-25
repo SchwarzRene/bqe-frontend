@@ -22,6 +22,7 @@ export interface Env {
   PBKDF2_ITERATIONS?: string; // for passwords set from now on; older ones are rehashed at sign-in
   PASSWORD_BREACH_CHECK?: string; // "off" skips the Have I Been Pwned lookup for new passwords
   TURNSTILE_SITE_KEY?: string; // public; with TURNSTILE_SECRET, sign-up needs a Turnstile token
+  TURNSTILE_HOSTNAMES?: string; // comma-separated hostnames a token may be solved on; unset = the request's own host
 
   // Secrets — `npx wrangler secret put NAME`, never in wrangler.toml.
   GEMINI_API_KEY?: string; // Market News briefing and chat; free key from aistudio.google.com
