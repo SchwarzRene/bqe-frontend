@@ -382,6 +382,13 @@ section.research-explorer {
   transition: color 0.2s ease, top 0.4s ease, left 0.4s ease, transform 0.4s ease, text-align 0.4s;
 }
 .node-title { display: block; }
+/* In the graph the stack line and the description are invisible but still
+   make the label box tall; without this that empty box catches taps meant
+   for the rock below it. Only the rock and the visible title take taps
+   there. List view shows the whole row and turns it back on. */
+.node-label { pointer-events: none; }
+.node-title { pointer-events: auto; }
+#graphWrap.is-list-view .node-label { pointer-events: auto; }
 .node-meta { display: block; }
 .node-sub {
   display: block;
@@ -482,7 +489,6 @@ section.research-explorer {
 
 @media (max-width: 640px) {
   .graph-legend { display: none; }
-  .node { width: 84px; }
   .node-label { font-size: 0.66rem; max-width: 84px; }
 }
 

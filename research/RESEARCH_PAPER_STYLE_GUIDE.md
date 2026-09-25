@@ -8,7 +8,7 @@ Empire rather than as separate, unbranded documents. Each paper is still a
 from the same tokens the rest of the site uses.
 
 This doc is the reference for redesigning the remaining papers (HistoryMap,
-Market Tape, Stack, and any new one) the same way BQE-DeComp and MarketJEPA
+Market News, Stack, and any new one) the same way BQE-DeComp and MarketJEPA
 were done.
 
 ---

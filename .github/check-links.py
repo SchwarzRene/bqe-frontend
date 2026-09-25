@@ -53,6 +53,10 @@ def main() -> int:
         for reference in REFERENCE.findall(html.read_text(encoding="utf-8", errors="ignore")):
             if EXTERNAL.match(reference):
                 continue
+            # A JavaScript template literal (href="${…}") is a URL built at
+            # runtime from data; there is nothing on disk to check.
+            if reference.startswith("${"):
+                continue
             checked += 1
 
             # A leading slash is the site root, which is the repository root.

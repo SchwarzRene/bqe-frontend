@@ -74,6 +74,7 @@ handful of things `build.sh` leaves out.
 │   └── DEPLOYMENT.md       Cloudflare setup, secrets, custom domain
 ├── wrangler.toml           Worker config: assets, D1 binding, cron schedule
 ├── worker/                 The Worker: API, data serving, scheduled jobs
+│   └── news/               Market News: feeds, briefing, calendar, chat
 ├── migrations/             D1 schema, applied by wrangler
 ├── test/                   Worker unit tests (vitest)
 ├── package.json            Worker tooling (wrangler, typescript, vitest)
@@ -125,8 +126,8 @@ handful of things `build.sh` leaves out.
     ├── marketjepa/         Self-supervised world model
     │   └── index.html
     ├── tradingjournal/     Trade log, chart markup and journal (own README)
-    ├── markettape.html     Write-up for the Market Tape app
-    ├── markettape/         The Market Tape app itself (own README)
+    ├── markettape.html     Write-up for Market News (replaced Market Tape)
+    ├── markettape/         The Market News page (own README)
     ├── historymap/         Interactive history atlas (own README)
     └── stack/              S&P 500 chart feed (own README)
         ├── index.html
@@ -138,7 +139,7 @@ The fetchers and the live-quotes service are in `worker/`; the Python versions
 in [`bqe-backend`](https://github.com/SchwarzRene/bqe-backend) are retired.
 
 **Why the research projects are all folders.** `assets/js/research-graph.js`
-lists BQE-DeComp, MarketJEPA, HistoryMap, Market Tape and Stack as five equal
+lists BQE-DeComp, MarketJEPA, HistoryMap, Market News and Stack as five equal
 projects — the graph, the list and the search treat them the same way, and the
 layout on disk says what the site already said.
 
@@ -381,7 +382,7 @@ Everything dynamic goes through the Worker. Two patterns, depending on how
 fresh the data has to be:
 
 **Refreshed on a schedule, stored in D1** — what `research/stack/` and
-`research/markettape/` do:
+Market News (`research/markettape/`, `worker/news/`) do:
 
 1. Write the job as a function in `worker/` that fetches, shapes and stores
    JSON (`putDocument()` in `worker/stack.ts` for a single document, or a
@@ -406,8 +407,10 @@ slow upstream degrades to stored data rather than an error.
 | `GET /api/quotes/:symbol` | `worker/yahoo.ts` | Daily + hourly bars from Yahoo, cached 60 s at the edge. |
 | `POST /api/contact` | `worker/contact.ts` | Stores a contact form submission in D1 (validated, rate-limited, honeypot). |
 | `GET /research/stack/data/*.json` | `worker/stack.ts` | Prices from D1; the committed file until D1 has them. |
-| `GET /research/markettape/data/*.json` | `worker/markettape.ts` | Rundown from D1; the committed file until D1 has it. |
-| `POST /api/admin/run/{stack,markettape}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
+| `GET /api/news` | `worker/news/index.ts` | Market News: the latest briefing, 24 h of headlines, this week's calendar. |
+| `POST /api/news/refresh` | `worker/news/index.ts` | Fetch now and write a fresh briefing. Signed in; one per 15 min. |
+| `POST /api/chat` | `worker/news/chat.ts` | Market News chat (Gemini). Signed in; daily limit per user. |
+| `POST /api/admin/run/{stack,news,calendar,briefing}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
 | `POST /api/auth/{login,logout,password}`, `GET /api/auth/me` | `worker/auth.ts` | Sign-in with an HttpOnly session cookie. |
 | `GET/PUT /api/state/{stack,journal}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
 | `GET /api/market/{quote,candles}` | `worker/market.ts` | Yahoo quotes and candles for the Trading Journal, cached at the edge. |
@@ -435,8 +438,8 @@ shows who is signed in. A new app also needs its name added to `APPS` in
 | Cron (UTC) | Job | Writes to D1 |
 |---|---|---|
 | every 3 min, 22:00–23:59, Mon–Fri | Stack prices: constituents from Wikipedia, bars from Yahoo, 20 tickers a run | `tickers`, `series` |
-| 12:10 and 22:10, Mon–Fri | Market Tape: Fed calendar and earnings via Gemini + Google Search | `documents` |
-| with the Market Tape runs | Deletes contact messages 30 days after they were answered | `contact_messages` |
+| every 15 min | Market News (`worker/news/`): headlines every run on weekdays and hourly at weekends; Gemini briefings at 02:30, 08:00, 12:30, 16:30 New York time on weekdays and Sat 10:00; the calendar (no model calls) and the daily clean-up at 05:00 New York time | `news_*`, `documents` |
+| with the 05:00 run | Deletes contact messages 30 days after they were answered, expired sessions | `contact_messages`, `sessions` |
 
 The Stack job is batched because one Worker invocation may make only a
 limited number of outbound requests: each run takes the next tickers not yet
@@ -472,9 +475,10 @@ npm install
 npx wrangler d1 migrations apply bqe --local
 npm run dev                                  # → http://localhost:8787
 curl "localhost:8787/__scheduled?cron=*/3+22-23+*+*+1-5"   # fire the Stack job
+curl "localhost:8787/__scheduled?cron=*/15+*+*+*+*"        # fire the Market News tick
 ```
 
-For Market Tape locally, put `GEMINI_API_KEY=...` in `.dev.vars` (git-ignored).
+For the Market News briefing and chat locally, put `GEMINI_API_KEY=...` in `.dev.vars` (git-ignored).
 
 ## Deploying
 

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { validateContact } from "../worker/contact";
-import { cleanEvent, etDate, etToUtc, extractJson, started } from "../worker/markettape";
 import { parseConstituents } from "../worker/stack";
 import {
   type Columns, isValidSymbol, mergeDaily, mergeHourly, refreshQuote, toColumns, yahooSymbol,
@@ -79,48 +78,6 @@ describe("parseConstituents", () => {
   it("gives up on a table whose headers changed", () => {
     expect(parseConstituents(html.replace("GICS Sector", "Sector"))).toEqual([]);
     expect(parseConstituents("<table id='other'></table>")).toEqual([]);
-  });
-});
-
-describe("markettape", () => {
-  it("extracts JSON from fenced or chatty model output", () => {
-    expect(extractJson('Here you go:\n```json\n[{"a":1},{"b":"]"}]\n```')).toEqual([{ a: 1 }, { b: "]" }]);
-    expect(extractJson('{"status":"not_yet"} trailing')).toEqual({ status: "not_yet" });
-    expect(extractJson("nothing here")).toBeNull();
-  });
-
-  it("salvages a truncated array", () => {
-    expect(extractJson('[{"a":1},{"b":2},{"c":')).toEqual([{ a: 1 }, { b: 2 }]);
-  });
-
-  it("cleans events and rejects unusable rows", () => {
-    const e = cleanEvent(
-      {
-        title: "Q3", date: "2026-10-28", ticker: "msft", releaseET: "16:05", streamKind: "tv",
-        streamUrl: "javascript:alert(1)", links: [{ url: "https://x.com" }, { url: "ftp://y" }],
-      },
-      "earnings",
-      2,
-    )!;
-    expect(e.id).toBe("earnings-2");
-    expect(e.ticker).toBe("MSFT");
-    expect(e.streamKind).toBe("page");
-    expect(e.streamUrl).toBe("");
-    expect(e.links).toEqual([{ label: "Link", url: "https://x.com" }]);
-    expect(cleanEvent({ title: "x", date: "soon" }, "fed", 0)).toBeNull();
-  });
-
-  it("converts New York wall time across DST", () => {
-    expect(new Date(etToUtc("2026-07-01", 14, 0)).toISOString()).toBe("2026-07-01T18:00:00.000Z");
-    expect(new Date(etToUtc("2026-12-01", 14, 0)).toISOString()).toBe("2026-12-01T19:00:00.000Z");
-    expect(etDate(new Date("2026-09-25T02:00:00Z"))).toBe("2026-09-24");
-  });
-
-  it("knows when an event has started", () => {
-    const e = cleanEvent({ title: "FOMC", date: "2026-07-01", timeET: "14:00" }, "fed", 0)!;
-    expect(started(e, new Date("2026-07-01T17:59:00Z"))).toBe(false);
-    expect(started(e, new Date("2026-07-01T18:30:00Z"))).toBe(true);
-    expect(started(e, new Date("2026-07-03T18:30:00Z"))).toBe(false);
   });
 });
 

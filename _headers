@@ -25,5 +25,3 @@
 # evenings, so a day at the edge is as long as they can safely be held.
 /research/stack/data/*
   Cache-Control: public, max-age=3600
-/research/markettape/data/*
-  Cache-Control: public, max-age=1800

@@ -22,7 +22,7 @@ Everything fits Cloudflare's free tiers except, possibly, one thing:
 | Worker requests | 100,000 / day | only `/api/*` and data files count; static files are free |
 | D1 storage | 500 MB per database | ~45 MB of prices |
 | D1 writes | 100,000 rows / day | ~1,100 on a weekday evening |
-| Cron triggers | 5 per account | 3 |
+| Cron triggers | 5 per account | 2 |
 | **CPU per invocation** | **10 ms** | **a Stack batch merges 20 tickers** |
 
 The Stack refresh is incremental: most tickers need only a month of days and
@@ -35,10 +35,15 @@ ex-dividend at once. If the Worker's logs show Stack runs ending in
 Paid ($5/month)**, which allows 30 s of CPU per invocation (raise
 `STACK_BATCH` to 100 there). A run that hits the limit writes nothing and is
 retried 20 minutes later. The other jobs wait on the network, which
-costs no CPU time, and fit the free plan comfortably.
+costs no CPU time, and fit the free plan comfortably — except possibly
+the Market News fetch, which parses ~20 feeds every 15 minutes; if its runs
+end in `exceededCpu`, drop feeds from `worker/news/sources.json` (see
+`research/markettape/README.md`).
 
-Gemini's free tier covers Market Tape: 8 grounded requests per run, 2 runs a
-day.
+Gemini's free tier covers Market News, which calls it for two things only:
+the briefing, about 4 requests a day, and the chat, per question, for
+signed-in users only, with a daily limit per user (`NEWS_CHAT_DAILY_LIMIT`).
+The calendar makes no model calls.
 
 ## The files that make it work
 
@@ -98,9 +103,9 @@ npx wrangler secret put GEMINI_API_KEY   # free key: https://aistudio.google.com
 npx wrangler secret put ADMIN_TOKEN      # any long random string: openssl rand -hex 32
 ```
 
-`GEMINI_API_KEY` is what Market Tape uses; the Worker reads it as
-`env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
-`POST /api/admin/run/{stack,markettape}`, which runs a job on demand. For
+`GEMINI_API_KEY` is what the Market News briefing and chat use; the Worker
+reads it as `env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
+`POST /api/admin/run/{stack,news,calendar,briefing}`, which runs a job on demand. For
 `npm run dev` locally, put the same names in a `.dev.vars` file
 (git-ignored) instead.
 
@@ -109,12 +114,14 @@ npx wrangler secret put ADMIN_TOKEN      # any long random string: openssl rand 
 public. Sign in on the site → click `ceo` in the header → **Change
 password**.
 
-**4. Fill the data.** Market Tape fills itself: the first visit to
-`/research/markettape/` after a deploy builds the rundown if there is none
-(about a minute). Stack prices wait for the evening run, or run them now:
+**4. Fill the data.** Market News fills itself: the first 15-minute run
+after a deploy fetches headlines and builds the calendar and the first
+briefing. Stack prices wait for the evening run, or run them now:
 
 ```bash
-curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/markettape
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/news
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/calendar
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/briefing
 # repeat until "remaining" reaches 0:
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/stack
 ```
@@ -230,6 +237,7 @@ bars, which is the designed behaviour.
 
 **The data is not updating.** Worker → **Logs** (observability is on) and look
 at the cron runs: `stack refresh {...}` reports what each batch did, and
-`markettape refresh:` says why it skipped (usually a missing
-`GEMINI_API_KEY`). `SELECT symbol, last_error FROM tickers WHERE last_error
+`news: …` what the Market News tick did — `fetch`, `calendar` (per source,
+e.g. `bls failed: HTTP 403`) and `briefing` (skipped when `GEMINI_API_KEY`
+is missing or nothing new arrived). `SELECT symbol, last_error FROM tickers WHERE last_error
 IS NOT NULL` shows which tickers keep failing.

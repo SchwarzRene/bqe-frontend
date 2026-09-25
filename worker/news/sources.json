@@ -1,0 +1,58 @@
+{
+  "feeds": [
+    { "id": "cnbc-top", "name": "CNBC", "type": "rss", "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html", "category": "markets", "region": "us", "weight": 22 },
+    { "id": "cnbc-markets", "name": "CNBC", "type": "rss", "url": "https://www.cnbc.com/id/10000664/device/rss/rss.html", "category": "markets", "region": "us", "weight": 20 },
+    { "id": "marketwatch", "name": "MarketWatch", "type": "rss", "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories", "category": "markets", "region": "us", "weight": 20 },
+    { "id": "marketwatch-bulletins", "name": "MarketWatch", "type": "rss", "url": "https://feeds.content.dowjones.io/public/rss/mw_bulletins", "category": "markets", "region": "us", "weight": 24 },
+    { "id": "bbc-world", "name": "BBC", "type": "rss", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "category": "world", "region": "global", "weight": 18 },
+    { "id": "fed-press", "name": "Federal Reserve", "type": "rss", "url": "https://www.federalreserve.gov/feeds/press_all.xml", "category": "policy", "region": "us", "weight": 30 },
+    { "id": "fed-speeches", "name": "Federal Reserve", "type": "rss", "url": "https://www.federalreserve.gov/feeds/speeches.xml", "category": "policy", "region": "us", "weight": 24 },
+    { "id": "ecb", "name": "ECB", "type": "rss", "url": "https://www.ecb.europa.eu/rss/press.html", "category": "policy", "region": "europe", "weight": 28 },
+    { "id": "euronews-business", "name": "Euronews", "type": "rss", "url": "https://www.euronews.com/rss?level=vertical&name=business", "category": "markets", "region": "europe", "weight": 18 },
+    { "id": "bbc-asia", "name": "BBC Asia", "type": "rss", "url": "https://feeds.bbci.co.uk/news/world/asia/rss.xml", "category": "world", "region": "asia", "weight": 16 },
+    { "id": "nikkei-asia", "name": "Nikkei Asia", "type": "rss", "url": "https://asia.nikkei.com/rss/feed/nar", "category": "markets", "region": "asia", "weight": 20 },
+    { "id": "scmp-business", "name": "South China Morning Post", "type": "rss", "url": "https://www.scmp.com/rss/92/feed", "category": "markets", "region": "asia", "weight": 16 },
+    { "id": "scmp-china", "name": "South China Morning Post", "type": "rss", "url": "https://www.scmp.com/rss/4/feed", "category": "world", "region": "asia", "weight": 14 },
+    { "id": "moscow-times", "name": "The Moscow Times", "type": "rss", "url": "https://www.themoscowtimes.com/rss/news", "category": "world", "region": "russia", "weight": 16 },
+    { "id": "meduza", "name": "Meduza", "type": "rss", "url": "https://meduza.io/rss/en/all", "category": "world", "region": "russia", "weight": 14 },
+    { "id": "bank-of-russia", "name": "Bank of Russia", "type": "rss", "url": "https://www.cbr.ru/rss/eng/RssPress", "category": "policy", "region": "russia", "weight": 24 },
+    { "id": "usda", "name": "USDA", "type": "rss", "url": "https://www.usda.gov/rss/latest-releases.xml", "category": "commodities", "region": "us", "weight": 16 },
+    { "id": "eia", "name": "EIA", "type": "rss", "url": "https://www.eia.gov/rss/press_rss.xml", "category": "commodities", "region": "us", "weight": 18 }
+  ],
+
+  "yahooWeight": 16,
+
+  "watchlist": [
+    { "symbol": "NVDA", "name": "Nvidia", "region": "us" },
+    { "symbol": "AAPL", "name": "Apple", "region": "us" },
+    { "symbol": "MSFT", "name": "Microsoft", "region": "us" },
+    { "symbol": "AMZN", "name": "Amazon", "region": "us" },
+    { "symbol": "GOOGL", "name": "Alphabet", "region": "us" },
+    { "symbol": "ASML", "name": "ASML", "region": "europe" },
+    { "symbol": "SAP.DE", "name": "SAP", "region": "europe" },
+    { "symbol": "EBS.VI", "name": "Erste Group", "region": "europe" },
+    { "symbol": "2330.TW", "name": "TSMC", "region": "asia" }
+  ],
+
+  "commodities": [
+    { "symbol": "ZS=F", "name": "Soybeans", "group": "Agriculture" },
+    { "symbol": "ZC=F", "name": "Corn", "group": "Agriculture" },
+    { "symbol": "ZW=F", "name": "Wheat", "group": "Agriculture" },
+    { "symbol": "KC=F", "name": "Coffee", "group": "Agriculture" },
+    { "symbol": "CL=F", "name": "Crude oil", "group": "Energy" },
+    { "symbol": "NG=F", "name": "US gas", "group": "Energy" },
+    { "symbol": "TTF=F", "name": "EU gas", "group": "Energy" },
+    { "symbol": "GC=F", "name": "Gold", "group": "Metals" },
+    { "symbol": "SI=F", "name": "Silver", "group": "Metals" },
+    { "symbol": "HG=F", "name": "Copper", "group": "Metals" }
+  ],
+
+  "blockedPublishers": [
+    "RT", "Sputnik", "TASS", "RIA Novosti", "Motley Fool", "The Motley Fool", "InvestorPlace", "Zacks", "Benzinga"
+  ],
+
+  "promoPatterns": [
+    "stocks? to buy", "could make you rich", "millionaire", "buy (?:now|before)", "top \\d+ stocks", "best stocks?",
+    "should you buy", "is it time to buy", "dividend stocks? to", "no-brainer", "sponsored", "(?:^|\\W)promo(?:\\W|$)"
+  ]
+}

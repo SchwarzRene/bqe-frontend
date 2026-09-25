@@ -254,10 +254,10 @@
       stack: "Leaflet · GeoJSON", href: "/research/historymap/"
     },
     {
-      id: "markettape", tag: "Interactive", title: "Market Tape",
-      desc: "A broadcast-style rundown for Fed events and earnings calls, assembled by a search-grounded model under a strict JSON contract and rendered with live countdowns.",
-      short: "Live broadcast rundown for Fed events and earnings calls.",
-      stack: "React · Gemini API", href: "/research/markettape/"
+      id: "markettape", tag: "Interactive", title: "Market News",
+      desc: "A daily briefing on markets, stocks and commodities across the US, Europe, Asia and Russia: free headlines ranked and summarised by a model, an on-now calendar of Fed, ECB, data and earnings events, and a chat that answers from the collected headlines.",
+      short: "AI-ranked market briefing with an on-now event calendar.",
+      stack: "RSS · Gemini API", href: "/research/markettape/"
     },
     {
       id: "stack", tag: "Interactive", title: "Stack",
@@ -451,7 +451,19 @@
     // fan siblings out around the cluster center; a lone member gets no
     // offset at all, so single-node clusters sit exactly on their center
     var offsetX = 0, offsetY = 0;
-    if (p.clusterCount > 1) {
+    if (p.clusterCount > 1 && w < 560) {
+      // A phone has no room for a ring: four members on it put each label
+      // on top of the next rock, and a tap on Stack opened the Trading
+      // Journal. Two columns, wide and tall enough that a rock and its
+      // title never reach the neighbour's; a last odd member is centred.
+      var colX = Math.max(72, w * 0.22);
+      var rowY = 100;
+      var rows = Math.ceil(p.clusterCount / 2);
+      var row = Math.floor(p.clusterIndex / 2);
+      var alone = p.clusterIndex === p.clusterCount - 1 && p.clusterCount % 2 === 1;
+      offsetX = alone ? 0 : (p.clusterIndex % 2 ? colX : -colX);
+      offsetY = (row - (rows - 1) / 2) * rowY;
+    } else if (p.clusterCount > 1) {
       // The floor, not the proportion, is what matters on a phone: a ring
       // any tighter than this parks each label under the next node's rock.
       var ringRadius = Math.max(64, Math.min(w, h) * 0.12);

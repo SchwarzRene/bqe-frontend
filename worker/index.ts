@@ -2,12 +2,15 @@
 // reach this code; only the paths in wrangler.toml's run_worker_first do,
 // plus the cron triggers.
 
-import { handleAuth, pruneAuth } from "./auth";
-import { handleContact, pruneContact } from "./contact";
+import { handleAuth } from "./auth";
+import { handleContact } from "./contact";
 import type { Env } from "./env";
 import { json } from "./http";
 import { handleMarket } from "./market";
-import { refreshTape, serveTapeFile } from "./markettape";
+import { handleChat, handleNews, newsTick } from "./news";
+import { buildBriefing } from "./news/briefing";
+import { refreshCalendar } from "./news/calendar";
+import { ingest } from "./news/store";
 import { refreshStack, serveStackFile } from "./stack";
 import { handleState } from "./state";
 import { fetchQuote, isValidSymbol, UpstreamError } from "./yahoo";
@@ -40,18 +43,20 @@ export default {
       m = path.match(/^\/api\/market\/([a-z]+)$/);
       if (m) return handleMarket(request, ctx, m[1]);
 
-      m = path.match(/^\/api\/admin\/run\/(stack|markettape)$/);
+      if (path === "/api/chat") return handleChat(request, env);
+
+      m = path.match(/^\/api\/news(?:\/([a-z]+))?$/);
+      if (m) return handleNews(request, env, m[1] ?? "");
+
+      m = path.match(/^\/api\/admin\/run\/(stack|news|calendar|briefing)$/);
       if (m) {
         if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
         if (!authorised(request, env)) return json({ error: "unauthorised" }, 401);
-        return json(m[1] === "stack" ? await refreshStack(env) : { result: await refreshTape(env) });
+        return json(await adminRun(env, m[1]));
       }
 
       m = path.match(/^\/research\/stack\/data\/([A-Za-z0-9.\-]+)\.json$/);
       if (m && method === "GET") return serveStackFile(request, env, m[1]);
-
-      m = path.match(/^\/research\/markettape\/data\/([a-z]+\.json)$/);
-      if (m && method === "GET") return serveTapeFile(request, env, ctx, m[1]);
 
       if (path.startsWith("/api/")) return json({ error: "not found" }, 404);
     } catch (err) {
@@ -62,18 +67,15 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  async scheduled(controller, env, ctx): Promise<void> {
+  async scheduled(controller, env): Promise<void> {
     switch (controller.cron) {
       case "*/3 22-23 * * 1-5": {
         const report = await refreshStack(env, new Date(controller.scheduledTime));
         console.log("stack refresh", JSON.stringify(report));
         break;
       }
-      case "10 12 * * 1-5":
-      case "10 22 * * 1-5": {
-        console.log("markettape refresh:", await refreshTape(env, new Date(controller.scheduledTime)));
-        ctx.waitUntil(pruneContact(env));
-        ctx.waitUntil(pruneAuth(env));
+      case "*/15 * * * *": {
+        console.log("news:", await newsTick(env, controller.scheduledTime));
         break;
       }
       default:
@@ -104,6 +106,20 @@ async function quote(symbol: string, request: Request, ctx: ExecutionContext): P
     const message = err instanceof UpstreamError ? err.message : "upstream unavailable";
     console.warn(`quote ${symbol}: ${err}`);
     return json({ error: message }, 502);
+  }
+}
+
+/** POST /api/admin/run/:job — a scheduled job, now. */
+async function adminRun(env: Env, job: string): Promise<unknown> {
+  switch (job) {
+    case "stack":
+      return refreshStack(env);
+    case "news":
+      return { fetch: await ingest(env) };
+    case "calendar":
+      return { calendar: await refreshCalendar(env) };
+    default:
+      return { briefing: await buildBriefing(env, "manual", { force: true }) };
   }
 }
 
