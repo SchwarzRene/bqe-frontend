@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildBriefing, latestBriefing } from "../worker/news/briefing";
-import { readCalendar, refreshCalendar, refreshResults } from "../worker/news/calendar";
+import { type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
 import type { Config } from "../worker/news/feeds";
 import { handleChat, handleNews, newsTick } from "../worker/news/index";
 import { ingest, pruneNews } from "../worker/news/store";
@@ -102,24 +102,22 @@ function internet(opts: { briefing?: (prompt: string) => unknown; chat?: (body: 
     if (url.includes("finance/chart")) {
       return new Response(JSON.stringify({ chart: { result: [{ meta: { symbol: "NVDA", regularMarketPrice: 110, chartPreviousClose: 100, currency: "USD" } }] } }));
     }
+    if (url.includes("bls.ics")) {
+      return new Response([
+        "BEGIN:VCALENDAR",
+        "BEGIN:VEVENT", "DTSTART;TZID=America/New_York:20260924T083000", "SUMMARY:Consumer Price Index for August 2026", "END:VEVENT",
+        "BEGIN:VEVENT", "DTSTART;TZID=America/New_York:20260924T100000", "SUMMARY:County Employment and Wages", "END:VEVENT",
+        "BEGIN:VEVENT", "DTSTART;TZID=America/New_York:20261002T083000", "SUMMARY:The Employment Situation - September 2026", "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"));
+    }
+    if (url.includes("api.nasdaq.com")) {
+      const rows = url.endsWith("2026-09-23")
+        ? [{ symbol: "NVDA", name: "NVIDIA Corporation", marketCap: "$4,000,000,000,000", time: "time-after-hours", epsForecast: "$1.00", eps: "$1.10" }]
+        : [];
+      return new Response(JSON.stringify({ data: { rows } }));
+    }
     if (url.includes("generativelanguage")) {
-      if (body?.tools?.[0]?.google_search && !body.systemInstruction) {
-        const prompt: string = body.contents[0].parts[0].text;
-        if (prompt.includes("outcome of each")) {
-          const id = prompt.match(/id "([^"]+)"/)![1];
-          return gemini(JSON.stringify({ results: [{ id, result: "CPI 2.9% vs 3.0% expected" }] }));
-        }
-        if (prompt.includes("US economic data")) {
-          return gemini("```json\n" + JSON.stringify([
-            { type: "us-data", title: "US CPI, August", date: "2026-09-24", time: "08:30", tz: "America/New_York", region: "us", importance: 3 },
-            { type: "us-data", title: "US PCE, August", date: "2026-09-25", time: "08:30", tz: "America/New_York", region: "us", importance: 3 },
-          ]) + "\n```");
-        }
-        if (prompt.includes("commodity reports")) {
-          return gemini(JSON.stringify([{ type: "commodities", title: "EIA natural gas storage", date: "2026-09-24", time: "10:30", tz: "America/New_York", region: "us", importance: 2 }]));
-        }
-        return gemini("[]");
-      }
       if (body?.generationConfig?.responseMimeType === "application/json") {
         return gemini(JSON.stringify(opts.briefing ? opts.briefing(body.contents[0].parts[0].text) : null));
       }
@@ -178,18 +176,35 @@ describe("Market News flow", () => {
     expect(await ingest(env, NOW + 60_000, cfg)).toMatchObject({ added: 0, merged: 0 });
   });
 
-  it("builds the calendar, a briefing, results, and serves it all", async () => {
+  it("builds the calendar without AI, a briefing, and serves it all", async () => {
     const calls = internet({ briefing: briefingFrom });
     const env = envWith();
     await ingest(env, NOW, cfg);
 
-    expect(await refreshCalendar(env, NOW, cfg)).toBe("us: 2, europe: 0, asia-russia: 0, commodities: 1");
-    const events = await readCalendar(env, NOW - 86_400_000, NOW + 3 * 86_400_000, cfg);
-    expect(events.map((e) => [e.title, e.start])).toEqual([
-      ["US CPI, August", "2026-09-24T12:30:00Z"],
-      ["EIA natural gas storage", "2026-09-24T14:30:00Z"],
-      ["US PCE, August", "2026-09-25T12:30:00Z"],
+    const cal: CalendarConfig = {
+      meetings: [{ type: "eu-central-bank", title: "ECB rate decision", date: "2026-09-25", time: "14:15", tz: "Europe/Berlin", minutes: 90, region: "europe", importance: 3 }],
+      weekly: [{ type: "commodities", title: "EIA natural gas storage", weekday: 4, time: "10:30", tz: "America/New_York", region: "us", importance: 2 }],
+      monthly: [],
+      ics: [{ id: "bls", name: "BLS", url: "https://www.bls.gov/schedule/news_release/bls.ics", type: "us-data", region: "us", include: [
+        { match: "Consumer Price Index", title: "US CPI", importance: 3 },
+        { match: "Employment Situation", title: "US jobs report", importance: 3 },
+      ] }],
+    };
+    // The calendar makes no model calls.
+    expect(await refreshCalendar(env, NOW, { cfg, cal })).toBe("meetings: 1, rules: 3, bls: 2, nasdaq: 1, yahoo: 0");
+    expect(calls.some((c) => c.url.includes("generativelanguage"))).toBe(false);
+    const events = await readCalendar(env, NOW - 86_400_000, NOW + 3 * 86_400_000);
+    expect(events.map((e) => [e.title, e.start, e.result])).toEqual([
+      ["NVIDIA results, after the close", "2026-09-23T20:05:00Z", "EPS $1.10 vs $1.00 est."],
+      ["US CPI", "2026-09-24T12:30:00Z", ""],
+      ["EIA natural gas storage", "2026-09-24T14:30:00Z", ""],
+      ["ECB rate decision", "2026-09-25T12:15:00Z", ""],
     ]);
+    // Rebuilt the next day, nothing is duplicated and the reported EPS stays.
+    await refreshCalendar(env, NOW + 86_400_000, { cfg, cal });
+    const again = await readCalendar(env, NOW - 86_400_000, NOW + 3 * 86_400_000);
+    expect(again.map((e) => e.title)).toEqual(events.map((e) => e.title));
+    expect(again[0].result).toBe("EPS $1.10 vs $1.00 est.");
 
     expect(await buildBriefing(env, "pre-market", { now: NOW, cfg })).toBe("briefing written from 5 headlines");
     const b = (await latestBriefing(env))!;
@@ -200,11 +215,6 @@ describe("Market News flow", () => {
     const geminiCalls = calls.filter((c) => c.url.includes("generativelanguage")).length;
     expect(await buildBriefing(env, "midday", { now: NOW + 3_600_000, cfg })).toMatch(/skipped/);
     expect(calls.filter((c) => c.url.includes("generativelanguage")).length).toBe(geminiCalls);
-
-    // The CPI release was at 12:30 UTC; later that morning its result is looked up.
-    expect(await refreshResults(env, NOW + 2 * 3_600_000)).toBe("1 of 1 results");
-    const cpi = (await readCalendar(env, NOW - 86_400_000, NOW + 86_400_000, cfg)).find((e) => e.title.startsWith("US CPI"))!;
-    expect(cpi.result).toBe("CPI 2.9% vs 3.0% expected");
 
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW + 90 * 60_000);
@@ -231,7 +241,7 @@ describe("Market News flow", () => {
     // 10:15 New York on a Thursday: no slot, but nothing exists yet.
     const report = await newsTick(env, Date.parse("2026-09-24T14:15:00Z"), cfg);
     expect(report).toMatch(/fetch: /);
-    expect(report).toMatch(/calendar \(first\): us: 2/);
+    expect(report).toMatch(/calendar \(first\): meetings: \d+, rules: \d+, bls: \d+, nasdaq: \d+, yahoo: 0/);
     expect(report).toMatch(/briefing \(first\): briefing written/);
   });
 

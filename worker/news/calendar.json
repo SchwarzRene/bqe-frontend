@@ -1,0 +1,52 @@
+{
+  "_readme": "The calendar's fixed parts. meetings: central bank decisions, set once a year by each bank; add next year's dates when they are published. weekly and monthly: releases at fixed times. ics: published release schedules, fetched daily. Times are local wall-clock times in the given time zone.",
+
+  "meetings": [
+    { "type": "fed", "title": "FOMC rate decision", "date": "2026-10-28", "time": "14:00", "tz": "America/New_York", "minutes": 90, "region": "us", "importance": 3, "streamUrl": "https://www.federalreserve.gov/live-broadcast.htm" },
+    { "type": "fed", "title": "FOMC rate decision", "date": "2026-12-09", "time": "14:00", "tz": "America/New_York", "minutes": 90, "region": "us", "importance": 3, "streamUrl": "https://www.federalreserve.gov/live-broadcast.htm" },
+
+    { "type": "eu-central-bank", "title": "ECB rate decision and press conference", "date": "2026-10-29", "time": "14:15", "tz": "Europe/Berlin", "minutes": 90, "region": "europe", "importance": 3, "streamUrl": "https://www.ecb.europa.eu/press/pressconf/html/index.en.html" },
+    { "type": "eu-central-bank", "title": "ECB rate decision and press conference", "date": "2026-12-17", "time": "14:15", "tz": "Europe/Berlin", "minutes": 90, "region": "europe", "importance": 3, "streamUrl": "https://www.ecb.europa.eu/press/pressconf/html/index.en.html" },
+
+    { "type": "eu-central-bank", "title": "Bank of England rate decision", "date": "2026-11-05", "time": "12:00", "tz": "Europe/London", "minutes": 60, "region": "europe", "importance": 2 },
+    { "type": "eu-central-bank", "title": "Bank of England rate decision", "date": "2026-12-17", "time": "12:00", "tz": "Europe/London", "minutes": 60, "region": "europe", "importance": 2 },
+
+    { "type": "eu-central-bank", "title": "SNB rate decision", "date": "2026-12-10", "time": "09:30", "tz": "Europe/Zurich", "minutes": 60, "region": "europe", "importance": 2 },
+
+    { "type": "asia-central-bank", "title": "Bank of Japan rate decision", "date": "2026-10-30", "time": "12:00", "tz": "Asia/Tokyo", "minutes": 240, "region": "asia", "importance": 3 },
+    { "type": "asia-central-bank", "title": "Bank of Japan rate decision", "date": "2026-12-18", "time": "12:00", "tz": "Asia/Tokyo", "minutes": 240, "region": "asia", "importance": 3 },
+
+    { "type": "russia", "title": "Bank of Russia key rate decision", "date": "2026-10-23", "time": "13:30", "tz": "Europe/Moscow", "minutes": 90, "region": "russia", "importance": 2 },
+    { "type": "russia", "title": "Bank of Russia key rate decision", "date": "2026-12-18", "time": "13:30", "tz": "Europe/Moscow", "minutes": 90, "region": "russia", "importance": 2 }
+  ],
+
+  "weekly": [
+    { "type": "us-data", "title": "US weekly jobless claims", "weekday": 4, "time": "08:30", "tz": "America/New_York", "region": "us", "importance": 2 },
+    { "type": "commodities", "title": "EIA weekly petroleum status report", "weekday": 3, "time": "10:30", "tz": "America/New_York", "region": "us", "importance": 2 },
+    { "type": "commodities", "title": "EIA natural gas storage", "weekday": 4, "time": "10:30", "tz": "America/New_York", "region": "us", "importance": 2 },
+    { "type": "commodities", "title": "USDA weekly export sales", "weekday": 4, "time": "08:30", "tz": "America/New_York", "region": "us", "importance": 1 },
+    { "type": "commodities", "title": "USDA crop progress", "weekday": 1, "time": "16:00", "tz": "America/New_York", "region": "us", "importance": 1, "months": [4, 5, 6, 7, 8, 9, 10, 11] }
+  ],
+
+  "monthly": [
+    { "type": "asia-central-bank", "title": "PBoC loan prime rate", "day": 20, "weekend": "next-business-day", "time": "09:00", "tz": "Asia/Shanghai", "region": "asia", "importance": 2 },
+    { "type": "asia-data", "title": "China official PMIs", "day": "last", "weekend": "same-day", "time": "09:30", "tz": "Asia/Shanghai", "region": "asia", "importance": 2 }
+  ],
+
+  "ics": [
+    {
+      "id": "bls",
+      "name": "BLS",
+      "url": "https://www.bls.gov/schedule/news_release/bls.ics",
+      "type": "us-data",
+      "region": "us",
+      "include": [
+        { "match": "Consumer Price Index", "title": "US CPI", "importance": 3 },
+        { "match": "Employment Situation", "title": "US jobs report", "importance": 3 },
+        { "match": "Producer Price Index", "title": "US PPI", "importance": 2 },
+        { "match": "Job Openings and Labor Turnover", "title": "US job openings (JOLTS)", "importance": 2 },
+        { "match": "Employment Cost Index", "title": "US employment cost index", "importance": 2 }
+      ]
+    }
+  ]
+}

@@ -335,5 +335,7 @@ export async function pruneNews(env: Env, now = Date.now()): Promise<void> {
     env.DB.prepare("DELETE FROM news_briefings WHERE generated_at < ?").bind(cutoff),
     env.DB.prepare("DELETE FROM news_events WHERE start_at < ?").bind(iso(now - 14 * DAY_MS)),
     env.DB.prepare("DELETE FROM news_chat_usage WHERE day < ?").bind(cutoff.slice(0, 10)),
+    // What Market Tape, which Market News replaced, left behind.
+    env.DB.prepare("DELETE FROM documents WHERE key LIKE 'markettape:%'"),
   ]);
 }

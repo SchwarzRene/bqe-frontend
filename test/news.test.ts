@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { validateBriefing, pickInput } from "../worker/news/briefing";
-import { cleanSearchEvent, fromTape, tapeResultLine } from "../worker/news/calendar";
+import { type CalendarConfig, fixedEvents, nasdaqEvent, parseIcs, pickNasdaq } from "../worker/news/calendar";
+import { describeGeminiError } from "../worker/news/gemini";
 import { cleanMessages, handleChat, splitSources } from "../worker/news/chat";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
@@ -179,27 +180,59 @@ describe("news time", () => {
 });
 
 describe("news calendar", () => {
-  it("places a found event on the UTC clock and checks its fields", () => {
-    const e = cleanSearchEvent(
-      { type: "eu-data", title: "Euro-area flash inflation", date: "2026-10-01", time: "11:00", tz: "Europe/Luxembourg", region: "europe", importance: 3, streamUrl: "javascript:x", tickers: ["bad ticker"] },
-      ["eu-data", "eu-central-bank"],
-    )!;
-    expect(e).toMatchObject({ id: "eu-data-2026-10-01-euro-area-flash-inflation", start: "2026-10-01T09:00:00Z", end: "2026-10-01T09:15:00Z", importance: 3, streamUrl: "", tickers: [] });
-    expect(cleanSearchEvent({ type: "fed", title: "x", date: "2026-10-01", time: "10:00" }, ["eu-data"])).toBeNull();
-    expect(cleanSearchEvent({ type: "eu-data", title: "x", date: "soon", time: "10:00" }, ["eu-data"])).toBeNull();
+  const cal: CalendarConfig = {
+    meetings: [{ type: "fed", title: "FOMC rate decision", date: "2026-10-28", time: "14:00", tz: "America/New_York", minutes: 90, region: "us", importance: 3 }],
+    weekly: [
+      { type: "commodities", title: "EIA natural gas storage", weekday: 4, time: "10:30", tz: "America/New_York", region: "us", importance: 2 },
+      { type: "commodities", title: "USDA crop progress", weekday: 1, time: "16:00", tz: "America/New_York", region: "us", importance: 1, months: [4, 5, 6, 7, 8, 9, 10, 11] },
+    ],
+    monthly: [
+      { type: "asia-central-bank", title: "PBoC loan prime rate", day: 20, weekend: "next-business-day", time: "09:00", tz: "Asia/Shanghai", region: "asia", importance: 2 },
+      { type: "asia-data", title: "China official PMIs", day: "last", weekend: "same-day", time: "09:30", tz: "Asia/Shanghai", region: "asia", importance: 2 },
+    ],
+    ics: [],
+  };
+
+  it("places meetings and weekly and monthly releases on the UTC clock", () => {
+    const { meetings, rules } = fixedEvents("2026-09-14", "2026-10-31", cal);
+    expect(meetings).toEqual([expect.objectContaining({
+      id: "fed-2026-10-28-fomc-rate-decision", start: "2026-10-28T18:00:00Z", end: "2026-10-28T19:30:00Z", importance: 3,
+    })]);
+    const at = (title: string) => rules.filter((r) => r.title === title).map((r) => r.start);
+    expect(at("EIA natural gas storage").slice(0, 2)).toEqual(["2026-09-17T14:30:00Z", "2026-09-24T14:30:00Z"]);
+    // 20 September 2026 is a Sunday: the next business day.
+    expect(at("PBoC loan prime rate")).toEqual(["2026-09-21T01:00:00Z", "2026-10-20T01:00:00Z"]);
+    expect(at("China official PMIs")).toEqual(["2026-09-30T01:30:00Z", "2026-10-31T01:30:00Z"]);
+    // Crop progress only runs April to November.
+    expect(fixedEvents("2026-12-01", "2026-12-31", cal).rules.some((r) => r.title === "USDA crop progress")).toBe(false);
   });
 
-  it("turns Market Tape rows and results into calendar events", () => {
-    const e = fromTape(
-      { id: "nvda-q3", kind: "earnings", title: "Q3 results", org: "Nvidia", ticker: "NVDA", date: "2026-11-18", releaseET: "16:20", timeET: "17:00", streamUrl: "https://ir.example/webcast" },
-      { status: "reported", metrics: [{ label: "Adj. EPS", actual: "$1.42", estimate: "$1.28" }] },
-    )!;
-    expect(e).toMatchObject({
-      id: "tape-nvda-q3", type: "earnings", title: "Nvidia Q3 results", start: "2026-11-18T21:20:00Z", end: "2026-11-18T23:20:00Z",
-      region: "us", tickers: ["NVDA"], result: "Adj. EPS $1.42 vs $1.28 est.",
+  it("parses a published iCalendar schedule", () => {
+    const ics = [
+      "BEGIN:VCALENDAR", "BEGIN:VEVENT", "DTSTART;TZID=America/New_York:20261014T083000",
+      "SUMMARY:Consumer Price Index for Septem", " ber 2026", "END:VEVENT",
+      "BEGIN:VEVENT", "DTSTART:20261106T133000Z", "SUMMARY:Employment Situation\\, October", "END:VEVENT",
+      "BEGIN:VEVENT", "DTSTART;VALUE=DATE:20261201", "END:VEVENT", "END:VCALENDAR",
+    ].join("\r\n");
+    expect(parseIcs(ics)).toEqual([
+      { summary: "Consumer Price Index for September 2026", start: Date.parse("2026-10-14T12:30:00Z") },
+      { summary: "Employment Situation, October", start: Date.parse("2026-11-06T13:30:00Z") },
+    ]);
+  });
+
+  it("reads Nasdaq earnings rows: watchlist plus the largest, reported EPS as the result", () => {
+    const rows = [
+      { symbol: "TINY", marketCap: "$1,000", time: "time-pre-market" },
+      { symbol: "NVDA", name: "NVIDIA Corporation", marketCap: "$4,000,000,000,000", time: "time-after-hours", fiscalQuarterEnding: "Oct/2026", epsForecast: "$1.25", eps: "$1.30" },
+      ...Array.from({ length: 6 }, (_, i) => ({ symbol: `BIG${"ABCDEF"[i]}`, marketCap: `$${(i + 1) * 1000},000,000` })),
+    ];
+    expect(pickNasdaq(rows, new Set(["NVDA"])).map((r) => r.symbol)).toEqual(["NVDA", "BIGF", "BIGE", "BIGD", "BIGC", "BIGB"]);
+    expect(nasdaqEvent(rows[1], "2026-11-18")).toMatchObject({
+      id: "earnings-2026-11-18-nvda", title: "NVIDIA results (quarter to Oct/2026), after the close",
+      start: "2026-11-18T21:05:00Z", result: "EPS $1.30 vs $1.25 est.", tickers: ["NVDA"],
     });
-    expect(fromTape({ id: "f", kind: "fed", title: "FOMC rate decision", date: "2026-10-28", timeET: "14:00" }, null)!.importance).toBe(3);
-    expect(tapeResultLine({ status: "not_yet" })).toBe("");
+    expect(nasdaqEvent({ symbol: "AAPL", epsForecast: "$1.00", eps: "N/A" }, "2026-10-29")!.result).toBe("");
+    expect(nasdaqEvent({ symbol: "<script>" }, "2026-10-29")).toBeNull();
   });
 
   it("groups headlines under the event they mention", () => {
@@ -245,6 +278,26 @@ describe("news briefing", () => {
     const it = (id: string, score: number, at: string) => ({ id, title: "", url: "", source: "", alsoIn: [], category: "", region: "", tickers: [], publishedAt: at, score });
     const picked = pickInput([it("old", 60, "2026-09-23T13:00:00Z"), it("new", 50, "2026-09-24T11:30:00Z"), it("low", 10, "2026-09-24T11:59:00Z")], now, 2);
     expect(picked.map((p) => p.id)).toEqual(["new", "old"]);
+  });
+});
+
+describe("describeGeminiError", () => {
+  const body = (quotaId: string, quotaValue: string, retryDelay = "20s") =>
+    JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", details: [
+      { violations: [{ quotaMetric: "generate_content_free_tier_requests", quotaId, quotaValue }] },
+      { retryDelay },
+    ] } });
+
+  it("says so when the model has no free tier, and does not retry", () => {
+    const r = describeGeminiError(429, body("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "0"));
+    expect(r.summary).toContain("no free-tier quota");
+    expect(r.retryAfterMs).toBeNull();
+  });
+
+  it("waits out a short per-minute limit, not a daily one", () => {
+    expect(describeGeminiError(429, body("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", "10")).retryAfterMs).toBe(20_000);
+    expect(describeGeminiError(429, body("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "250")).retryAfterMs).toBeNull();
+    expect(describeGeminiError(500, "not json").summary).toBe("not json");
   });
 });
 

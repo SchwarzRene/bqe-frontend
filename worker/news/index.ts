@@ -6,16 +6,15 @@
 //
 // and one cron, every 15 minutes (see newsTick):
 //   fetch + dedupe         every run on weekdays, hourly at weekends
-//   briefing               02:30, 08:00, 12:30, 16:30 New York time on weekdays, Sat 10:00
-//   event results          with each briefing
-//   calendar + pruning     05:00 New York time
+//   briefing (Gemini)      02:30, 08:00, 12:30, 16:30 New York time on weekdays, Sat 10:00
+//   calendar + pruning     05:00 New York time (no model calls)
 
-import { currentUser } from "../auth";
+import { currentUser, pruneAuth } from "../auth";
+import { pruneContact } from "../contact";
 import type { Env } from "../env";
 import { crossSite, isoNow, json } from "../http";
-import { bootstrapTape } from "../markettape";
 import { buildBriefing, latestBriefing } from "./briefing";
-import { calendarIsEmpty, type CalendarEvent, readCalendar, refreshCalendar, refreshResults } from "./calendar";
+import { calendarIsEmpty, type CalendarEvent, readCalendar, refreshCalendar } from "./calendar";
 import { CONFIG } from "./feeds";
 import { type Item, eventWordsFor, ingest, itemsById, pruneNews, readHealth, recentItems, staleSources } from "./store";
 import { briefingSlot, isCalendarRun, iso, shouldFetch } from "./time";
@@ -42,7 +41,7 @@ async function news(env: Env): Promise<Response> {
   const [briefing, recent, events, health] = await Promise.all([
     latestBriefing(env),
     recentItems(env, now, 24, 250),
-    readCalendar(env, now - 8 * 86_400_000, now + 8 * 86_400_000),
+    readCalendar(env, now - 8 * 86_400_000, now + 9 * 86_400_000),
     readHealth(env),
   ]);
   // A briefing can cite headlines that have since dropped out of the 24 h window.
@@ -147,29 +146,29 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG): Promise
     }
   };
 
-  if (shouldFetch(ms)) await record("fetch", () => ingest(env, ms, cfg));
+  // 05:00 New York: the calendar and the daily clean-up. That run skips the
+  // headline fetch, so the two stay within the per-run subrequest limit.
+  const calendarRun = isCalendarRun(ms);
+  if (shouldFetch(ms) && !calendarRun) await record("fetch", () => ingest(env, ms, cfg));
+  if (calendarRun) {
+    await record("calendar", () => refreshCalendar(env, ms, { cfg }));
+    await record("prune", async () => {
+      await Promise.all([pruneNews(env, ms), pruneContact(env), pruneAuth(env)]);
+      return "done";
+    });
+  } else if ((await calendarIsEmpty(env, ms)) && (await claim(env, "news:calendar-first", 60 * 60_000))) {
+    // A fresh deploy: the calendar is built by the first run, not at 05:00.
+    await record("calendar (first)", () => refreshCalendar(env, ms, { cfg }));
+  }
 
+  // The only model calls the cron makes: the briefing.
   if (!env.GEMINI_API_KEY) {
-    report.push("AI steps skipped: GEMINI_API_KEY is not set");
+    report.push("briefing skipped: GEMINI_API_KEY is not set");
     return report.join(" · ");
   }
-
-  // The calendar: daily, or as soon as it is empty (at most every 3 hours,
-  // so a failing key cannot use up the quota).
-  if (isCalendarRun(ms)) {
-    await record("calendar", () => refreshCalendar(env, ms, cfg));
-    await record("prune", async () => (await pruneNews(env, ms), "done"));
-  } else if ((await calendarIsEmpty(env, ms)) && (await claim(env, "news:calendar-first", 3 * 3_600_000))) {
-    await record("calendar (first)", () => refreshCalendar(env, ms, cfg));
-  }
-
-  // The Fed and earnings rundown, if a fresh deploy has none yet.
-  await record("fed + earnings (first)", async () => (await bootstrapTape(env)) ?? "not needed");
-
   const slot = briefingSlot(ms);
   if (slot) {
     await record("briefing", () => buildBriefing(env, slot, { now: ms, cfg }));
-    await record("results", () => refreshResults(env, ms));
   } else if (!(await latestBriefing(env)) && (await claim(env, "news:briefing-first", 60 * 60_000))) {
     // A fresh deploy: the first briefing comes with the first fetch, not at the next slot.
     await record("briefing (first)", () => buildBriefing(env, "first", { force: true, now: ms, cfg }));

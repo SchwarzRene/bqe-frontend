@@ -4,13 +4,9 @@ Market News collects headlines from free sources, has a model pick and summarize
 
 It answers two questions: "what matters in markets and the world right now?" and "what's new on the companies and commodities I follow?"
 
-Live at **/research/markettape/**: Market News replaces Market Tape and keeps its URL,
-so existing links still work. `index.html` in this folder is the page; the jobs and
-endpoints behind it are in `worker/news/` (see [How it is built](#how-it-is-built)).
-The write-up is `research/markettape.html`. The AI is Google's Gemini, through the
-`GEMINI_API_KEY` secret the Fed and earnings job already used.
+Market News replaces Market Tape and keeps its URL, **/research/markettape/**, so existing links still work. `index.html` in this folder is the page; the jobs and endpoints behind it are in `worker/news/` (see [How it is built](#how-it-is-built)). The write-up is `research/markettape.html`.
 
-Spec as of 24 September 2026; built 25 September 2026.
+Spec as of 24 September 2026; built 25 September 2026. The AI is Google's Gemini (`GEMINI_API_KEY`), and it is used for exactly two things: the briefing and the chat.
 
 ## Contents
 
@@ -25,18 +21,18 @@ Spec as of 24 September 2026; built 25 September 2026.
 - [Calendar](#calendar)
 - [Schedule, cost and storage](#schedule-cost-and-storage)
 - [Risks and open questions](#risks-and-open-questions)
-- [The Fed and earnings job (formerly Market Tape)](#the-fed-and-earnings-job-formerly-market-tape)
 - [References](#references)
 
 ## How it is built
 
 ```
 worker/news/sources.json   feeds, watchlist, commodities, blocked publishers, promo patterns
+worker/news/calendar.json  central bank meetings, weekly and monthly releases, published schedules
 worker/news/feeds.ts       fetch RSS/Atom + Yahoo search, parse, normalize, classify
 worker/news/store.ts       filter, dedupe, pre-score, store in D1; source health; reads; pruning
-worker/news/gemini.ts      the Gemini client: strict-JSON, search-grounded and tool calls
+worker/news/calendar.ts    the calendar, from calendar.json, BLS, Nasdaq and Yahoo (no model calls)
+worker/news/gemini.ts      the Gemini client
 worker/news/briefing.ts    the briefing: prompt, response schema, validation, retry, storage
-worker/news/calendar.ts    the calendar: daily grounded search, result lines, Market Tape merge
 worker/news/chat.ts        POST /api/chat: context, tools, sources, daily limit
 worker/news/index.ts       GET /api/news, POST /api/news/refresh, and the 15-minute cron
 worker/news/time.ts        New York / local-time helpers, briefing slots
@@ -48,23 +44,26 @@ research/markettape/index.html   the page
 
 | Path | Who | What |
 | --- | --- | --- |
-| `GET /api/news` | everyone | The latest briefing, the last 24 h of headlines, this week's calendar (with the headlines grouped under each event), the watchlist, and which sources have been silent for a day. Cached 60 s. |
+| `GET /api/news` | everyone | The latest briefing, the last 24 h of headlines, this week's calendar (with the headlines grouped under each event), the watchlist, and which sources have been silent for a day. Cached 60 s. No model calls. |
 | `POST /api/news/refresh` | signed in | Fetches now and writes a fresh briefing. At most one per 15 minutes for everyone together; `429` otherwise. |
 | `POST /api/chat` | signed in | See [AI chat](#ai-chat). `401` for guests before anything else runs. |
-| `POST /api/admin/run/{news,calendar,briefing}` | `ADMIN_TOKEN` | Runs a job now: fetch, calendar + results, or a forced briefing. |
+| `POST /api/admin/run/{news,calendar,briefing}` | `ADMIN_TOKEN` | Runs a job now: fetch, calendar, or a forced briefing. |
 
-**One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything and `newsTick()` decides per run what is due, in New York time: the fetch (every run on weekdays, on the hour at weekends), the briefing and the event results at the briefing times, the calendar and the 7-day pruning at 05:00. Right after a deploy, the first run builds the calendar and the first briefing instead of waiting for their times; each is tried at most every 3 hours / 1 hour while it keeps failing.
+**Which requests can cause a model call.** Only `POST /api/chat` and `POST /api/news/refresh`, both of which answer `401` to anyone not signed in before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's only model call is the scheduled briefing.
 
-**Settings** (`[vars]` in `wrangler.toml`): `GEMINI_MODEL` (briefing and calendar), `GEMINI_CHAT_MODEL` (optional, the chat), `NEWS_CHAT_SEARCH` (`on` = Google Search grounding in the chat), `NEWS_CHAT_DAILY_LIMIT` (default 50). The watchlist, the commodity list and the feeds are in `worker/news/sources.json`.
+**One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything and `newsTick()` decides per run what is due, in New York time: the headline fetch (every run on weekdays, on the hour at weekends), the briefing at the briefing times, and at 05:00 the calendar plus the daily clean-up (7-day retention, old contact messages and sessions). Right after a deploy, the first run builds the calendar and the first briefing instead of waiting for their times.
+
+**Settings** (`[vars]` in `wrangler.toml`): `GEMINI_MODEL` (the briefing, and the chat unless set otherwise), `GEMINI_CHAT_MODEL` (optional, the chat), `NEWS_CHAT_SEARCH` (`on` = Google Search grounding in the chat, off by default), `NEWS_CHAT_DAILY_LIMIT` (default 50). The watchlist, the commodity list and the feeds are in `worker/news/sources.json`; the calendar's fixed parts in `worker/news/calendar.json`.
 
 **Where it differs from the spec below, and why**
 
-- The latest briefing is one row in D1's `documents` table (`news:briefing`), not KV: it is still one read per page load, and it needs no KV namespace to be created before a deploy.
-- The calendar outside the Fed and US watchlist earnings is found by four search-grounded Gemini calls a day (US data, Europe, Asia and Russia, commodities), not by scraping each agency's release calendar. The agencies publish them in a dozen different formats, and the Fed and earnings job already works this way. The prompts name the same sources the table in [Calendar](#calendar) lists.
-- Eurostat has no headline feed in `sources.json`: its release list is dataset updates, not news. Its releases reach the page through the calendar and through Euronews and the ECB.
-- The feed URLs could not be checked from the environment this was built in. Any that are wrong show up in the Worker's log (`news: no items for 24 h from …`) and under the page's headlines; fix them in `sources.json`.
+- The latest briefing is one row in D1's `documents` table (`news:briefing`), not KV: still one read per page load, and no KV namespace to create before a deploy.
+- Market Tape is gone, so the calendar reads its sources itself (see [Calendar](#calendar)); the table there says which source each event type comes from, and which ones are not covered yet.
+- Result lines after an event come only from sources that publish them in a machine-readable form (reported EPS from Nasdaq). Data releases and rate decisions have no result line yet; the chat's `get_event_result` tool returns the headlines about the event instead. Result lines written by the briefing model are possible later.
+- Eurostat has no headline feed in `sources.json`: its feed lists dataset updates, not news.
+- The feed and calendar URLs could not be checked from the environment this was built in. Any that are wrong show up in the Worker's log (`news: no items for 24 h from …`, `calendar: … failed`) and under the page's headlines; fix them in `sources.json` / `calendar.json`.
 
-**CPU.** The fetch parses ~20 feeds and 19 Yahoo answers per run. On the free plan's 10 ms CPU per invocation that is tight; if the log shows `exceededCpu` for the news cron, drop feeds from `sources.json` or move to Workers Paid. A run that fails writes nothing and the next one, 15 minutes later, catches up.
+**CPU.** The fetch parses ~20 feeds and 19 Yahoo answers per run. On the free plan's 10 ms CPU per invocation that is tight; if the log shows `exceededCpu` for the news cron, drop feeds from `sources.json` or move to Workers Paid. A run that fails writes nothing, and the next one, 15 minutes later, catches up.
 
 ## Goal and scope
 
@@ -83,7 +82,7 @@ Out of scope:
 - Trading signals or advice
 - Real-time alerts (possible later)
 
-Market News replaces Market Tape. Market Tape's scheduled Worker job, which finds Fed events and earnings dates with their streams and reported numbers, stays and becomes the US part of the calendar (see [below](#the-calendar-job-formerly-market-tape)). Market News shares the Cloudflare Worker and the watchlist with the rest of the site.
+Market News replaces Market Tape: its Fed events and earnings are part of Market News's own calendar now. It shares the Cloudflare Worker and the sign-in with the rest of the site.
 
 ## Sources
 
@@ -95,7 +94,7 @@ All sources are free and return headline, link and time; none return full articl
 | CNBC Markets / Finance | Market moves, Wall Street | RSS: `cnbc.com/id/10000664/device/rss/rss.html` | Overlaps with Top News; dedupe |
 | MarketWatch Top Stories | Markets, economy | RSS: `feeds.content.dowjones.io/public/rss/mw_topstories` | Also a breaking-bulletins feed (`mw_bulletins`) |
 | BBC World | Major world news | RSS: `feeds.bbci.co.uk/news/world/rss.xml` | Non-market events that move markets |
-| Federal Reserve | Statements, speeches, testimony | Fed RSS feeds | Also feeds the calendar |
+| Federal Reserve | Statements, speeches, testimony | Fed RSS feeds | Press releases and speeches |
 | ECB | Euro-area policy | ECB press RSS | Decisions, speeches, press conferences |
 | Euronews Business | European business, markets, EU policy | RSS | Europe-first coverage to balance US outlets |
 | Eurostat | Euro-area inflation flash, GDP, unemployment | Release calendar + news releases | Also feeds the calendar |
@@ -201,7 +200,7 @@ Ranked down: opinion pieces, listicles, single-stock tips, celebrity business ne
 
 **Model choice**
 
-Gemini, through the same `GEMINI_API_KEY` and `GEMINI_MODEL` the Fed and earnings job already uses (`gemini-3.7-flash` today), with Gemini's structured output (a response schema). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k. The briefing needs no search grounding, so it does not use up the grounded-request limit that the calendar (4 calls a day, plus one results call per briefing) and the Fed and earnings job (up to 8 per run) rely on.
+Gemini (`GEMINI_MODEL`, `gemini-3.7-flash` today) with Gemini's structured output (a response schema). A Flash model is enough: the input is ~3–4k tokens, the output under 1.5k. The briefing uses no web search.
 
 ## AI chat
 
@@ -218,9 +217,9 @@ The Worker builds the context for each question; the model has no other knowledg
 | Calendar | This week's events with times and one-line results | Always in the system prompt |
 | Current view | Page, region filter and time zone the user is looking at | Sent with each question |
 | Older headlines | Up to 7 days in D1 | Tool: `search_headlines(query, days, region)` |
-| Event results | EPS vs. estimate, Fed rate and vote, data figures, from the calendar | Tool: `get_event_result(event_id)` |
+| Event results | The calendar's result line (reported EPS vs. estimate) and the headlines about the event | Tool: `get_event_result(event_id)` |
 | Prices | Latest move for a ticker or futures contract, from the existing Yahoo data | Tool: `get_price(symbol)` |
-| The wider web (optional) | Anything not in the app's data | Google Search grounding (`tools: [{ google_search: {} }]`), off by default |
+| The wider web (optional) | Anything not in the app's data | Google Search grounding (`NEWS_CHAT_SEARCH = "on"`), off by default |
 
 **Answer rules (system prompt)**
 
@@ -258,17 +257,17 @@ Streaming (server-sent events) can come later; the first version returns the who
 
 **Model and cost**
 
-- Model: Gemini, with the existing `GEMINI_API_KEY` secret (Worker → Settings → Variables and Secrets). The model comes from `GEMINI_MODEL` in `wrangler.toml`; a separate `GEMINI_CHAT_MODEL` can point the chat at a larger model later.
-- A question is ~10k input and ~500 output tokens. The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it goes first in the prompt, where Gemini's context caching can reuse it on models that support it.
+- Model: Gemini, with the `GEMINI_API_KEY` secret (Worker → Settings → Variables and Secrets). `GEMINI_MODEL` by default; `GEMINI_CHAT_MODEL` points the chat at a larger model if wanted.
+- A question is ~10k input and ~500 output tokens. The context block (briefing, headlines, calendar) is the same for every question until the next fetch run, so it goes first in the request, where Gemini's context caching can reuse it on models that support it.
 - On the free tier this costs nothing but is rate-limited per minute and per day, and Google may use prompts to improve its products — the headlines are public, but the questions are the user's own words. The paid tier lifts both; check current [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing) and [rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
-- Google Search grounding, if turned on for the chat, counts against its own grounded-request limit, which the calendar and the Fed and earnings job also use.
+- Google Search grounding, if turned on for the chat, is billed and rate-limited separately.
 
 **Limits and security**
 
 - The API key lives only in the Worker as a secret; the browser never sees it
-- AI features are for signed-in users only (the site's accounts, `worker/auth.ts`): the chat and a fresh briefing on Refresh. Guests can read the scheduled briefing, the calendar and the headlines; Ask AI shows a lock and opens the sign-in dialog
-- The Worker enforces it: `POST /api/chat` and the refresh endpoint check the session cookie with `currentUser()` and answer `401` without one. The locked button alone keeps no one out
-- Rate limit per user, e.g. 50 questions a day, and, on the paid tier, a budget alert on the Google Cloud billing account
+- AI features are for signed-in users only (the site's accounts, `worker/auth.ts`): the chat and a fresh briefing on Refresh. Guests read the scheduled briefing, the calendar and the headlines; Ask AI shows a lock and opens the sign-in dialog
+- The Worker enforces it: `POST /api/chat` and `POST /api/news/refresh` check the session with `currentUser()` and answer `401` without one, before any model call
+- Rate limit per user, 50 questions a day by default (`NEWS_CHAT_DAILY_LIMIT`), and, on the paid tier, a budget alert on the Google Cloud billing account
 
 ## UI
 
@@ -286,29 +285,31 @@ Times are shown in Vienna time (CET/CEST) with a toggle to New York time. The re
 
 ## Calendar
 
-The calendar shows what's on now, later today and this week, so headlines can be read against scheduled events. Fed events and US watchlist earnings come from the former Market Tape job.
+The calendar shows what's on now, later today and this week, so headlines can be read against scheduled events. It is built in code from published schedules; no model is involved.
 
 **Event types**
 
-| Type | Examples | Source |
-| --- | --- | --- |
-| Fed | FOMC decision, press conference, speeches, testimony | Calendar job (Fed calendar + RSS) |
-| US economic data | CPI, jobs report, PCE, GDP, retail sales, jobless claims | BLS and BEA release schedules, fetched weekly |
-| Earnings | Watchlist companies, plus large caps reporting that day | Calendar job (Nasdaq / Yahoo calendar) |
-| European central banks | ECB decision and press conference, BoE, SNB, OeNB statements | Their meeting calendars, set once a year |
-| European data | Euro-area inflation flash, GDP, German ifo and ZEW, Austrian CPI | Eurostat, Destatis and Statistik Austria release calendars, fetched weekly |
-| European earnings | European watchlist companies (e.g. SAP, ASML, Erste) | Yahoo calendarEvents per ticker; company IR pages as fallback |
-| Asian central banks | BoJ decision, PBoC loan prime rate, RBI decision | Their meeting calendars, set once a year |
-| Asian data | China PMIs, CPI, trade, GDP; Japan CPI and Tankan | China NBS and Japan statistics release calendars, fetched weekly |
-| Russia | Bank of Russia key rate decision, CPI | Bank of Russia meeting calendar, Rosstat releases |
-| Commodities | USDA WASDE, crop progress and export sales; EIA crude and gas storage; OPEC+ meetings | USDA and EIA release schedules, OPEC meeting calendar |
+| Type | Examples | Source | Built so far |
+| --- | --- | --- | --- |
+| Fed | FOMC decision, press conference, speeches, testimony | Fed meeting calendar (set once a year) + Fed RSS | FOMC decisions from `calendar.json`, with the Fed's live stream; speeches reach the page as Fed RSS headlines, not as calendar rows |
+| US economic data | CPI, jobs report, PCE, GDP, retail sales, jobless claims | BLS and BEA release schedules | BLS's published iCalendar (CPI, jobs report, PPI, JOLTS, ECI), fetched daily; weekly jobless claims as a Thursday 08:30 ET rule. BEA (GDP, PCE) and Census (retail sales): not yet |
+| Earnings | Watchlist companies, plus large caps reporting that day | Nasdaq / Yahoo calendar | Nasdaq's earnings calendar: US watchlist tickers plus the 5 largest companies reporting each day, with the EPS estimate and, once reported, the actual figure |
+| European central banks | ECB decision and press conference, BoE, SNB, OeNB statements | Their meeting calendars, set once a year | ECB, BoE, SNB in `calendar.json`. OeNB: no scheduled statements to list |
+| European data | Euro-area inflation flash, GDP, German ifo and ZEW, Austrian CPI | Eurostat, Destatis and Statistik Austria release calendars | Not yet: add their schedules to `calendar.json` (an `ics` source, or dated entries) |
+| European earnings | European watchlist companies (e.g. SAP, ASML, Erste) | Yahoo calendarEvents per ticker | Yahoo calendarEvents for watchlist tickers listed outside the US (the day only; Yahoo gives no hour). ASML via Nasdaq |
+| Asian central banks | BoJ decision, PBoC loan prime rate, RBI decision | Their meeting calendars, set once a year | BoJ in `calendar.json`; PBoC loan prime rate as a rule (the 20th, next business day). RBI: not yet |
+| Asian data | China PMIs, CPI, trade, GDP; Japan CPI and Tankan | China NBS and Japan statistics release calendars | China official PMIs as a rule (last day of the month). The rest: not yet |
+| Russia | Bank of Russia key rate decision, CPI | Bank of Russia meeting calendar, Rosstat releases | Key rate decisions in `calendar.json`. Rosstat CPI: not yet |
+| Commodities | USDA WASDE, crop progress and export sales; EIA crude and gas storage; OPEC+ meetings | USDA and EIA release schedules, OPEC meeting calendar | EIA petroleum (Wed 10:30 ET) and gas storage (Thu 10:30 ET), USDA export sales (Thu 08:30 ET) and crop progress (Mon 16:00 ET, April–November) as rules. WASDE and OPEC+: not yet |
+
+The rules ignore public holidays, when an agency moves a weekly release by a day. The meeting dates in `calendar.json` run to the end of 2026; add next year's when the banks publish them.
 
 **What it shows**
 
 - **On now:** events currently live (press conference, earnings call), with stream link
 - **Next up:** the next 3 events with countdown
 - **This week:** a 5-day view, one row per day
-- After an event, it shows the result in one line (e.g. "CPI 2.9% vs 3.0% exp."), looked up after the event (Fed and US earnings: by the Fed and earnings job)
+- After an event, it shows the result in one line where the source publishes one: for now, reported EPS vs. estimate from Nasdaq (e.g. "EPS $1.30 vs $1.25 est."). Other events have none yet; the headlines about them are grouped under them
 
 **Tie-in with the briefing**
 
@@ -316,7 +317,7 @@ The calendar shows what's on now, later today and this week, so headlines can be
 - Headlines matching an event (e.g. mentioning "CPI" on CPI day) are grouped under it
 - Importance is ranked up for news about events happening today
 
-Calendar events are stored in D1 and refreshed daily at 05:00 ET by search-grounded Gemini calls (see [How it is built](#how-it-is-built)); Fed and US earnings rows and their results come from the Fed and earnings job. Result lines for everything else are looked up with each briefing.
+Calendar events are stored in D1 and refreshed daily at 05:00 ET, 7 days back and 8 days ahead. Each source replaces only its own rows, and a source that fails keeps what it had.
 
 ## Schedule, cost and storage
 
@@ -327,6 +328,7 @@ Fetch headlines often, but run the briefing model only at fixed times: that keep
 | Job | When | AI? |
 | --- | --- | --- |
 | Fetch + dedupe | Every 15 min around the clock on weekdays (Asian, European and US sessions); hourly on weekends | No |
+| Calendar + clean-up | 05:00 | No |
 | Asia close and European open briefing | 02:30 (08:30 Vienna) | Yes |
 | Pre-market briefing | 08:00 | Yes |
 | Midday briefing | 12:30 | Yes |
@@ -358,7 +360,7 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 | Paywalled links | Show source name so the reader knows before clicking |
 | Copyright | Store and show only headline, source, link, time; summaries in own words; no article bodies |
 | Feed terms of use | Personal, non-commercial use; check each publisher's RSS terms before making the page public |
-| Chat costs grow with use | AI features for signed-in users only, checked on the Worker; per-user daily limit, Gemini free-tier limits or a billing budget alert, context caching |
+| Chat costs grow with use | Signed-in users only, checked on the Worker; per-user daily limit; Gemini free-tier limits or a billing budget alert; context caching |
 | Instructions hidden in headlines (prompt injection) | Headlines passed as data; system prompt tells the model to ignore instructions inside them; chat has read-only tools |
 | Chat gives advice or overstates | Answer rules: no trade recommendations, say when the news doesn't answer, always show sources |
 | Russian state media | Not used as sources: several are under EU broadcast bans. Russia coverage comes from independent outlets, BBC and the Bank of Russia; check the EU sanctions list before adding any Russian outlet |
@@ -366,74 +368,17 @@ The main risks are fragile sources and a model that over-interprets headlines; b
 **Open questions**
 
 - [ ] Private page for me only, or shared with others? Public use needs a closer look at feed terms.
-- [ ] Which companies go on the watchlist? Market News reads it from `worker/news/sources.json`; the Fed and earnings job still reads `MARKETTAPE_TICKERS`. One list for both?
+- [ ] Which companies go on the watchlist? It is in `worker/news/sources.json`.
 - [x] European coverage: yes (ECB, Eurostat, Euronews, European tickers and earnings).
 - [x] Asia and Russia coverage: yes (BBC Asia, Nikkei Asia, SCMP, The Moscow Times, Meduza, Bank of Russia).
 - [x] Commodities: yes, as a separate page (energy, metals, agriculture).
 - [ ] Briefing language: English or German?
 - [ ] Three fixed briefings a day enough, or near-live updates?
 - [x] Chat with the model about current events: yes (see AI chat).
-- [x] AI provider: Gemini, with the existing `GEMINI_API_KEY`.
+- [x] AI provider: Gemini, for the briefing and the chat only.
 - [ ] Chat model: the same Flash model as the briefing, or a larger one? Google Search grounding on or off?
 - [ ] Later: push alert for importance-3 stories?
-
-## The Fed and earnings job (formerly Market Tape)
-
-The Worker job that used to power the Market Tape board still runs, on its own two crons. It finds the Fed calendar and watchlist earnings dates, their streams and their reported numbers with Gemini and Google Search, and serves them at `data/schedule.json` and `data/results.json`. `worker/news/calendar.ts` merges them into the calendar: they are the Fed and US earnings rows of On now, Next up and This week, with their webcasts and results.
-
-### How the data gets here
-
-The searches run ahead of time, on the site's Worker:
-
-```
-wrangler.toml [triggers]           weekdays 12:10 + 22:10 UTC
-worker/markettape.ts               Gemini API + Google Search grounding -> D1
-/research/markettape/data/*.json   served by the Worker from D1
-```
-
-`schedule.json` holds the rundown (Fed events 10 days out, earnings 21 days for
-the watchlist). `results.json` holds the reported numbers for events that have
-already started, keyed by event id. The Worker answers those paths from D1,
-and falls back to a committed file in `data/` if there is one.
-
-### Setup
-
-1. Get a free Gemini API key at <https://aistudio.google.com/apikey>.
-2. Store it on the Worker: `npx wrangler secret put GEMINI_API_KEY`
-   (or Worker → Settings → Variables and Secrets in the dashboard).
-3. Request `data/schedule.json`. When there is no rundown yet — a fresh deploy, before
-   the first scheduled run — the Worker builds one while that first request
-   waits (about a minute). That on-demand build is tried
-   at most once every 30 minutes, so a failing key or model name cannot run
-   up the quota. It skips the reported numbers; the next scheduled run adds
-   them.
-
-   To force a full run at any time instead:
-
-   ```bash
-   curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
-     https://<your-site>/api/admin/run/markettape
-   ```
-
-If a build fails, the Worker's logs show why (`markettape: gemini 404` is a wrong model
-name, `429` the free tier's rate limit). A run is two schedule queries plus at most six result
-queries, well inside the free tier's daily limit. On the free tier Google may
-use prompts to improve its products — nothing private goes into these ones.
-
-### Changing the watchlist or the model
-
-`MARKETTAPE_TICKERS` and `GEMINI_MODEL` under `[vars]` in `wrangler.toml`.
-The model must support Google Search grounding.
-
-### Running it locally
-
-```bash
-echo "GEMINI_API_KEY=..." > .dev.vars      # git-ignored
-npx wrangler d1 migrations apply bqe --local
-npm run dev
-curl "localhost:8787/__scheduled?cron=10+12+*+*+1-5"
-# open http://localhost:8787/research/markettape/data/schedule.json
-```
+- [ ] Later: result lines for data releases and rate decisions (e.g. written by the briefing from the headlines).
 
 ## References
 

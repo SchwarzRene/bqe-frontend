@@ -10,7 +10,7 @@ import { crossSite, json, readJson, utcDay } from "../http";
 import { latestBriefing, type Briefing } from "./briefing";
 import { type CalendarEvent, readCalendar } from "./calendar";
 import { GeminiError, generate, model, textOf } from "./gemini";
-import { type Item, recentItems, toItem } from "./store";
+import { eventWordsFor, type Item, recentItems, toItem } from "./store";
 import { iso } from "./time";
 
 const DEFAULT_DAILY_LIMIT = 50;
@@ -133,7 +133,7 @@ const TOOLS = [
       },
       {
         name: "get_event_result",
-        description: "The outcome of a calendar event (data figures, rate decision, EPS vs. estimate).",
+        description: "What is known about a calendar event: its time, a result line if the calendar has one (e.g. reported EPS), and the headlines about it.",
         parameters: { type: "OBJECT", properties: { event_id: { type: "STRING" } }, required: ["event_id"] },
       },
       {
@@ -265,7 +265,7 @@ async function answer(
         found.forEach((i) => known.set(i.id, i));
         result = { headlines: found.map((i) => ({ id: i.id, time: i.publishedAt, source: i.source, region: i.region, title: i.title })) };
       } else if (name === "get_event_result") {
-        result = await eventResult(env, String(args?.event_id ?? ""), events);
+        result = await eventResult(env, String(args?.event_id ?? ""), events, known);
       } else if (name === "get_price") {
         result = await getPrice(String(args?.symbol ?? ""));
       } else {
@@ -290,18 +290,16 @@ async function answer(
   return { answer: prose, sources };
 }
 
-async function eventResult(env: Env, id: string, events: CalendarEvent[]): Promise<unknown> {
+/** What the calendar knows about an event's outcome, plus the headlines about it. */
+async function eventResult(env: Env, id: string, events: CalendarEvent[], known: Map<string, Item>): Promise<unknown> {
   const event = events.find((e) => e.id === id);
   if (!event) return { error: "no event with that id this week" };
-  if (id.startsWith("tape-")) {
-    const row = await env.DB.prepare("SELECT body FROM documents WHERE key = 'markettape:results'").first<{ body: string }>();
-    let detail: unknown = null;
-    try {
-      detail = row ? JSON.parse(row.body)?.results?.[id.slice(5)] ?? null : null;
-    } catch {
-      detail = null;
-    }
-    return { event: event.title, start: event.start, result: event.result || "not published yet", detail };
-  }
-  return { event: event.title, start: event.start, result: event.result || "not published yet" };
+  const start = Date.parse(event.start);
+  const words = eventWordsFor([event.title], event.tickers);
+  const headlines = [...known.values()]
+    .filter((i) => Math.abs(Date.parse(i.publishedAt) - start) < 18 * 3_600_000)
+    .filter((i) => words.some((w) => i.title.includes(w) || i.tickers.includes(w)))
+    .slice(0, 8)
+    .map((i) => ({ id: i.id, time: i.publishedAt, source: i.source, title: i.title }));
+  return { event: event.title, start: event.start, result: event.result || "no result in the calendar", headlines };
 }

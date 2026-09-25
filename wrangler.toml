@@ -36,7 +36,6 @@ not_found_handling = "none"
 run_worker_first = [
   "/api/*",
   "/research/stack/data/*",
-  "/research/markettape/data/*",
 ]
 
 [[d1_databases]]
@@ -53,13 +52,10 @@ crons = [
   # tickers not yet refreshed today, so the 500 are spread over many small
   # invocations instead of one that would hit the subrequest limit.
   "*/3 22-23 * * 1-5",
-  # Market Tape: before the US open (the day's schedule) and after the close
-  # (the reported numbers).
-  "10 12 * * 1-5",
-  "10 22 * * 1-5",
   # Market News: every 15 minutes. worker/news/index.ts decides per run what
   # is due — fetching (every run on weekdays, hourly at weekends), the
-  # briefings at fixed New York times, the calendar at 05:00 New York time.
+  # briefings at fixed New York times, the calendar and the daily clean-up
+  # (old contact messages, sessions, news) at 05:00 New York time.
   # One trigger instead of one per job: the free plan allows 5 per account.
   "*/15 * * * *",
 ]
@@ -68,10 +64,9 @@ crons = [
 # Tickers refreshed per cron run. 40 runs a night × 20 = 800 slots for ~503
 # tickers, so failures get retried. Each ticker is two Yahoo requests.
 STACK_BATCH = "20"
-# Earnings watchlist for Market Tape, space separated.
-MARKETTAPE_TICKERS = "NVDA AAPL MSFT AMZN GOOGL"
-# Gemini model for the calendar job and the Market News briefing. Must
-# support Google Search grounding.
+# Gemini model for the Market News briefing (and the chat, unless
+# GEMINI_CHAT_MODEL is set). The watchlist, feeds and calendar sources are in
+# worker/news/sources.json and worker/news/calendar.json.
 GEMINI_MODEL = "gemini-3.7-flash"
 # Market News chat. GEMINI_CHAT_MODEL (unset: GEMINI_MODEL) picks a different
 # model for it; NEWS_CHAT_SEARCH = "on" lets it search the web with Google

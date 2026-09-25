@@ -307,7 +307,7 @@ export async function buildBriefing(
 
   const items = pickInput(await recentItems(env, now, 24, 400), now);
   if (items.length < 5) return `only ${items.length} headlines — no briefing`;
-  const events = await readCalendar(env, now - 12 * 3_600_000, now + 36 * 3_600_000, cfg);
+  const events = await readCalendar(env, now - 12 * 3_600_000, now + 36 * 3_600_000);
   const itemIds = new Set(items.map((i) => i.id));
   const eventIds = new Set(events.map((e) => e.id));
   const prompt = buildPrompt({ items, now, cfg, previous, events });
