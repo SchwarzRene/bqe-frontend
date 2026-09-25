@@ -145,13 +145,20 @@ export const api = {
   priceAt: async (symbolId, localTime) => {
     const symbol = S.getSymbol(db, symbolId);
     const ts = S.localEpoch(localTime);
-    const plan = S.planPriceAt(ts);
-    const fetchWindow = ([start, end]) =>
-      market("candles", { ticker: symbol.ticker, interval: plan.interval, period1: Math.floor(start), period2: Math.ceil(end) }, 300_000);
-    let hit = S.priceAt((await fetchWindow(plan.window)).candles, ts, plan.interval);
-    if (!hit) hit = S.priceAt((await fetchWindow(plan.fallback)).candles, ts, plan.interval);
-    if (!hit) throw new Error(`No ${symbol.name} price found for ${localTime.replace("T", " ")} — enter it by hand.`);
-    return { ...hit, interval: plan.interval };
+    let lastError = null;
+    for (const plan of S.planPriceAt(ts)) {
+      const fetchWindow = ([start, end]) =>
+        market("candles", { ticker: symbol.ticker, interval: plan.interval, period1: Math.floor(start), period2: Math.ceil(end) }, 300_000);
+      try {
+        const hit = S.priceAt((await fetchWindow(plan.window)).candles, ts, plan.interval)
+          || S.priceAt((await fetchWindow(plan.fallback)).candles, ts, plan.interval);
+        if (hit) return { ...hit, interval: plan.interval };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    const why = lastError ? ` (${lastError.message})` : "";
+    throw new Error(`No ${symbol.name} price found for ${localTime.replace("T", " ")}${why} — enter it by hand.`);
   },
 
   stats: async (filters) => {
