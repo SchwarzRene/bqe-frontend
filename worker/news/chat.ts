@@ -58,7 +58,7 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
       .bind(user.id, utcDay())
       .run()
       .catch(() => {});
-    return json(chatError(err), err instanceof GeminiError && err.status === 429 ? 429 : 502);
+    return json(chatError(err), err instanceof GeminiError && (err.status === 429 || err.status === 503) ? err.status : 502);
   }
 }
 
@@ -69,7 +69,9 @@ export async function handleChat(request: Request, env: Env): Promise<Response> 
  */
 export function chatError(err: unknown): { error: string } {
   if (err instanceof GeminiError) {
-    if (err.status === 429) return { error: `The model is busy or over its quota — try again in a minute. (${err.message.slice(0, 300)})` };
+    if (err.status === 429 || err.status === 503 || err.status === 500) {
+      return { error: `Gemini is busy right now — try again in a minute. (${err.message.slice(0, 300)})` };
+    }
     return { error: `The model could not answer: ${err.message.slice(0, 300)}` };
   }
   return { error: `The chat failed on the server: ${String(err instanceof Error ? err.message : err).slice(0, 300)}` };

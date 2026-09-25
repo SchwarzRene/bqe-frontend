@@ -53,7 +53,7 @@ research/markettape/index.html   the page
 
 **One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything and `newsTick()` decides per run what is due, in New York time: the headline fetch (every run on weekdays, on the hour at weekends), the briefing at the briefing times, the calendar's results hourly on weekdays, and at 05:00 the calendar plus the daily clean-up (7-day retention, old contact messages and sessions). Right after a deploy, the first run builds the calendar and the first briefing instead of waiting for their times.
 
-**Settings** (`[vars]` in `wrangler.toml`): `GEMINI_MODEL` (the briefing, and the chat unless set otherwise), `GEMINI_CHAT_MODEL` (optional, the chat), `NEWS_CHAT_SEARCH` (`on` = Google Search grounding in the chat, off by default), `NEWS_CHAT_DAILY_LIMIT` (default 50). The watchlist, the commodity list and the feeds are in `worker/news/sources.json`; the calendar's fixed parts in `worker/news/calendar.json`.
+**Settings** (`[vars]` in `wrangler.toml`): `GEMINI_MODEL` (the briefing, and the chat unless set otherwise), `GEMINI_CHAT_MODEL` (optional, the chat), `GEMINI_FALLBACK_MODEL` (`gemini-flash-latest`; takes the request when the main model is overloaded or over its quota, after two short retries; `off` for none), `NEWS_CHAT_SEARCH` (`on` = Google Search grounding in the chat, off by default), `NEWS_CHAT_DAILY_LIMIT` (default 50). The watchlist, the commodity list and the feeds are in `worker/news/sources.json`; the calendar's fixed parts in `worker/news/calendar.json`.
 
 **Where it differs from the spec below, and why**
 

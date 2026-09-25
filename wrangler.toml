@@ -71,6 +71,9 @@ GEMINI_MODEL = "gemini-3.7-flash"
 # Market News chat. GEMINI_CHAT_MODEL (unset: GEMINI_MODEL) picks a different
 # model for it; NEWS_CHAT_SEARCH = "on" lets it search the web with Google
 # Search grounding instead of only the app's own data.
+# When the model is overloaded ("high demand", HTTP 503) or over its quota,
+# the same request goes to this one after two short retries. "off" for none.
+GEMINI_FALLBACK_MODEL = "gemini-flash-latest"
 NEWS_CHAT_SEARCH = "off"
 NEWS_CHAT_DAILY_LIMIT = "50"
 

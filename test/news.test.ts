@@ -3,7 +3,7 @@ import { validateBriefing, pickInput } from "../worker/news/briefing";
 import { type CalendarConfig, fixedEvents, mergeMeetingResults, nasdaqEvent, parseEconomic, parseIcs, pickNasdaq } from "../worker/news/calendar";
 import { describeGeminiError } from "../worker/news/gemini";
 import { chatError, cleanMessages, handleChat, splitSources } from "../worker/news/chat";
-import { GeminiError } from "../worker/news/gemini";
+import { GeminiError, generate, RETRY_DELAYS_MS } from "../worker/news/gemini";
 import { classify, cleanText, type Config, fetchAll, normalizeUrl, parseFeed, type RawItem, tickersFor } from "../worker/news/feeds";
 import { withHeadlines } from "../worker/news/index";
 import { dedupe, eventWordsFor, isBlocked, isPromo, sameStory, scoreItem, staleSources, titleWords } from "../worker/news/store";
@@ -322,6 +322,40 @@ describe("describeGeminiError", () => {
   });
 });
 
+describe("Gemini overload", () => {
+  const overloaded = () => new Response(JSON.stringify({ error: { code: 503, status: "UNAVAILABLE", message: "This model is currently experiencing high demand." } }), { status: 503 });
+  const ok = (text: string) => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }));
+  const saved = [...RETRY_DELAYS_MS];
+  afterEach(() => RETRY_DELAYS_MS.splice(0, RETRY_DELAYS_MS.length, ...saved));
+  const env: any = { GEMINI_API_KEY: "k" };
+
+  it("retries an overloaded model", async () => {
+    RETRY_DELAYS_MS.splice(0, 2, 0, 0);
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => (calls.push(url), calls.length < 3 ? overloaded() : ok("hi")));
+    expect((await generate(env, "gemini-3.7-flash", {}, "t")).candidates[0].content.parts[0].text).toBe("hi");
+    expect(calls.map((u) => u.split("/models/")[1])).toEqual(Array(3).fill("gemini-3.7-flash:generateContent"));
+  });
+
+  it("falls back to the second model when the first stays overloaded, and gives up after it", async () => {
+    RETRY_DELAYS_MS.splice(0, 2, 0, 0);
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => (calls.push(url), url.includes("gemini-flash-latest") ? ok("from fallback") : overloaded()));
+    expect((await generate(env, "gemini-3.7-flash", {}, "t")).candidates[0].content.parts[0].text).toBe("from fallback");
+    expect(calls.filter((u) => u.includes("gemini-3.7-flash"))).toHaveLength(3);
+
+    vi.stubGlobal("fetch", async () => overloaded());
+    await expect(generate({ ...env, GEMINI_FALLBACK_MODEL: "off" }, "gemini-3.7-flash", {}, "t")).rejects.toMatchObject({ status: 503 });
+  });
+
+  it("does not fall back on a request the model rejects", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => (calls.push(url), new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "bad" } }), { status: 400 })));
+    await expect(generate(env, "gemini-3.7-flash", {}, "t")).rejects.toMatchObject({ status: 400 });
+    expect(calls).toHaveLength(1);
+  });
+});
+
 describe("news chat", () => {
   it("keeps a clean, alternating history that ends with the question", () => {
     expect(cleanMessages([
@@ -346,7 +380,8 @@ describe("news chat", () => {
   it("says why the model could not answer", () => {
     expect(chatError(new GeminiError("NOT_FOUND — models/x is not found for API version v1beta", 404)).error)
       .toBe("The model could not answer: NOT_FOUND — models/x is not found for API version v1beta");
-    expect(chatError(new GeminiError("RESOURCE_EXHAUSTED", 429)).error).toMatch(/^The model is busy or over its quota/);
+    expect(chatError(new GeminiError("RESOURCE_EXHAUSTED", 429)).error).toMatch(/^Gemini is busy right now/);
+    expect(chatError(new GeminiError("UNAVAILABLE — high demand", 503)).error).toBe("Gemini is busy right now — try again in a minute. (UNAVAILABLE — high demand)");
     expect(chatError(new Error("D1_ERROR: no such table")).error).toBe("The chat failed on the server: D1_ERROR: no such table");
   });
 
