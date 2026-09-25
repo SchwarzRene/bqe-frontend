@@ -130,10 +130,11 @@ describe("trading journal store", () => {
 
   it("looks up the price at a moment from candles", () => {
     const now = S.localEpoch("2026-09-24T12:00");
-    const recent = S.planPriceAt(S.localEpoch("2026-09-24T10:30"), now);
-    expect(recent.interval).toBe("1m");
-    expect(S.planPriceAt(S.localEpoch("2025-01-06T10:00"), now).interval).toBe("1h");
-    expect(S.planPriceAt(S.localEpoch("2023-09-04T10:00"), now).interval).toBe("1d");
+    const intervals = (t: string) => S.planPriceAt(S.localEpoch(t), now).map((p: any) => p.interval);
+    expect(intervals("2026-09-24T10:30")).toEqual(["1m", "5m", "1h", "1d"]);
+    expect(intervals("2026-08-01T10:30")).toEqual(["5m", "1h", "1d"]);
+    expect(intervals("2025-01-06T10:00")).toEqual(["1h", "1d"]);
+    expect(intervals("2023-09-04T10:00")).toEqual(["1d"]);
     expect(() => S.planPriceAt(now + 3600, now)).toThrow(/future/);
 
     const candles = [

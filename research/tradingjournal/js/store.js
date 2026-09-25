@@ -610,18 +610,25 @@ export function planTradeChart(trade, interval, now = Date.now() / 1000) {
 
 // ─── price at a moment (for trades entered by time only) ────────────────────
 
-/** Which candles hold the price at `ts`: the finest interval Yahoo still serves, from a few days before. */
+/**
+ * Where to look for the price at `ts`, best first: each interval Yahoo still
+ * serves for that age, finest first. A symbol without fine bars (or a Yahoo
+ * error on one) falls through to the next.
+ */
 export function planPriceAt(ts, now = Date.now() / 1000) {
   if (ts > now + 60) throw new ValidationError("that time is in the future");
-  const interval = Object.keys(INTERVAL_SECONDS).find((i) => HISTORY_LIMIT[i] == null || now - ts <= HISTORY_LIMIT[i]);
-  const step = INTERVAL_SECONDS[interval];
-  const end = Math.min(ts + step, now);
-  return {
-    interval,
-    window: [ts - 10 * step, end],
-    // Market shut at that time: reach back to the last session before a weekend or holiday.
-    fallback: [ts - Math.max(5 * DAY, 10 * step), end],
-  };
+  return ["1m", "5m", "1h", "1d"]
+    .filter((i) => HISTORY_LIMIT[i] == null || now - ts <= HISTORY_LIMIT[i])
+    .map((interval) => {
+      const step = INTERVAL_SECONDS[interval];
+      const end = Math.min(ts + step, now);
+      return {
+        interval,
+        window: [ts - 10 * step, end],
+        // Market shut at that time: reach back to the last session before a weekend or holiday.
+        fallback: [ts - Math.max(5 * DAY, 10 * step), end],
+      };
+    });
 }
 
 /**

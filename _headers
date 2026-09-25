@@ -25,3 +25,8 @@
 # evenings, so a day at the edge is as long as they can safely be held.
 /research/stack/data/*
   Cache-Control: public, max-age=3600
+
+# The Trading Journal's scripts and styles are plain files imported by name:
+# a phone must never keep an old copy after a deploy.
+/research/tradingjournal/*
+  Cache-Control: no-cache

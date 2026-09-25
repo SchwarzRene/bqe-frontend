@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { money, nowLocalInput } from "../format.js";
-import { $, $$, esc, formValues, openFormModal, toast } from "../ui.js";
+import { $, $$, debounce, esc, formValues, openFormModal, toast } from "../ui.js";
 
 /**
  * Open the create/edit trade dialog. With `closing: true` the exit fields are
@@ -112,6 +112,7 @@ function wireAutoPrices(form, symbolFor, updatePreview) {
   const auto = Object.fromEntries(sides.map((w) => [w, !form[`${w}_price`].value]));
   const pending = {}; // the latest lookup per side
   const inFlight = {};
+  const lookedUp = {}; // symbol and time of the latest lookup per side
   const hint = (which, text) => { $(`[data-price-hint=${which}]`, form).textContent = text; };
 
   function lookup(which) {
@@ -122,6 +123,9 @@ function wireAutoPrices(form, symbolFor, updatePreview) {
       inFlight[which] = false;
       return (pending[which] = null);
     }
+    const key = `${symbol.id}|${time}`;
+    if (key === lookedUp[which] && (inFlight[which] || form[`${which}_price`].value)) return pending[which];
+    lookedUp[which] = key;
     hint(which, "Looking up the price…");
     const request = api.priceAt(symbol.id, time).then(
       ({ price, interval }) => {
@@ -133,6 +137,7 @@ function wireAutoPrices(form, symbolFor, updatePreview) {
       (error) => {
         if (pending[which] !== request || !auto[which]) return;
         form[`${which}_price`].value = "";
+        lookedUp[which] = null; // a later try may succeed
         hint(which, error.message);
         throw error;
       },
@@ -148,7 +153,10 @@ function wireAutoPrices(form, symbolFor, updatePreview) {
       hint(which, "");
       if (auto[which]) lookup(which);
     });
-    form[`${which}_time`].addEventListener("change", () => lookup(which));
+    // Browsers differ in which of these a date picker fires (iOS may fire
+    // only one, and only on closing), so listen to all three.
+    const later = debounce(() => lookup(which), 400);
+    for (const type of ["input", "change", "blur"]) form[`${which}_time`].addEventListener(type, later);
   }
   form.symbol_id.addEventListener("change", () => sides.forEach(lookup));
   sides.forEach(lookup);
@@ -158,8 +166,7 @@ function wireAutoPrices(form, symbolFor, updatePreview) {
     async fillMissing() {
       for (const which of sides) {
         if (!auto[which] || !form[`${which}_time`].value) continue;
-        if (inFlight[which]) await pending[which];
-        else if (!form[`${which}_price`].value) await lookup(which);
+        if (!form[`${which}_price`].value || inFlight[which]) await lookup(which);
       }
     },
   };
