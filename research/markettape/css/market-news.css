@@ -644,3 +644,12 @@ body.az-open { overflow: hidden; }
   .az-grid, .az-lists, .az-two { grid-template-columns: minmax(0, 1fr); }
   .az-svg { height: 220px; }
 }
+
+/* An event's link: a small ↗ button in its bottom-right corner */
+.wev, .dev { position: relative; }
+.wev { padding-right: 28px; }
+.dev { padding-right: 34px; }
+.ev-link { position: absolute; right: 5px; bottom: 5px; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--muted); text-decoration: none; }
+.dev .ev-link { right: 0; bottom: 10px; width: 26px; height: 26px; }
+.ev-link:hover, .ev-link:focus-visible { color: var(--accent); border-color: var(--accent); }
+@media (pointer: coarse) { .ev-link { width: 30px; height: 30px; } .wev { padding-right: 38px; } .dev { padding-right: 40px; } }
