@@ -116,7 +116,7 @@ lists are served.
 │   │   ├── hero-network.js Start page hero animation (canvas)
 │   │   ├── formula-network.js Start page formula band animation (canvas)
 │   │   ├── research-hero.js  Research intro band animation (canvas)
-│   │   ├── research-graph.js Research project graph, list view and search
+│   │   ├── research-filter.js Research index: category filter and search
 │   │   ├── session.js      Sign-in, sign-up and per-user saving, shared by site and apps
 │   │   ├── admin.js        The admin terminal (pages/admin.html)
 │   │   └── form.js         Contact form validation (WCAG error handling)
@@ -125,7 +125,7 @@ lists are served.
 │   └── video.mp4           Unused since the "Was wir tun" section was replaced
 │
 └── research/               One folder per project, plus the index over them
-    ├── index.html          Research index (project graph / list)
+    ├── index.html          Research index (a card per project)
     ├── RESEARCH_PAPER_STYLE_GUIDE.md  How a write-up is styled
     ├── bqe-decomp/         Binary encoding for 1-minute OHLCV data
     │   ├── index.html
@@ -145,10 +145,9 @@ lists are served.
 The fetchers and the live-quotes service are in `worker/`; the Python versions
 in [`bqe-backend`](https://github.com/SchwarzRene/bqe-backend) are retired.
 
-**Why the research projects are all folders.** `assets/js/research-graph.js`
-lists BQE-DeComp, MarketJEPA, HistoryMap, Market News and Stack as five equal
-projects — the graph, the list and the search treat them the same way, and the
-layout on disk says what the site already said.
+**Why the research projects are all folders.** The research index lists every
+project as an equal card — write-ups and tools alike — and the layout on disk
+says what the site already says.
 
 ## How a page is put together
 
@@ -300,28 +299,19 @@ Three things to keep intact when touching it:
 
 ### The research index
 
-`research/index.html` is two canvases and a set of links. The band behind the heading
-runs the start page's own market network (`assets/js/research-hero.js`); below it,
-`assets/js/research-graph.js` draws one soft cloud per category and lays the projects
-over it as real `<a>` elements — focusable, linkable, readable by a screen reader.
-Only the clouds and the category names are painted; nothing you can click is canvas.
+`research/index.html` is a canvas band and a grid of cards. The band behind the heading
+runs the start page's own market network (`assets/js/research-hero.js`); below it, each
+project is a plain `<li class="project-card">` with its artwork, category, kind
+(write-up or tool), description and stack. The title's link is stretched over the whole
+card in `research.css`, so the card is one target while a screen reader hears only the
+project name.
 
-- **`PAPERS` in `research-graph.js` is the index.** Adding an entry there adds the
-  project to the graph, the list and the search at once. The no-script list in
-  `research/index.html` carries the same five projects, and the footer its own copy —
-  all three are updated together.
-- **Graph and list are one set of nodes in two layouts.** Each node is a small physics
-  body: a spring pull toward whatever its current mode wants, damped so it settles,
-  bouncing off its neighbours on the way. The toggle changes the target, not the
-  markup.
-- Each rock is generated from its project's `id`, so a project keeps the same
-  silhouette across reloads; the same seed drives its spin direction and period.
-- Under `prefers-reduced-motion` nothing orbits: nodes land on their target
-  immediately and the animation loop never starts.
-- The intro canvas needs an explicit `width`/`height` in CSS. `inset: 0` alone anchors
-  a replaced element at its intrinsic size — the backing store, which is
-  `devicePixelRatio` times larger — and the whole mesh then draws at double scale on a
-  phone.
+- **The markup is the index.** The page reads in full without script;
+  `assets/js/research-filter.js` only reveals the toolbar, counts each category from the
+  cards, and hides the ones that do not match the chosen category and the typed words.
+- **Artwork** lives in `assets/images/research/<project>.svg`: square, 360-unit viewBox,
+  motif kept in the middle three quarters — the card shows it through a 4:3 window.
+- Under `prefers-reduced-motion` the cards do not lift or zoom on hover.
 
 ### The start page formula band
 
@@ -377,11 +367,10 @@ their own, which is what keeps their figures beside them (`bqe-decomp/utils/`) a
 URL a clean `/research/bqe-decomp/`. A paper is styled from its own embedded CSS rather
 than `shared.css` — `research/RESEARCH_PAPER_STYLE_GUIDE.md` is the reference
 for that, and for redesigning the write-ups that still predate it. List every project in
-three places, which are meant to agree: the `PAPERS`
-array in `assets/js/research-graph.js` (the graph, the list and the search all read it),
-the `<noscript>` list in `research/index.html`, and the Research column of the footer.
-A new category also needs a cluster centre in `CLUSTER_CENTERS`, an entry in `COLORS`
-and a swatch in the page's legend.
+two places, which are meant to agree: a card in
+`research/index.html` (with its artwork in `assets/images/research/`) and the Research
+column of the footer. A new category also needs a filter button in the page's toolbar
+and a `.project-tag--<category>` colour in `research.css`.
 
 ### A page that needs live data
 
