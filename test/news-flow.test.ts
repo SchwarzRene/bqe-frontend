@@ -96,17 +96,17 @@ function internet(opts: { briefing?: (prompt: string) => unknown; rank?: (prompt
         : [];
       return new Response(JSON.stringify({ data: { rows } }));
     }
-    if (url.includes("generativelanguage") && url.includes("gemma")) {
-      // Gemma, ranking headlines: GDP news matters most, Nvidia is NVDA.
-      const lines: string[] = body.contents[0].parts[0].text.split("Headlines (id | source | title):\n")[1].split("\n");
-      return gemini("```json\n" + JSON.stringify(lines.map((l) => {
-        const [id, , title] = l.split(" | ");
-        return { id, i: /GDP/.test(title) ? 5 : 2, t: /Nvidia/.test(title) ? ["NVDA", "MADE.UP"] : [], s: /recover/.test(title) ? "+" : "0" };
-      })) + "\n```");
-    }
     if (url.includes("generativelanguage")) {
       if (body?.generationConfig?.responseMimeType === "application/json") {
         const prompt: string = body.contents[0].parts[0].text;
+        if (prompt.startsWith("Headlines (id | source | title):")) {
+          // The headline ranking: GDP news matters most, Nvidia is NVDA.
+          const lines = prompt.split("\n").slice(1);
+          return gemini(JSON.stringify({ headlines: lines.map((l) => {
+            const [id, , title] = l.split(" | ");
+            return { id, importance: /GDP/.test(title) ? 5 : 2, tone: /recover/.test(title) ? "+" : "0", tickers: /Nvidia/.test(title) ? ["NVDA", "MADE.UP"] : [] };
+          }) }));
+        }
         if (prompt.startsWith("Days: ")) return gemini(JSON.stringify(opts.rank ? opts.rank(prompt) : null));
         return gemini(JSON.stringify(opts.briefing ? opts.briefing(prompt) : null));
       }
@@ -332,11 +332,12 @@ describe("Market News flow", () => {
     // The calendar's other half: earnings, dated events, rules.
     report = await tick("2026-09-24T14:30:00Z");
     expect(report).toMatch(/^calendar \(first, part 2\): dated: 0, rules: \d+, nasdaq: 1, yahoo: 0$/);
-    // No headlines yet, so no briefing: this run fetches, and Gemma ranks
-    // what came in, in the same run and with one call.
+    // No headlines yet, so no briefing: this run fetches, and the model
+    // ranks what came in, in the same run and with one call.
     report = await tick("2026-09-24T14:45:00Z");
-    expect(report).toMatch(/^fetch: \{"fetched":9,"added":5.* · rank: 5 of 5 ranked by gemma-3-27b-it, 1 tied to companies$/);
-    expect(calls.filter((c) => c.url.includes("generativelanguage")).map((c) => c.url.includes("gemma"))).toEqual([true]);
+    expect(report).toMatch(/^fetch: \{"fetched":9,"added":5.* · rank: 5 of 5 ranked by gemini-3.5-flash-lite, 1 tied to companies$/);
+    const modelCalls = calls.filter((c) => c.url.includes("generativelanguage"));
+    expect(modelCalls.map((c) => c.url.includes("gemini-3.5-flash-lite") && c.body.systemInstruction.parts[0].text.startsWith("You rank news headlines"))).toEqual([true]);
     const ranked = env.DB.raw.prepare("SELECT title, importance, tone, tickers FROM news_items WHERE title LIKE '%Nvidia%' OR title LIKE 'US GDP%' ORDER BY title").all();
     expect(ranked).toEqual([
       { title: "Nvidia shares recover part of this week's losses", importance: 2, tone: "+", tickers: '["NVDA"]' },
