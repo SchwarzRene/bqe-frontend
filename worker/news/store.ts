@@ -18,7 +18,7 @@ export interface Item {
   tickers: string[];
   publishedAt: string;
   score: number; // the rule-based score below, at the time it was stored
-  importance: number | null; // Gemma's 1-5 (headlines.ts); null until ranked
+  importance: number | null; // the model's 1-5 (headlines.ts); null until ranked
   tone: string | null; // "+", "-" or "0"
 }
 
@@ -45,8 +45,8 @@ export function isBlocked(source: string, cfg: Config = CONFIG): boolean {
 
 /**
  * 0-100 from source weight, number of sources, recency, watchlist mentions
- * and words that match today's calendar. The first estimate; once Gemma has
- * ranked a headline, effectiveScore() weighs its importance in.
+ * and words that match today's calendar. The first estimate; once the model
+ * has ranked a headline, effectiveScore() weighs its importance in.
  */
 export function scoreItem(
   item: { weight?: number; source: string; alsoIn: unknown[]; publishedAt: string; tickers: string[]; title: string },
@@ -313,7 +313,7 @@ const COLUMNS = "id, title, url, source, also_in, category, region, tickers, pub
 
 /**
  * What a headline is worth for picking and ordering: the rule-based score
- * alone until Gemma has ranked it, then mostly Gemma's importance (1-5 →
+ * alone until the model has ranked it, then mostly its importance (1-5 →
  * 12-60) with the rule score (source, other outlets, recency, events) as
  * the remaining 40. Mirrored in SQL by EFFECTIVE_SCORE_SQL.
  */
