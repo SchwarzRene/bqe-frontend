@@ -6,7 +6,7 @@ It answers two questions: "what matters in markets and the world right now?" and
 
 Market News replaces Market Tape and keeps its URL, **/research/markettape/**, so existing links still work. `index.html` in this folder is the page; the jobs and endpoints behind it are in `worker/news/` (see [How it is built](#how-it-is-built)). The write-up is `research/markettape.html`.
 
-Spec as of 24 September 2026; built 25 September 2026. The AI is Google's Gemini (`GEMINI_API_KEY`), and it is used for the briefing, the calendar ranking, the chat and the AI analyst; Gemma, on the same key, ranks every headline.
+Spec as of 24 September 2026; built 25 September 2026. The AI is Google's Gemini (`GEMINI_API_KEY`), and it is used for the briefing, the calendar ranking, the headline ranking, the chat and the AI analyst.
 
 ## Contents
 
@@ -34,7 +34,7 @@ worker/news/calendar.ts    the calendar, from calendar.json, Yahoo, Nasdaq and B
 worker/news/gemini.ts      the Gemini client
 worker/news/briefing.ts    the briefing: prompt, response schema, validation, retry, storage
 worker/news/rank.ts        the calendar ranking: one Gemini call a day ranks the events of busy days
-worker/news/headlines.ts   the headline ranking: Gemma rates and tags every headline after each fetch
+worker/news/headlines.ts   the headline ranking: the model rates and tags every headline after each fetch
 worker/news/analyst.ts     the AI analyst in the company window: POST/GET /api/company/analysis
 worker/profile.ts          company fundamentals from Yahoo quoteSummary: GET /api/market/profile
 worker/news/chat.ts        POST /api/chat: context, tools, sources, daily limit
@@ -66,7 +66,7 @@ assets/images/market-news/        the page's pictures: page banners, commodity g
 | `POST /api/company/analysis` | signed in | Writes the note: one Gemini call from a year of prices (returns, volatility, drawdown, averages, volume), the fundamentals, the week's headlines about the company and upcoming events. Counts against the chat's daily limit; stored 6 h per ticker and shared by everyone. |
 | `POST /api/admin/run/{news,calendar,briefing}` | `ADMIN_TOKEN` | Runs a job now: fetch, calendar, or a forced briefing. (`run/screen` backfills the chat's S&P 500 screen, see below.) |
 
-**Which requests can cause a model call.** Only `POST /api/chat`, `POST /api/company/analysis` and `POST /api/news/refresh`, which answer `401` to anyone not signed in and `403` to an account without AI access (granted by an admin in the admin terminal) before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's model calls are the scheduled briefing, the daily calendar ranking and Gemma's headline ranking after each fetch.
+**Which requests can cause a model call.** Only `POST /api/chat`, `POST /api/company/analysis` and `POST /api/news/refresh`, which answer `401` to anyone not signed in and `403` to an account without AI access (granted by an admin in the admin terminal) before doing anything else, and the admin runs, which need `ADMIN_TOKEN`. Everything else — the page, `/api/news`, the calendar — never calls a model. The cron's model calls are the scheduled briefing, the daily calendar ranking and the headline ranking after each fetch.
 
 **One cron, every 15 minutes** (`*/15 * * * *` in `wrangler.toml`). The free plan allows five cron triggers per account, so one trigger runs everything, and `newsTick()` gives each run exactly one job, in New York time: the calendar at 05:00 (economic calendar, meetings, fallbacks, plus the daily clean-up: 7-day retention, old contact messages and sessions) and 05:30 (earnings, dated events, rules); the calendar ranking at 05:45; the briefing at the briefing times; the calendar's results at a quarter past each hour on weekdays; and the headline fetch in every other run. Right after a deploy, the first runs build the calendar (two runs), then fetch, then write the first briefing as soon as there are headlines, instead of waiting for their times.
 
@@ -187,9 +187,9 @@ Every top story, company line and commodity line references item ids, so the pag
 
 **Calendar event**: id, type, title, start and end time (UTC), region, importance (1–3), stream URL, result line, related tickers.
 
-## Headline ranking (Gemma)
+## Headline ranking
 
-The rule-based score (source weight, other outlets, recency, watchlist, today's events) only knows where a headline came from, not what it says, and ties it to a company only by the watchlist's names. So after every fetch, `worker/news/headlines.ts` sends the newest headlines Gemma has not seen yet — up to 60, id, source and title only — to `GEMMA_MODEL` (default `gemma-3-27b-it`) in one call, and gets back for each:
+The rule-based score (source weight, other outlets, recency, watchlist, today's events) only knows where a headline came from, not what it says, and ties it to a company only by the watchlist's names. So after every fetch, `worker/news/headlines.ts` sends the newest headlines not ranked yet — up to 60, id, source and title only — to the model in one call, and gets back strict JSON for each:
 
 | Field | Meaning |
 | --- | --- |
@@ -197,13 +197,13 @@ The rule-based score (source weight, other outlets, recency, watchlist, today's 
 | `tone` | `+`, `-` or `0` for the companies named, or for markets |
 | tickers | the S&P 500 companies (plus the non-US watchlist and the futures) the headline is about; added to `tickers` and `news_item_tickers`, so the chat's `get_company` finds news on any of the ~500 |
 
-Everything is checked before it is stored: ids that were not asked about, importance outside 1–5 and symbols that are not an active S&P 500 ticker, a watchlist or a commodity symbol are dropped. A headline is marked `ranked_at` once it has been sent, answered or not, so none is sent twice; a failed call marks nothing and the next run tries again. Gemma on the Gemini API takes no system instruction and no JSON schema, so the rules are in the prompt and the array is parsed out of the text. There is no fallback to the Gemini models, whose quota the briefing and the chat need: an unranked headline simply keeps its rule-based score. `GEMMA_MODEL = "off"` turns the ranking off.
+It is the same call as the briefing and the calendar ranking: `GEMINI_MODEL`, with the `GEMINI_FALLBACK_MODEL` list when that model is overloaded or over its quota, and a response schema. Everything is checked before it is stored: ids that were not asked about, importance outside 1–5 and symbols that are not an active S&P 500 ticker, a watchlist or a commodity symbol are dropped. A headline is marked `ranked_at` once it has been sent and answered, so none is sent twice; a failed call, or an answer that is not JSON, marks nothing and the next run tries again. An unranked headline keeps its rule-based score.
 
 Where it is used: the briefing's input and the chat's 200 headlines are picked by `effectiveScore()` — the rule score alone until a headline is ranked, then `0.4 × rule score + 12 × importance` — plus recency; the chat sees each headline's importance and tone; the page orders and draws headlines by it.
 
 ## AI briefing
 
-The model gets headlines only and returns strict JSON for all three pages in one call: an overview, the 5 most important stories per page, one line per watchlist company, the commodity groups, and an importance from 1 to 5 for every headline it was given. The page orders headline lists and the commodity boxes by that importance ("Most important", or "Newest"); since Gemma ranks every headline after each fetch (below), its importance is used first, the briefing's for a headline Gemma has not ranked, and only a headline neither has seen gets an estimate from its stored score, drawn hollow.
+The model gets headlines only and returns strict JSON for all three pages in one call: an overview, the 5 most important stories per page, one line per watchlist company, the commodity groups, and an importance from 1 to 5 for every headline it was given. The page orders headline lists and the commodity boxes by that importance ("Most important", or "Newest"); since every headline is ranked after each fetch (above), that importance is used first, the briefing's for a headline not ranked yet, and only a headline neither has seen gets an estimate from its stored score, drawn hollow.
 
 **Input per run**
 
@@ -382,7 +382,7 @@ Fetch headlines often, but run the briefing model only at fixed times: that keep
 | Job | When | AI? |
 | --- | --- | --- |
 | Fetch + dedupe | Every 15 min around the clock, a third of the sources per run (each source every 45 min) | No |
-| Headline ranking | Right after each fetch, in the same run | Yes, Gemma, one call of up to 60 headlines, skipped when nothing is new |
+| Headline ranking | Right after each fetch, in the same run | Yes, one call of up to 60 headlines, skipped when nothing is new |
 | Calendar + clean-up | 05:00 and 05:30 | No |
 | Calendar results | Hourly on weekdays, at :15 | No |
 | Calendar ranking (busy days) | 05:45, and once right after a deploy | Yes, one call, skipped when no day is busy |
