@@ -103,8 +103,8 @@ export const events = () => (data.D ? data.D.events : []);
 export const ranks = () => (data.D && data.D.calendarRanks) || null;
 
 /**
- * A headline's importance, 1–5: Gemma's, which reads every headline after
- * each fetch; else the briefing model's, for a headline Gemma has not ranked;
+ * A headline's importance, 1–5: the headline ranking's, which reads every
+ * headline after each fetch; else the briefing's, for one not ranked yet;
  * else an estimate from the stored score (source weight, other sources,
  * followed tickers, today's events).
  */
