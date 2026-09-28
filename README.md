@@ -407,7 +407,7 @@ slow upstream degrades to stored data rather than an error.
 | `POST /api/news/refresh` | `worker/news/index.ts` | Fetch now and write a fresh briefing. AI access; one per 15 min. |
 | `POST /api/chat` | `worker/news/chat.ts` | Market News chat (Gemini). AI access; daily limit per user. |
 | `GET/POST /api/company/analysis` | `worker/news/analyst.ts` | Market News AI analyst note. AI access; same daily limit. |
-| `POST /api/admin/run/{stack,news,calendar,briefing}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
+| `POST /api/admin/run/{stack,screen,news,calendar,briefing}` | `worker/index.ts` | Runs a job now. Needs `Authorization: Bearer $ADMIN_TOKEN`. |
 | `POST /api/auth/{signup,login,logout,password}`, `GET /api/auth/{me,config}` | `worker/auth.ts` | Sign-up and sign-in with an HttpOnly session cookie. |
 | `GET /api/auth/export`, `POST /api/auth/delete` | `worker/auth.ts` | A user downloads everything stored for their account, or deletes it. |
 | `GET /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password` | `worker/admin.ts` | The admin terminal: list accounts, grant/revoke AI access, suspend, change role, reset a password, delete. Signed-in admins only. |

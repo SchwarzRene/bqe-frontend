@@ -5,6 +5,7 @@
 
 import type { Env } from "./env";
 import { isoNow, jsonText, mapLimit, utcDay } from "./http";
+import { backfillScreen, mergeScreen, type ScreenRow, screenRow } from "./screen";
 import { type Quote, refreshQuote, yahooSymbol } from "./yahoo";
 
 const WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies";
@@ -88,6 +89,7 @@ export interface RefreshReport {
   full: number; // of those refreshed, how many needed the whole history
   failed: string[];
   remaining: number;
+  screen?: { rows?: number; filled?: number; behind?: number; error?: string };
 }
 
 /**
@@ -138,6 +140,7 @@ export async function refreshStack(env: Env, now = new Date()): Promise<RefreshR
   const epochDay = Math.floor(now.getTime() / 86_400_000);
   const done: { s: string }[] = [];
   const failed: { s: string; e: string }[] = [];
+  const screened: ScreenRow[] = [];
   let full = 0;
 
   // Four at a time: polite to Yahoo, and well inside the per-invocation
@@ -156,6 +159,8 @@ export async function refreshStack(env: Env, now = new Date()): Promise<RefreshR
         .run();
       done.push({ s: t.symbol });
       if (fresh.full) full++;
+      const row = screenRow({ s: t.symbol, n: t.name, sec: t.sector }, fresh.quote.d);
+      if (row) screened.push(row);
     } catch (err) {
       failed.push({ s: t.symbol, e: String(err).slice(0, 200) });
     }
@@ -188,6 +193,17 @@ export async function refreshStack(env: Env, now = new Date()): Promise<RefreshR
     .bind(today)
     .first<{ n: number }>();
   report.remaining = left?.n ?? 0;
+
+  // The chat's S&P 500 screen (screen.ts), from the quotes just refreshed.
+  // Once every ticker is done for the day, the remaining ticks backfill any
+  // row that is still missing and drop companies that left the index. A
+  // failure here never fails the price refresh.
+  try {
+    if (screened.length) report.screen = { rows: await mergeScreen(env, screened) };
+    else if (!due.length) report.screen = await backfillScreen(env);
+  } catch (err) {
+    report.screen = { error: String(err).slice(0, 200) };
+  }
   return report;
 }
 

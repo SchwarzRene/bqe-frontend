@@ -13,6 +13,7 @@ import { handleConversations } from "./news/conversations";
 import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
 import { ingest } from "./news/store";
+import { backfillScreen } from "./screen";
 import { refreshStack, serveStackFile } from "./stack";
 import { handleState } from "./state";
 import { fetchQuote, isValidSymbol, UpstreamError } from "./yahoo";
@@ -65,7 +66,7 @@ export default {
       if (m) return handleAdminMessages(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
       if (path === "/api/admin/audit") return handleAdminAudit(request, env);
 
-      m = path.match(/^\/api\/admin\/run\/(stack|news|calendar|briefing)$/);
+      m = path.match(/^\/api\/admin\/run\/(stack|screen|news|calendar|briefing)$/);
       if (m) {
         if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
         if (!authorised(request, env)) return json({ error: "unauthorised" }, 401);
@@ -131,6 +132,8 @@ async function adminRun(env: Env, job: string): Promise<unknown> {
   switch (job) {
     case "stack":
       return refreshStack(env);
+    case "screen":
+      return { screen: await backfillScreen(env) };
     case "news":
       return { fetch: await ingest(env) };
     case "calendar":
