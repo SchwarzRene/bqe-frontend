@@ -188,8 +188,18 @@ function initLoginModal() {
     }
   });
 
+  // Only close on a click that both started and ended on the backdrop.
+  // Selecting text in an input and releasing the mouse outside the dialog
+  // fires `click` on the backdrop, which must not close the modal.
+  let pressedOnBackdrop = false;
+  loginModal.addEventListener('mousedown', (e) => {
+    pressedOnBackdrop = e.target === loginModal;
+  });
+
   loginModal.addEventListener('click', (e) => {
-    if (e.target === loginModal) {
+    const wasPressedOnBackdrop = pressedOnBackdrop;
+    pressedOnBackdrop = false;
+    if (e.target === loginModal && wasPressedOnBackdrop) {
       loginModal.setAttribute('hidden', '');
       loginBtn.focus();
     }
