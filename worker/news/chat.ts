@@ -1,8 +1,9 @@
 // POST /api/chat — questions about today, answered by Gemini from what the
-// app has collected: the latest briefing, the last 24 h of headlines, the
-// calendar and a summary of the S&P 500 screen are in the system prompt;
-// older headlines, event results, prices, the full screen and one company's
-// figures and news are tools. Signed-in users with AI access only, with a daily limit
+// app has collected: the latest briefing, the 500 most important headlines
+// of the last 7 days, the calendar and a summary of the S&P 500 screen are in
+// the system prompt (~30k tokens); older headlines (up to 180 days), event
+// results, prices, the full screen and one company's figures and news are
+// tools. Signed-in users with AI access only, with a daily limit
 // per user. Each question and its answer are saved to the user's account
 // (conversations.ts), so the chat's history follows them to any device.
 
@@ -14,7 +15,7 @@ import { latestBriefing, pickInput, type Briefing } from "./briefing";
 import { type CalendarEvent, readCalendar } from "./calendar";
 import { isConversationId, saveTurn } from "./conversations";
 import { GeminiError, generate, model, textOf } from "./gemini";
-import { eventWordsFor, type Item, recentItems, toItem } from "./store";
+import { eventWordsFor, type Item, toItem, topItems } from "./store";
 import { iso } from "./time";
 
 const DEFAULT_DAILY_LIMIT = 50;
@@ -22,6 +23,16 @@ const MAX_TURNS = 12;
 const MAX_CHARS = 2000;
 const MAX_TOOL_ROUNDS = 4;
 const SYMBOL_RE = /^[A-Z0-9^][A-Z0-9.\-=^]{0,11}$/;
+
+// How much news the model gets: the most important headlines of the week,
+// with today's ranked up by recency. A headline line is ~40 tokens, so 500
+// are ~20k of the ~30k-token prompt.
+export const PROMPT_DAYS = 7;
+export const PROMPT_HEADLINES = 500;
+const SEARCH_MAX_DAYS = 180; // the headline retention (store.ts KEEP_DAYS)
+const SEARCH_RESULTS = 40;
+const COMPANY_DAYS = 30;
+const COMPANY_HEADLINES = 30;
 
 export async function handleChat(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
@@ -144,7 +155,7 @@ Rules:
 - Answer in the language of the question (English or German).
 - Short answers by default (2-5 sentences); longer only when asked.
 - Times: use the time zone the user is viewing in.
-- Tools: search_headlines for anything older than the last 24 hours, get_event_result for the outcome of a calendar event, get_price for a live price, screen_stocks to rank all S&P 500 companies by a figure (optionally within a sector), get_company for one company's figures and recent headlines.
+- Tools: search_headlines for anything older than 7 days or not in the list below (it goes back up to 180 days), get_event_result for the outcome of a calendar event, get_price for a live price, screen_stocks to rank all S&P 500 companies by a figure (optionally within a sector), get_company for one company's figures and recent headlines.
 - The screen is built from daily closes; for a move during today's session, check get_price.
 - Each headline carries an importance (1-5) and a tone (+ good, - bad, 0 neutral) from a first-pass model reading; lean on the important ones, but judge for yourself.
 - End every answer with one last line: SOURCES: followed by the ids of the headlines you used, comma-separated (for example SOURCES: 3fa9c1d2e4b5, 77aa01bc02de). Write SOURCES: none if you used none.`;
@@ -171,8 +182,8 @@ function headlineLine(i: Item): string {
   return `${i.id} | ${i.publishedAt.slice(0, 16)}Z | ${i.source}${also} | ${i.region} | ${i.category} | ${rank}${i.tickers.length ? ` | ${i.tickers.join(" ")}` : ""} | ${i.title}`;
 }
 
-/** The chat's share of the day: the most important headlines, shown newest first. */
-export function chatHeadlines(items: Item[], now: number, max = 200): Item[] {
+/** The chat's share of the news: the most important headlines, shown newest first. */
+export function chatHeadlines(items: Item[], now: number, max = PROMPT_HEADLINES): Item[] {
   return pickInput(items, now, max).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
@@ -189,12 +200,12 @@ const TOOLS = [
     functionDeclarations: [
       {
         name: "search_headlines",
-        description: "Search stored headlines of the last 7 days by keywords.",
+        description: "Search stored headlines by keywords (all words must appear; word beginnings match, so \"tariff\" finds \"tariffs\"), newest first, up to 40. Goes back up to 180 days.",
         parameters: {
           type: "OBJECT",
           properties: {
             query: { type: "STRING", description: "a few keywords" },
-            days: { type: "INTEGER", description: "how many days back, 1-7" },
+            days: { type: "INTEGER", description: "how many days back, 1-180, default 7" },
             region: { type: "STRING", enum: ["us", "europe", "asia", "russia", "global", "any"] },
           },
           required: ["query"],
@@ -222,7 +233,7 @@ const TOOLS = [
       },
       {
         name: "get_company",
-        description: "One S&P 500 company's screen figures, its live price and its headlines of the last 7 days. Takes a symbol (AAPL, BRK.B) or a company name.",
+        description: "One S&P 500 company's screen figures, its live price and up to 30 of its headlines from the last 30 days. Takes a symbol (AAPL, BRK.B) or a company name.",
         parameters: { type: "OBJECT", properties: { query: { type: "STRING" } }, required: ["query"] },
       },
       {
@@ -240,24 +251,48 @@ export function chatRegion(raw: unknown): string {
   return picked.length ? picked.join(",") : "all";
 }
 
-export async function searchHeadlines(env: Env, query: string, days = 3, region = "any"): Promise<Item[]> {
-  const words = String(query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3).slice(0, 5);
-  if (!words.length) return [];
-  const since = iso(Date.now() - Math.min(7, Math.max(1, Math.round(days) || 3)) * 86_400_000);
-  const regionSql = region && region !== "any" ? " AND region = ?" : "";
-  const run = async (joiner: "AND" | "OR") => {
-    const where = words.map(() => "LOWER(title) LIKE ?").join(` ${joiner} `);
-    const binds = [since, ...words.map((w) => `%${w}%`), ...(regionSql ? [region] : [])];
+const STOP_WORDS = new Set("the and for with from that this are was were has have its into over after about news of in on to at is by an as or be it".split(" "));
+
+/**
+ * Keywords as an FTS5 query: each word a quoted prefix term (so "tariff"
+ * finds "tariffs", and nothing typed can become FTS syntax), all required or
+ * any. Null when no usable word is left.
+ */
+export function ftsQuery(query: string, joiner: "and" | "or"): string | null {
+  const words = String(query)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 2 && !STOP_WORDS.has(w))
+    .slice(0, 6);
+  if (!words.length) return null;
+  return words.map((w) => `"${w}"*`).join(joiner === "and" ? " " : " OR ");
+}
+
+/**
+ * Headlines matching the keywords, newest first, through the full-text index
+ * (news_fts, migration 0008): it reads the matches only, not every headline
+ * in the 180 days. All words first; if nothing has all of them, any word.
+ */
+export async function searchHeadlines(env: Env, query: string, days = 7, region = "any", limit = SEARCH_RESULTS): Promise<Item[]> {
+  const since = iso(Date.now() - Math.min(SEARCH_MAX_DAYS, Math.max(1, Math.round(days) || 7)) * 86_400_000);
+  const regionSql = region && region !== "any" ? " AND n.region = ?3" : "";
+  const run = async (match: string) => {
     const rows = await env.DB.prepare(
-      `SELECT id, title, url, source, also_in, category, region, tickers, published_at, score, importance, tone FROM news_items
-        WHERE published_at > ? AND (${where})${regionSql} ORDER BY published_at DESC LIMIT 20`,
+      `SELECT n.id, n.title, n.url, n.source, n.also_in, n.category, n.region, n.tickers, n.published_at, n.score, n.importance, n.tone
+         FROM news_fts JOIN news_items n ON n.id = news_fts.id
+        WHERE news_fts MATCH ?1 AND news_fts.published_at > ?2${regionSql}
+        ORDER BY news_fts.published_at DESC LIMIT ${Math.min(SEARCH_RESULTS, Math.max(1, limit))}`,
     )
-      .bind(...binds)
+      .bind(match, since, ...(regionSql ? [region] : []))
       .all<any>();
     return (rows.results ?? []).map(toItem);
   };
-  const all = await run("AND");
-  return all.length ? all : run("OR");
+  const all = ftsQuery(query, "and");
+  if (!all) return [];
+  const found = await run(all);
+  if (found.length) return found;
+  const any = ftsQuery(query, "or");
+  return any && any !== all ? run(any) : [];
 }
 
 export async function getPrice(symbol: string): Promise<Record<string, unknown>> {
@@ -312,7 +347,7 @@ async function answer(
   const now = Date.now();
   const [briefing, items, events, screen] = await Promise.all([
     latestBriefing(env),
-    recentItems(env, now, 24, 600).then((all) => chatHeadlines(all, now)),
+    topItems(env, now, PROMPT_DAYS * 24, PROMPT_HEADLINES),
     readCalendar(env, now - 7 * 86_400_000, now + 8 * 86_400_000),
     // A missing or unreadable screen leaves the chat as it was before it.
     readScreen(env).then(currentRows, () => [] as ScreenRow[]),
@@ -323,7 +358,7 @@ async function answer(
   const system = [
     RULES,
     `LATEST BRIEFING\n${briefingText(briefing)}`,
-    `HEADLINES, LAST 24 HOURS, the ${items.length} most important (id | time UTC | source | region | category | importance 1-5 and tone +/-/0 | tickers | title)\n${items.map(headlineLine).join("\n")}`,
+    `HEADLINES, LAST ${PROMPT_DAYS} DAYS, the ${items.length} most important, newest first (id | time UTC | source | region | category | importance 1-5 and tone +/-/0 | tickers | title)\n${items.map(headlineLine).join("\n")}`,
     `CALENDAR, THIS WEEK (id | start UTC | title | region | result)\n${events.map(eventLine).join("\n")}`,
     `S&P 500 SCREEN\n${screenSummary(screen)}`,
   ].join("\n\n");
@@ -431,17 +466,20 @@ export function screenStocks(rows: ScreenRow[], args: any): unknown {
   };
 }
 
-/** The get_company tool: screen figures, live price and the week's headlines. */
+/** The get_company tool: screen figures, live price and the last 30 days' headlines. */
 async function company(env: Env, rows: ScreenRow[], query: string, known: Map<string, Item>): Promise<unknown> {
   const row = findRow(rows, query);
   if (!row) return { error: `"${query}" is not in the S&P 500 screen; get_price takes any Yahoo symbol` };
   const [price, byName, bySymbol] = await Promise.all([
     getPrice(row.s.replace(/\./g, "-")),
-    searchHeadlines(env, shortName(row.n), 7).catch(() => [] as Item[]),
+    searchHeadlines(env, shortName(row.n), COMPANY_DAYS, "any", COMPANY_HEADLINES).catch(() => [] as Item[]),
     tickerHeadlines(env, row.s.replace(/\./g, "-")).catch(() => [] as Item[]),
   ]);
   const seen = new Set<string>();
-  const headlines = [...bySymbol, ...byName].filter((i) => !seen.has(i.id) && seen.add(i.id)).slice(0, 12);
+  const headlines = [...bySymbol, ...byName]
+    .filter((i) => !seen.has(i.id) && seen.add(i.id))
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
+    .slice(0, COMPANY_HEADLINES);
   headlines.forEach((i) => known.set(i.id, i));
   return {
     screen: rowLine(row),
@@ -452,11 +490,11 @@ async function company(env: Env, rows: ScreenRow[], query: string, known: Map<st
 }
 
 async function tickerHeadlines(env: Env, ticker: string): Promise<Item[]> {
-  const since = iso(Date.now() - 7 * 86_400_000);
+  const since = iso(Date.now() - COMPANY_DAYS * 86_400_000);
   const rows = await env.DB.prepare(
     `SELECT n.id, n.title, n.url, n.source, n.also_in, n.category, n.region, n.tickers, n.published_at, n.score, n.importance, n.tone
        FROM news_item_tickers t JOIN news_items n ON n.id = t.item_id
-      WHERE t.ticker = ? AND n.published_at > ? ORDER BY n.published_at DESC LIMIT 12`,
+      WHERE t.ticker = ? AND n.published_at > ? ORDER BY n.published_at DESC LIMIT ${COMPANY_HEADLINES}`,
   )
     .bind(ticker, since)
     .all<any>();
