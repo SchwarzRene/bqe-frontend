@@ -1,6 +1,6 @@
 // One place that talks to the Gemini API. Market News makes these kinds of
 // model call: the scheduled briefing (strict JSON, headlines only), the
-// calendar ranking, Gemma's headline ranking after each fetch, and the chat
+// calendar ranking, the headline ranking after each fetch, and the chat
 // and AI analyst (signed-in users only). The key is the GEMINI_API_KEY secret
 // and never leaves the Worker.
 
@@ -13,13 +13,6 @@ export class GeminiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
   }
-}
-
-/** The headline ranker (headlines.ts); null when GEMMA_MODEL is "off". */
-export const DEFAULT_GEMMA_MODEL = "gemma-3-27b-it";
-export function gemmaModel(env: Env): string | null {
-  const m = (env.GEMMA_MODEL ?? DEFAULT_GEMMA_MODEL).trim();
-  return m && m !== "off" ? m : null;
 }
 
 export function model(env: Env, purpose: "briefing" | "chat" = "briefing"): string {
@@ -44,10 +37,10 @@ const TRY_FALLBACK = new Set([404, 429, 500, 503]);
  * comma-separated list tried in order; "off" for none) get the same request.
  * Anything else throws.
  */
-export async function generate(env: Env, modelName: string, body: unknown, label: string, opts: { fallback?: boolean } = {}): Promise<any> {
+export async function generate(env: Env, modelName: string, body: unknown, label: string): Promise<any> {
   if (!env.GEMINI_API_KEY) throw new GeminiError("GEMINI_API_KEY is not set", 503);
   const fallback = (env.GEMINI_FALLBACK_MODEL ?? DEFAULT_FALLBACK_MODELS).trim();
-  const listed = fallback === "off" || opts.fallback === false ? [] : fallback.split(",").map((m) => m.trim()).filter(Boolean);
+  const listed = fallback === "off" ? [] : fallback.split(",").map((m) => m.trim()).filter(Boolean);
   const models = [...new Set([modelName, ...listed])];
   let last: unknown;
   for (const m of models) {
