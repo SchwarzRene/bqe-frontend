@@ -266,7 +266,7 @@ describe("news calendar", () => {
 
   it("groups headlines under the event they mention", () => {
     const ev = [{ id: "e", type: "us-data" as const, title: "US CPI, August", start: "2026-09-24T12:30:00Z", end: "", region: "us" as const, importance: 3, streamUrl: "", result: "", tickers: [] }];
-    const item = (id: string, title: string, at: string) => ({ id, title, url: "", source: "", alsoIn: [], category: "markets", region: "us", tickers: [], publishedAt: at, score: 0 });
+    const item = (id: string, title: string, at: string) => ({ id, title, url: "", source: "", alsoIn: [], category: "markets", region: "us", tickers: [], publishedAt: at, score: 0, importance: null, tone: null });
     const out = withHeadlines(ev, [item("a", "CPI rises more than expected", "2026-09-24T12:40:00Z"), item("b", "CPI outlook", "2026-09-20T12:40:00Z"), item("c", "Stocks rise", "2026-09-24T13:00:00Z")]);
     expect(out[0].itemIds).toEqual(["a"]);
   });
@@ -309,7 +309,7 @@ describe("news briefing", () => {
 
   it("picks the input by score with recency as of now", () => {
     const now = Date.parse("2026-09-24T12:00:00Z");
-    const it = (id: string, score: number, at: string) => ({ id, title: "", url: "", source: "", alsoIn: [], category: "", region: "", tickers: [], publishedAt: at, score });
+    const it = (id: string, score: number, at: string) => ({ id, title: "", url: "", source: "", alsoIn: [], category: "", region: "", tickers: [], publishedAt: at, score, importance: null, tone: null });
     const picked = pickInput([it("old", 60, "2026-09-23T13:00:00Z"), it("new", 50, "2026-09-24T11:30:00Z"), it("low", 10, "2026-09-24T11:59:00Z")], now, 2);
     expect(picked.map((p) => p.id)).toEqual(["new", "old"]);
   });

@@ -103,11 +103,13 @@ export const events = () => (data.D ? data.D.events : []);
 export const ranks = () => (data.D && data.D.calendarRanks) || null;
 
 /**
- * A headline's importance, 1–5: the model's, from the latest briefing, or,
- * for headlines that arrived after it, an estimate from the stored score
- * (source weight, other sources, followed tickers, today's events).
+ * A headline's importance, 1–5: the headline ranking's, which reads every
+ * headline after each fetch; else the briefing's, for one not ranked yet;
+ * else an estimate from the stored score (source weight, other sources,
+ * followed tickers, today's events).
  */
 export function headlineImportance(i) {
+  if (i.importance) return { value: i.importance, ai: true };
   const b = briefing();
   const ai = b && b.headlineRanks && b.headlineRanks[i.id];
   if (ai) return { value: ai, ai: true };

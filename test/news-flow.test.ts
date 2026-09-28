@@ -12,6 +12,8 @@ import { handleConversations } from "../worker/news/conversations";
 import { handleAnalysis, priceStats } from "../worker/news/analyst";
 import { toProfile } from "../worker/profile";
 import { rankCalendar } from "../worker/news/rank";
+import { mergeScreen, screenRow } from "../worker/screen";
+import { rankHeadlines } from "../worker/news/headlines";
 import { ingest as ingestPart, pruneNews } from "../worker/news/store";
 
 // Every source in one run: the rotation over runs is tested on its own.
@@ -97,6 +99,14 @@ function internet(opts: { briefing?: (prompt: string) => unknown; rank?: (prompt
     if (url.includes("generativelanguage")) {
       if (body?.generationConfig?.responseMimeType === "application/json") {
         const prompt: string = body.contents[0].parts[0].text;
+        if (prompt.startsWith("Headlines (id | source | title):")) {
+          // The headline ranking: GDP news matters most, Nvidia is NVDA.
+          const lines = prompt.split("\n").slice(1);
+          return gemini(JSON.stringify({ headlines: lines.map((l) => {
+            const [id, , title] = l.split(" | ");
+            return { id, importance: /GDP/.test(title) ? 5 : 2, tone: /recover/.test(title) ? "+" : "0", tickers: /Nvidia/.test(title) ? ["NVDA", "MADE.UP"] : [] };
+          }) }));
+        }
         if (prompt.startsWith("Days: ")) return gemini(JSON.stringify(opts.rank ? opts.rank(prompt) : null));
         return gemini(JSON.stringify(opts.briefing ? opts.briefing(prompt) : null));
       }
@@ -322,10 +332,19 @@ describe("Market News flow", () => {
     // The calendar's other half: earnings, dated events, rules.
     report = await tick("2026-09-24T14:30:00Z");
     expect(report).toMatch(/^calendar \(first, part 2\): dated: 0, rules: \d+, nasdaq: 1, yahoo: 0$/);
-    // No headlines yet, so no briefing: this run fetches.
+    // No headlines yet, so no briefing: this run fetches, and the model
+    // ranks what came in, in the same run and with one call.
     report = await tick("2026-09-24T14:45:00Z");
-    expect(report).toMatch(/^fetch: \{"fetched":9,"added":5/);
-    expect(calls.some((c) => c.url.includes("generativelanguage"))).toBe(false);
+    expect(report).toMatch(/^fetch: \{"fetched":9,"added":5.* · rank: 5 of 5 ranked by gemini-3.5-flash-lite, 1 tied to companies$/);
+    const modelCalls = calls.filter((c) => c.url.includes("generativelanguage"));
+    expect(modelCalls.map((c) => c.url.includes("gemini-3.5-flash-lite") && c.body.systemInstruction.parts[0].text.startsWith("You rank news headlines"))).toEqual([true]);
+    const ranked = env.DB.raw.prepare("SELECT title, importance, tone, tickers FROM news_items WHERE title LIKE '%Nvidia%' OR title LIKE 'US GDP%' ORDER BY title").all();
+    expect(ranked).toEqual([
+      { title: "Nvidia shares recover part of this week's losses", importance: 2, tone: "+", tickers: '["NVDA"]' },
+      { title: "US GDP growth revised up in third estimate", importance: 5, tone: "0", tickers: "[]" },
+    ]);
+    // Nothing left to rank: the next fetch run makes no model call for it.
+    expect(await rankHeadlines(env, Date.parse("2026-09-24T14:50:00Z"), cfg)).toBe("nothing to rank");
     // Now the first briefing, in a run of its own.
     report = await tick("2026-09-24T15:00:00Z");
     expect(report).toBe("briefing (first): briefing written from 5 headlines");
@@ -335,6 +354,60 @@ describe("Market News flow", () => {
     expect(await tick("2026-09-24T15:45:00Z")).toMatch(/^fetch: /);
     // The daily ranking at 05:45 New York.
     expect(await tick("2026-09-25T09:45:00Z")).toMatch(/^calendar ranks: /);
+  });
+
+  it("answers stock-idea questions from the S&P 500 screen", async () => {
+    const prompts: string[] = [];
+    const results: any[] = [];
+    internet({
+      chat: (body) => {
+        prompts.push(body.systemInstruction.parts[0].text);
+        const last = body.contents[body.contents.length - 1];
+        const reply = last.parts[0].functionResponse;
+        if (!reply) return new Response(JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ functionCall: { name: "screen_stocks", args: { sort_by: "r1m", order: "asc", limit: 2 } } }] } }] }));
+        results.push(reply);
+        if (reply.name === "screen_stocks") return new Response(JSON.stringify({ candidates: [{ content: { role: "model", parts: [{ functionCall: { name: "get_company", args: { query: "nvidia" } } }] } }] }));
+        return gemini("Weakest: SLIP. Screen-based ideas, not investment advice.\nSOURCES: none");
+      },
+    });
+    const env = envWith();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW + 10 * 60_000);
+    await ingest(env, Date.now(), cfg);
+    env.DB.raw.exec("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES ('" +
+      (await sha256("tok")) + "', 1, '2026-01-01', '2999-01-01')");
+    const bars = (drift: number) => {
+      const end = Math.floor(NOW / 86_400_000) - 1;
+      const t = Array.from({ length: 260 }, (_, i) => end - 259 + i);
+      const c = t.map((_, i) => 100 * (1 + drift) ** i);
+      return { tu: 86_400_000, t, o: c, h: c, l: c, c };
+    };
+    await mergeScreen(env, [
+      screenRow({ s: "NVDA", n: "NVIDIA Corporation", sec: "Information Technology" }, bars(0.004))!,
+      screenRow({ s: "SLIP", n: "Slip Industries", sec: "Industrials" }, bars(-0.004))!,
+      screenRow({ s: "FLAT", n: "Flat Co.", sec: "Utilities" }, bars(0))!,
+    ]);
+
+    const res = await handleChat(new Request("https://site/api/chat", {
+      method: "POST",
+      headers: { Cookie: "bqe_session=tok", Origin: "https://site" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "What could be a short today?" }], page: "stocks" }),
+    }), env);
+    const body: any = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.answer).toBe("Weakest: SLIP. Screen-based ideas, not investment advice.");
+
+    // The summary is in the prompt, and the rules allow ideas.
+    expect(prompts[0]).toContain("S&P 500 SCREEN\nAs of the close on 2026-09-23; 3 constituents");
+    expect(prompts[0]).toMatch(/Bottom 10 over 1 month:\nSLIP Slip Industries \(Industrials\)/);
+    expect(prompts[0]).toContain("Stock ideas: when asked for picks, longs, shorts");
+    // screen_stocks ranks the whole screen; get_company finds Nvidia by name,
+    // with its live price and its headlines.
+    expect(results[0].response.rows.map((r: string) => r.split(" ")[0])).toEqual(["SLIP", "FLAT"]);
+    const nvda = results[1].response;
+    expect(nvda.screen).toMatch(/^NVDA NVIDIA Corporation \(Information Technology\)/);
+    expect(nvda.live.price).toBe(110);
+    expect(nvda.headlines.map((h: any) => h.title)).toContain("Nvidia shares recover part of this week's losses");
   });
 
   it("answers signed-in users with sources, counts the limit, and refuses past it", async () => {

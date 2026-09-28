@@ -27,6 +27,7 @@ import { CALENDAR, calendarIsEmpty, type CalendarEvent, readCalendar, refreshCal
 const CALENDAR_FIRST_HALF = ["meetings", "yahoo-economic", "fallback-rules", ...CALENDAR.ics.map((s) => s.id)];
 const CALENDAR_SECOND_HALF = ["dated", "rules", "nasdaq", "yahoo"];
 import { CONFIG, type FetchPlan } from "./feeds";
+import { rankHeadlines } from "./headlines";
 import { type Item, eventWordsFor, FETCH_PARTS, ingest, itemsById, MAX_NEW_PER_RUN, pruneNews, readHealth, recentItems, staleSources } from "./store";
 import { latestRanks, rankCalendar } from "./rank";
 import { briefingSlot, calendarRun, isRankRun, isResultsRun, iso } from "./time";
@@ -161,6 +162,7 @@ async function refresh(request: Request, env: Env): Promise<Response> {
     return json({ error: "A fresh briefing was built less than 15 minutes ago." }, 429);
   }
   const fetched = await ingest(env);
+  await rankHeadlines(env).catch((err) => console.warn("news refresh: ranking failed", String(err)));
   const result = await buildBriefing(env, "manual", { force: true });
   console.log(`news refresh by ${user.username}: ${fetched.added} new, ${result}`);
   return json({ result, added: fetched.added });
@@ -243,7 +245,10 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: F
     return report.join(" · ");
   }
 
-  // Every other run fetches the next third of the sources.
+  // Every other run fetches the next third of the sources, then the model ranks
+  // the new headlines. The ranking is one model call and a few small writes:
+  // it waits on the network, it hardly adds CPU to the run.
   await record("fetch", async () => ingest(env, ms, cfg, fetch, plan ?? { part: await nextFetchPart(env), of: FETCH_PARTS, budget: MAX_NEW_PER_RUN }));
+  await record("rank", () => rankHeadlines(env, ms, cfg));
   return report.join(" · ");
 }

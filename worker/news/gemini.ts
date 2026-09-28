@@ -1,6 +1,7 @@
-// One place that talks to the Gemini API. Market News makes exactly two
-// kinds of model call: the scheduled briefing (strict JSON, headlines only)
-// and the chat (signed-in users only). The key is the GEMINI_API_KEY secret
+// One place that talks to the Gemini API. Market News makes these kinds of
+// model call: the scheduled briefing (strict JSON, headlines only), the
+// calendar ranking, the headline ranking after each fetch, and the chat
+// and AI analyst (signed-in users only). The key is the GEMINI_API_KEY secret
 // and never leaves the Worker.
 
 import type { Env } from "../env";

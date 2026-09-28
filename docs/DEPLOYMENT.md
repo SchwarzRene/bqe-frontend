@@ -117,7 +117,7 @@ back into IP addresses by trying them all (the log warns once per instance).
 
 `GEMINI_API_KEY` is what the Market News briefing and chat use; the Worker
 reads it as `env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
-`POST /api/admin/run/{stack,news,calendar,briefing}`, which runs a job on demand. For
+`POST /api/admin/run/{stack,screen,news,calendar,briefing}`, which runs a job on demand. For
 `npm run dev` locally, put the same names in a `.dev.vars` file
 (git-ignored) instead.
 
@@ -160,6 +160,14 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/ru
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/briefing
 # repeat until "remaining" reaches 0:
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/stack
+```
+
+The chat's S&P 500 screen is built from those prices as they refresh. To
+build it right away from the prices already stored, run this until
+"behind" reaches 0 (25 companies per call):
+
+```bash
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/screen
 ```
 
 **5. Retire `bqe-backend`.** Once the site serves from D1:

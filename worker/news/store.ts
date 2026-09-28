@@ -17,7 +17,9 @@ export interface Item {
   region: string;
   tickers: string[];
   publishedAt: string;
-  score: number;
+  score: number; // the rule-based score below, at the time it was stored
+  importance: number | null; // the model's 1-5 (headlines.ts); null until ranked
+  tone: string | null; // "+", "-" or "0"
 }
 
 const DAY_MS = 86_400_000;
@@ -43,7 +45,8 @@ export function isBlocked(source: string, cfg: Config = CONFIG): boolean {
 
 /**
  * 0-100 from source weight, number of sources, recency, watchlist mentions
- * and words that match today's calendar. Used to pick what the model sees.
+ * and words that match today's calendar. The first estimate; once the model
+ * has ranked a headline, effectiveScore() weighs its importance in.
  */
 export function scoreItem(
   item: { weight?: number; source: string; alsoIn: unknown[]; publishedAt: string; tickers: string[]; title: string },
@@ -303,9 +306,21 @@ export function staleSources(doc: HealthDoc | null, now: number, hours = 24): st
 type Row = {
   id: string; title: string; url: string; source: string; also_in: string; category: string;
   region: string; tickers: string; published_at: string; score: number;
+  importance?: number | null; tone?: string | null;
 };
 
-const COLUMNS = "id, title, url, source, also_in, category, region, tickers, published_at, score";
+const COLUMNS = "id, title, url, source, also_in, category, region, tickers, published_at, score, importance, tone";
+
+/**
+ * What a headline is worth for picking and ordering: the rule-based score
+ * alone until the model has ranked it, then mostly its importance (1-5 →
+ * 12-60) with the rule score (source, other outlets, recency, events) as
+ * the remaining 40. Mirrored in SQL by EFFECTIVE_SCORE_SQL.
+ */
+export function effectiveScore(i: { score: number; importance?: number | null }): number {
+  return i.importance ? Math.round(0.4 * i.score + 12 * i.importance) : i.score;
+}
+export const EFFECTIVE_SCORE_SQL = "(CASE WHEN importance IS NULL THEN score ELSE 0.4 * score + 12 * importance END)";
 
 export function toItem(r: Row): Item {
   return {
@@ -319,6 +334,8 @@ export function toItem(r: Row): Item {
     tickers: parseList(r.tickers),
     publishedAt: r.published_at,
     score: r.score,
+    importance: r.importance ?? null,
+    tone: r.tone ?? null,
   };
 }
 

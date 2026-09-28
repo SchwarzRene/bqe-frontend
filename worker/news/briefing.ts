@@ -8,7 +8,7 @@ import { putDocument } from "../stack";
 import { type CalendarEvent, readCalendar } from "./calendar";
 import { CONFIG, type Config, type Region } from "./feeds";
 import { askJson, model } from "./gemini";
-import { type Item, recentItems } from "./store";
+import { EFFECTIVE_SCORE_SQL, effectiveScore, type Item, recentItems } from "./store";
 import { SLOT_LABEL, type Slot } from "./time";
 
 const MAX_INPUT = 100;
@@ -303,7 +303,7 @@ export async function latestBriefing(env: Env): Promise<Briefing | null> {
 
 /** Rank for the model's input: the stored score with recency taken as of now. */
 export function pickInput(items: Item[], now: number, max = MAX_INPUT): Item[] {
-  const rank = (i: Item) => i.score + Math.max(0, 25 * (1 - (now - Date.parse(i.publishedAt)) / 86_400_000));
+  const rank = (i: Item) => effectiveScore(i) + Math.max(0, 25 * (1 - (now - Date.parse(i.publishedAt)) / 86_400_000));
   return [...items].sort((a, b) => rank(b) - rank(a)).slice(0, max);
 }
 
@@ -318,7 +318,7 @@ export async function buildBriefing(
 ): Promise<string> {
   const previous = await latestBriefing(env);
   if (!force && previous) {
-    const fresh = await env.DB.prepare("SELECT COUNT(*) AS n FROM news_items WHERE fetched_at > ? AND score >= ?")
+    const fresh = await env.DB.prepare(`SELECT COUNT(*) AS n FROM news_items WHERE fetched_at > ? AND ${EFFECTIVE_SCORE_SQL} >= ?`)
       .bind(previous.generatedAt, NEW_ENOUGH)
       .first<{ n: number }>();
     if (!fresh?.n) return "nothing new since the last briefing — skipped";
