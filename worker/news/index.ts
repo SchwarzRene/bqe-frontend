@@ -245,7 +245,7 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: F
     return report.join(" · ");
   }
 
-  // Every other run fetches the next third of the sources, then Gemma ranks
+  // Every other run fetches the next third of the sources, then the model ranks
   // the new headlines. The ranking is one model call and a few small writes:
   // it waits on the network, it hardly adds CPU to the run.
   await record("fetch", async () => ingest(env, ms, cfg, fetch, plan ?? { part: await nextFetchPart(env), of: FETCH_PARTS, budget: MAX_NEW_PER_RUN }));
