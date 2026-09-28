@@ -150,7 +150,7 @@ flowchart LR
 3. **Dedupe.** Same URL → one item. Near-identical titles across sources (e.g. word overlap above ~70%) → one story with several sources. More sources on a story is a signal of importance.
 4. **Filter and pre-score in code.** Drop items older than 24 h, promo patterns ("stocks to buy", "could make you rich"), and blocked publishers. Score the rest from source weight, number of sources, recency, and watchlist ticker mentions.
 5. **AI briefing.** Send the top ~60 headlines (titles, sources, times only) to the model. It returns ranked top stories and summaries (see AI briefing).
-6. **Store.** Save items and the latest briefing; keep 7 days of history.
+6. **Store.** Save items and the latest briefing; keep 180 days of headlines (with a full-text index over their titles) and 7 days of briefings.
 7. **Serve.** The page fetches one JSON endpoint from the Worker.
 
 ## Data model
@@ -199,7 +199,7 @@ The rule-based score (source weight, other outlets, recency, watchlist, today's 
 
 It is the same call as the briefing and the calendar ranking: `GEMINI_MODEL`, with the `GEMINI_FALLBACK_MODEL` list when that model is overloaded or over its quota, and a response schema. Everything is checked before it is stored: ids that were not asked about, importance outside 1–5 and symbols that are not an active S&P 500 ticker, a watchlist or a commodity symbol are dropped. A headline is marked `ranked_at` once it has been sent and answered, so none is sent twice; a failed call, or an answer that is not JSON, marks nothing and the next run tries again. An unranked headline keeps its rule-based score.
 
-Where it is used: the briefing's input and the chat's 200 headlines are picked by `effectiveScore()` — the rule score alone until a headline is ranked, then `0.4 × rule score + 12 × importance` — plus recency; the chat sees each headline's importance and tone; the page orders and draws headlines by it.
+Where it is used: the briefing's input and the chat's 500 headlines are picked by `effectiveScore()` — the rule score alone until a headline is ranked, then `0.4 × rule score + 12 × importance` — plus recency; the chat sees each headline's importance and tone; the page orders and draws headlines by it.
 
 ## AI briefing
 
@@ -254,15 +254,15 @@ The Worker builds the context for each question; the model has no other knowledg
 | Context | Content | How it gets there |
 | --- | --- | --- |
 | Latest briefing | Overviews, top stories, company and commodity lines for all three pages | Always in the system prompt |
-| Headlines, last 24 h | id, title, source, time, region, category, tickers (~200 items, ~5k tokens) | Always in the system prompt |
+| Headlines, last 7 days | The 500 most important by `effectiveScore()` plus a recency bonus that fades over a day (picked in SQL by `topItems()`), listed newest first: id, title, source, time, region, category, importance and tone, tickers (~20k tokens; the whole prompt is ~30k) | Always in the system prompt |
 | Calendar | This week's events with times and one-line results | Always in the system prompt |
 | S&P 500 screen, summary | Breadth, sector averages, and the top and bottom names by day, month, 52-week high/low and RSI (~4k tokens) | Always in the system prompt |
 | Current view | Page, region filter and time zone the user is looking at | Sent with each question |
-| Older headlines | Up to 7 days in D1 | Tool: `search_headlines(query, days, region)` |
+| Older headlines | Up to 180 days in D1, found through a full-text index on titles (`news_fts`, migration 0008): all words, word beginnings (`tariff` finds `tariffs`), newest first, up to 40; any word if nothing has all | Tool: `search_headlines(query, days, region)` |
 | Event results | The calendar's result line (reported EPS vs. estimate) and the headlines about the event | Tool: `get_event_result(event_id)` |
 | Prices | Latest move for a ticker or futures contract, from the existing Yahoo data | Tool: `get_price(symbol)` |
 | S&P 500 screen, full | All ~500 constituents ranked by one figure (returns 1d–1y and YTD, distance from the 52-week high/low and the 50/200-day averages, RSI, volatility, streak), optionally within a sector | Tool: `screen_stocks(sort_by, order, sector, limit)` |
-| One company | Its screen row, live price and the week's headlines about it (by ticker and by name) | Tool: `get_company(query)` |
+| One company | Its screen row, live price and up to 30 headlines about it from the last 30 days (by ticker and by name) | Tool: `get_company(query)` |
 | The wider web (optional) | Anything not in the app's data | Google Search grounding (`NEWS_CHAT_SEARCH = "on"`), off by default |
 
 **Answer rules (system prompt)**
@@ -401,7 +401,7 @@ The fetch jobs, storage and Worker fit in Cloudflare's free tier at this volume.
 
 **Storage**
 
-- D1 (SQLite): headline items (7-day retention, indexed by time, category, region and ticker) and calendar events
+- D1 (SQLite): headline items (180-day retention, indexed by time, category, region and ticker, plus a full-text index on titles) and calendar events. At ~800 headlines a day that is ~150 MB, inside D1's 500 MB per database on the free plan; `KEEP_DAYS` in `worker/news/store.ts` sets it
 - D1 `documents`: the latest briefing as one JSON blob, so a page loads with a single read
 - Previous briefings kept 7 days for the "new vs. continuing" comparison
 
