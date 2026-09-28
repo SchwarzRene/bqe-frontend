@@ -63,7 +63,7 @@ export function itemSources(ids) {
 /** A headline's importance as five bars; hollow when it is an estimate, not the model's. */
 export function hlImp(i) {
   const { value, ai } = headlineImportance(i);
-  return `<span class="hbars${ai ? '' : ' est'}" title="Importance ${value} of 5${ai ? ', ranked by AI' : ', estimated (arrived after the last briefing)'}">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= value ? 'on' : ''}"></i>`).join('')}</span>`;
+  return `<span class="hbars${ai ? '' : ' est'}" title="Importance ${value} of 5${ai ? ', ranked by AI' : ', estimated (not ranked by AI yet)'}">${[1, 2, 3, 4, 5].map((k) => `<i class="${k <= value ? 'on' : ''}"></i>`).join('')}</span>`;
 }
 
 /** One headline row. */

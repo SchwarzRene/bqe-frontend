@@ -10,7 +10,7 @@ import { aiDenied, currentUser } from "../auth";
 import type { Env } from "../env";
 import { crossSite, json, readJson, utcDay } from "../http";
 import { currentRows, findRow, METRICS, type Metric, readScreen, rowLine, type ScreenRow, screenSummary, shortName, sortBy } from "../screen";
-import { latestBriefing, type Briefing } from "./briefing";
+import { latestBriefing, pickInput, type Briefing } from "./briefing";
 import { type CalendarEvent, readCalendar } from "./calendar";
 import { isConversationId, saveTurn } from "./conversations";
 import { GeminiError, generate, model, textOf } from "./gemini";
@@ -146,6 +146,7 @@ Rules:
 - Times: use the time zone the user is viewing in.
 - Tools: search_headlines for anything older than the last 24 hours, get_event_result for the outcome of a calendar event, get_price for a live price, screen_stocks to rank all S&P 500 companies by a figure (optionally within a sector), get_company for one company's figures and recent headlines.
 - The screen is built from daily closes; for a move during today's session, check get_price.
+- Each headline carries an importance (1-5) and a tone (+ good, - bad, 0 neutral) from a first-pass model reading; lean on the important ones, but judge for yourself.
 - End every answer with one last line: SOURCES: followed by the ids of the headlines you used, comma-separated (for example SOURCES: 3fa9c1d2e4b5, 77aa01bc02de). Write SOURCES: none if you used none.`;
 
 function briefingText(b: Briefing | null): string {
@@ -166,7 +167,13 @@ function briefingText(b: Briefing | null): string {
 
 function headlineLine(i: Item): string {
   const also = i.alsoIn.length ? ` (+${i.alsoIn.map((a) => a.source).join(", ")})` : "";
-  return `${i.id} | ${i.publishedAt.slice(0, 16)}Z | ${i.source}${also} | ${i.region} | ${i.category}${i.tickers.length ? ` | ${i.tickers.join(" ")}` : ""} | ${i.title}`;
+  const rank = i.importance ? `${i.importance}${i.tone ?? ""}` : "–";
+  return `${i.id} | ${i.publishedAt.slice(0, 16)}Z | ${i.source}${also} | ${i.region} | ${i.category} | ${rank}${i.tickers.length ? ` | ${i.tickers.join(" ")}` : ""} | ${i.title}`;
+}
+
+/** The chat's share of the day: the most important headlines, shown newest first. */
+export function chatHeadlines(items: Item[], now: number, max = 200): Item[] {
+  return pickInput(items, now, max).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
 function eventLine(e: CalendarEvent): string {
@@ -242,7 +249,7 @@ export async function searchHeadlines(env: Env, query: string, days = 3, region 
     const where = words.map(() => "LOWER(title) LIKE ?").join(` ${joiner} `);
     const binds = [since, ...words.map((w) => `%${w}%`), ...(regionSql ? [region] : [])];
     const rows = await env.DB.prepare(
-      `SELECT id, title, url, source, also_in, category, region, tickers, published_at, score FROM news_items
+      `SELECT id, title, url, source, also_in, category, region, tickers, published_at, score, importance, tone FROM news_items
         WHERE published_at > ? AND (${where})${regionSql} ORDER BY published_at DESC LIMIT 20`,
     )
       .bind(...binds)
@@ -305,7 +312,7 @@ async function answer(
   const now = Date.now();
   const [briefing, items, events, screen] = await Promise.all([
     latestBriefing(env),
-    recentItems(env, now, 24, 200),
+    recentItems(env, now, 24, 600).then((all) => chatHeadlines(all, now)),
     readCalendar(env, now - 7 * 86_400_000, now + 8 * 86_400_000),
     // A missing or unreadable screen leaves the chat as it was before it.
     readScreen(env).then(currentRows, () => [] as ScreenRow[]),
@@ -316,7 +323,7 @@ async function answer(
   const system = [
     RULES,
     `LATEST BRIEFING\n${briefingText(briefing)}`,
-    `HEADLINES, LAST 24 HOURS (id | time UTC | source | region | category | tickers | title)\n${items.map(headlineLine).join("\n")}`,
+    `HEADLINES, LAST 24 HOURS, the ${items.length} most important (id | time UTC | source | region | category | importance 1-5 and tone +/-/0 | tickers | title)\n${items.map(headlineLine).join("\n")}`,
     `CALENDAR, THIS WEEK (id | start UTC | title | region | result)\n${events.map(eventLine).join("\n")}`,
     `S&P 500 SCREEN\n${screenSummary(screen)}`,
   ].join("\n\n");
@@ -354,7 +361,7 @@ async function answer(
       if (name === "search_headlines") {
         const found = await searchHeadlines(env, args?.query ?? "", args?.days, args?.region);
         found.forEach((i) => known.set(i.id, i));
-        result = { headlines: found.map((i) => ({ id: i.id, time: i.publishedAt, source: i.source, region: i.region, title: i.title })) };
+        result = { headlines: found.map((i) => ({ id: i.id, time: i.publishedAt, source: i.source, region: i.region, importance: i.importance, tone: i.tone, title: i.title })) };
       } else if (name === "get_event_result") {
         result = await eventResult(env, String(args?.event_id ?? ""), events, known);
       } else if (name === "screen_stocks") {
@@ -440,14 +447,14 @@ async function company(env: Env, rows: ScreenRow[], query: string, known: Map<st
     screen: rowLine(row),
     asOf: row.date,
     live: price,
-    headlines: headlines.map((i) => ({ id: i.id, time: i.publishedAt, source: i.source, title: i.title })),
+    headlines: headlines.map((i) => ({ id: i.id, time: i.publishedAt, source: i.source, importance: i.importance, tone: i.tone, title: i.title })),
   };
 }
 
 async function tickerHeadlines(env: Env, ticker: string): Promise<Item[]> {
   const since = iso(Date.now() - 7 * 86_400_000);
   const rows = await env.DB.prepare(
-    `SELECT n.id, n.title, n.url, n.source, n.also_in, n.category, n.region, n.tickers, n.published_at, n.score
+    `SELECT n.id, n.title, n.url, n.source, n.also_in, n.category, n.region, n.tickers, n.published_at, n.score, n.importance, n.tone
        FROM news_item_tickers t JOIN news_items n ON n.id = t.item_id
       WHERE t.ticker = ? AND n.published_at > ? ORDER BY n.published_at DESC LIMIT 12`,
   )

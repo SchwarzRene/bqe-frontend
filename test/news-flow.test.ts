@@ -13,6 +13,7 @@ import { handleAnalysis, priceStats } from "../worker/news/analyst";
 import { toProfile } from "../worker/profile";
 import { rankCalendar } from "../worker/news/rank";
 import { mergeScreen, screenRow } from "../worker/screen";
+import { rankHeadlines } from "../worker/news/headlines";
 import { ingest as ingestPart, pruneNews } from "../worker/news/store";
 
 // Every source in one run: the rotation over runs is tested on its own.
@@ -94,6 +95,14 @@ function internet(opts: { briefing?: (prompt: string) => unknown; rank?: (prompt
         ? [{ symbol: "NVDA", name: "NVIDIA Corporation", marketCap: "$4,000,000,000,000", time: "time-after-hours", epsForecast: "$1.00", eps: "$1.10" }]
         : [];
       return new Response(JSON.stringify({ data: { rows } }));
+    }
+    if (url.includes("generativelanguage") && url.includes("gemma")) {
+      // Gemma, ranking headlines: GDP news matters most, Nvidia is NVDA.
+      const lines: string[] = body.contents[0].parts[0].text.split("Headlines (id | source | title):\n")[1].split("\n");
+      return gemini("```json\n" + JSON.stringify(lines.map((l) => {
+        const [id, , title] = l.split(" | ");
+        return { id, i: /GDP/.test(title) ? 5 : 2, t: /Nvidia/.test(title) ? ["NVDA", "MADE.UP"] : [], s: /recover/.test(title) ? "+" : "0" };
+      })) + "\n```");
     }
     if (url.includes("generativelanguage")) {
       if (body?.generationConfig?.responseMimeType === "application/json") {
@@ -323,10 +332,18 @@ describe("Market News flow", () => {
     // The calendar's other half: earnings, dated events, rules.
     report = await tick("2026-09-24T14:30:00Z");
     expect(report).toMatch(/^calendar \(first, part 2\): dated: 0, rules: \d+, nasdaq: 1, yahoo: 0$/);
-    // No headlines yet, so no briefing: this run fetches.
+    // No headlines yet, so no briefing: this run fetches, and Gemma ranks
+    // what came in, in the same run and with one call.
     report = await tick("2026-09-24T14:45:00Z");
-    expect(report).toMatch(/^fetch: \{"fetched":9,"added":5/);
-    expect(calls.some((c) => c.url.includes("generativelanguage"))).toBe(false);
+    expect(report).toMatch(/^fetch: \{"fetched":9,"added":5.* · rank: 5 of 5 ranked by gemma-3-27b-it, 1 tied to companies$/);
+    expect(calls.filter((c) => c.url.includes("generativelanguage")).map((c) => c.url.includes("gemma"))).toEqual([true]);
+    const ranked = env.DB.raw.prepare("SELECT title, importance, tone, tickers FROM news_items WHERE title LIKE '%Nvidia%' OR title LIKE 'US GDP%' ORDER BY title").all();
+    expect(ranked).toEqual([
+      { title: "Nvidia shares recover part of this week's losses", importance: 2, tone: "+", tickers: '["NVDA"]' },
+      { title: "US GDP growth revised up in third estimate", importance: 5, tone: "0", tickers: "[]" },
+    ]);
+    // Nothing left to rank: the next fetch run makes no model call for it.
+    expect(await rankHeadlines(env, Date.parse("2026-09-24T14:50:00Z"), cfg)).toBe("nothing to rank");
     // Now the first briefing, in a run of its own.
     report = await tick("2026-09-24T15:00:00Z");
     expect(report).toBe("briefing (first): briefing written from 5 headlines");

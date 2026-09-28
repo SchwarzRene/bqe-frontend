@@ -12,6 +12,7 @@ import { handleAnalysis, handleChat, handleNews, newsTick } from "./news";
 import { handleConversations } from "./news/conversations";
 import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
+import { rankHeadlines } from "./news/headlines";
 import { ingest } from "./news/store";
 import { backfillScreen } from "./screen";
 import { refreshStack, serveStackFile } from "./stack";
@@ -135,7 +136,7 @@ async function adminRun(env: Env, job: string): Promise<unknown> {
     case "screen":
       return { screen: await backfillScreen(env) };
     case "news":
-      return { fetch: await ingest(env) };
+      return { fetch: await ingest(env), rank: await rankHeadlines(env) };
     case "calendar":
       return { calendar: await refreshCalendar(env) };
     default:

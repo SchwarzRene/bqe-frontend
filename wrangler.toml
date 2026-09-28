@@ -92,6 +92,10 @@ GEMINI_MODEL = "gemini-3.5-flash-lite"
 # changed; a model is never asked twice, so while it is the main model the
 # list effectively starts at gemini-3.1-flash-lite.
 GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash"
+# Gemma ranks every headline after each fetch (importance 1-5, tone, and
+# the S&P 500 companies it is about; worker/news/headlines.ts). No fallback:
+# a headline it could not rank keeps its rule-based score. "off" for none.
+GEMMA_MODEL = "gemma-3-27b-it"
 NEWS_CHAT_SEARCH = "off"
 NEWS_CHAT_DAILY_LIMIT = "50"
 # New accounts per hour, site-wide (on top of 5 per visitor per day).
