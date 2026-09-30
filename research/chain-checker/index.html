@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Chain Checker: score an LLM chain against a labelled corpus and let a modifier LLM rewrite its system prompt in the loop.">
+<title>Chain Checker — Tuning LLM Chain Prompts in the Loop</title>
+<link rel="icon" href="/assets/images/logo.png" type="image/png">
+<style>
+  :root{
+    --fg:#A8B6C9; --fg-strong:#EEF2F8; --muted:#7C8DA6;
+    --accent:#F0B429; --accent-light:#FFD166; --accent-dark:#C88F14;
+    --bg:#050810; --bg-soft:#070B15; --bg-muted:#0F1A2C; --card:#070B15;
+    --border:rgba(240,180,41,0.18); --navy:rgba(19,35,61,0.5);
+    --green:#6EE796; --red:#F87171;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg);}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px 96px;}
+  header{background:var(--bg-soft);border-top:3px solid var(--accent);border-bottom:3px solid var(--accent);color:var(--fg-strong);padding:64px 24px 56px;text-align:center;position:relative;}
+  header::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(240,180,41,.05) 0%,transparent 50%,rgba(240,180,41,.05) 100%);pointer-events:none;}
+  header h1{margin:0 0 8px;font-size:2.6rem;letter-spacing:-.5px;color:var(--accent);position:relative;}
+  header p{margin:0;font-size:1.12rem;color:var(--fg);position:relative;}
+  .badges{margin-top:22px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;position:relative;}
+  .badge{background:rgba(240,180,41,.08);border:1px solid rgba(240,180,41,.35);border-radius:999px;padding:6px 16px;font-size:.9rem;font-weight:600;color:var(--accent);}
+  h2{font-size:1.7rem;margin:56px 0 0;letter-spacing:-.3px;color:var(--fg-strong);background:var(--bg-soft);border-top:3px solid var(--accent);border-bottom:1px solid var(--border);padding:20px 24px;scroll-margin-top:12px;}
+  h2 .num{color:var(--accent);font-weight:800;}
+  h3{font-size:1.2rem;margin:32px 0 4px;color:var(--fg-strong);}
+  h4{font-size:1rem;margin:22px 0 2px;color:var(--accent-light);}
+  p{color:var(--fg);} p.lead{color:var(--muted);margin-top:4px;} strong{color:var(--fg-strong);}
+  a{color:var(--accent);} a:hover{color:var(--accent-light);}
+  code,pre{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;}
+  code{background:var(--bg-muted);color:var(--accent-light);padding:2px 6px;border-radius:5px;font-size:.9em;}
+  pre{background:#0F1A2C;color:#EEF2F8;padding:18px 20px;border-radius:10px;overflow:auto;font-size:.85rem;line-height:1.5;border:1px solid var(--border);}
+  pre .k{color:#59C0FF;} pre .s{color:#6EE796;} pre .c{color:#7C8DA6;font-style:italic;} pre .n{color:#F87171;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px 26px;margin:18px 0;}
+  table{border-collapse:collapse;width:100%;margin:18px 0;font-size:.93rem;}
+  th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;color:var(--fg);vertical-align:top;}
+  th{background:var(--navy);color:var(--accent);font-weight:600;}
+  td.r,th.r{text-align:right;}
+  .pill{display:inline-block;background:var(--bg-muted);border:1px solid var(--border);border-radius:6px;padding:1px 8px;font-size:.85em;font-family:monospace;color:var(--accent-light);}
+  .key{border-left:4px solid var(--accent);background:rgba(240,180,41,.06);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;color:var(--fg);}
+  .key strong{color:var(--accent);}
+  .warn{border-left:4px solid var(--red);background:rgba(248,113,113,.07);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;}
+  .warn strong{color:var(--red);}
+  .ok{border-left:4px solid var(--green);background:rgba(110,231,150,.07);padding:12px 18px;border-radius:0 8px 8px 0;margin:16px 0;}
+  .ok strong{color:var(--green);}
+  nav.toc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 24px;margin:28px 0;}
+  nav.toc strong{color:var(--fg-strong);} nav.toc a{color:var(--accent);text-decoration:none;} nav.toc a:hover{color:var(--accent-light);text-decoration:underline;}
+  nav.toc ol{margin:6px 0;padding-left:22px;columns:2;} @media(max-width:640px){nav.toc ol{columns:1;}}
+  .muted{color:var(--muted);}
+  /* flow diagram */
+  .flow{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:20px 0;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;}
+  .flow-row{display:flex;align-items:stretch;border-bottom:1px solid var(--border);}
+  .flow-row:last-child{border-bottom:none;}
+  .flow-stage{flex:0 0 160px;padding:12px 14px;background:rgba(240,180,41,.10);color:var(--accent);font-weight:700;border-right:1px solid var(--border);display:flex;align-items:center;}
+  .flow-body{flex:1;padding:12px 14px;color:var(--fg);}
+  .flow-body .sh{color:var(--green);}
+  .arrowdown{text-align:center;color:var(--accent);font-size:1.1rem;padding:4px;}
+  /* file map */
+  .fm{border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:"SF Mono",monospace;font-size:.8rem;margin:18px 0;}
+  .fm div{padding:6px 14px;border-bottom:1px solid var(--border);}
+  .fm div:last-child{border-bottom:none;}
+  .fm .f{color:var(--accent-light);} .fm .d{color:var(--muted);}
+  @media(max-width:640px){header h1{font-size:2rem;} .flow-stage{flex-basis:108px;}}
+
+  /* ── Version / findings log ──────────────────────────────────────── */
+  .vlog{margin:18px 0;}
+  .ventry{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 20px;margin:14px 0;}
+  .ventry h4{margin:0 0 8px;color:var(--fg-strong);font-size:1.05rem;}
+  .vtag{display:inline-block;background:rgba(240,180,41,.15);border:1px solid rgba(240,180,41,.4);color:var(--accent);border-radius:6px;padding:1px 9px;font-family:monospace;font-size:.82rem;font-weight:700;margin-right:10px;}
+  .ventry .row{margin:5px 0;font-size:.94rem;}
+  .ventry .lbl{color:var(--accent);font-weight:700;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;margin-right:6px;}
+  .ventry.fix{border-left-color:var(--red);} .ventry.fix .vtag{color:var(--red);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.12);}
+  .ventry.fix .lbl{color:var(--red);}
+  .ventry.win{border-left-color:var(--green);} .ventry.win .vtag{color:var(--green);border-color:rgba(110,231,150,.45);background:rgba(110,231,150,.12);}
+  .ventry.win .lbl{color:var(--green);}
+  .ventry.live .vtag{background:rgba(89,192,255,.12);border-color:rgba(89,192,255,.45);color:#59C0FF;}
+
+  /* ── Static background network (frozen echo of the homepage hero) ──── */
+  .bg-network {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg, #070b15 0%, #0a1220 55%, #050810 100%);
+    overflow: hidden;
+  }
+  .bg-network-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .bg-network::after {
+    /* soft vignette so the network fades at the edges instead of stopping hard */
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 38%, rgba(5,8,16,0) 0%, rgba(5,8,16,0.35) 60%, rgba(3,5,10,0.82) 100%);
+  }
+  body { background: transparent; }
+  .wrap {
+    position: relative;
+    z-index: 1;
+    background: var(--bg);
+    box-shadow: 0 0 0 1px var(--border), 0 40px 120px rgba(0,0,0,0.55);
+  }
+  header { position: relative; z-index: 1; }
+  /* Wide tables scroll inside their own box on phones instead of the page. */
+  @media(max-width:640px){table{display:block;overflow-x:auto;} .wrap{padding:0 16px 72px;}}
+</style>
+</head>
+<body>
+<div class="bg-network"><svg class="bg-network-svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><defs><radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="rgba(240,180,60,0.30)"/><stop offset="100%" stop-color="rgba(240,180,60,0)"/></radialGradient></defs><g stroke="rgba(214,228,248,0.10)" stroke-width="1"><line x1="143.4" y1="93.9" x2="369.1" y2="178.6"/><line x1="143.4" y1="93.9" x2="258.9" y2="335.0"/><line x1="369.1" y1="178.6" x2="488.6" y2="80.6"/><line x1="369.1" y1="178.6" x2="258.9" y2="335.0"/><line x1="369.1" y1="178.6" x2="551.4" y2="247.2"/><line x1="488.6" y1="80.6" x2="646.5" y2="55.2"/><line x1="488.6" y1="80.6" x2="551.4" y2="247.2"/><line x1="646.5" y1="55.2" x2="881.0" y2="115.1"/><line x1="646.5" y1="55.2" x2="551.4" y2="247.2"/><line x1="881.0" y1="115.1" x2="750.6" y2="293.5"/><line x1="881.0" y1="115.1" x2="885.6" y2="333.5"/><line x1="1108.2" y1="96.9" x2="1300.8" y2="134.8"/><line x1="1108.2" y1="96.9" x2="1107.7" y2="224.3"/><line x1="1108.2" y1="96.9" x2="1254.7" y2="253.9"/><line x1="1300.8" y1="134.8" x2="1528.8" y2="98.0"/><line x1="1300.8" y1="134.8" x2="1107.7" y2="224.3"/><line x1="1300.8" y1="134.8" x2="1254.7" y2="253.9"/><line x1="1528.8" y1="98.0" x2="1254.7" y2="253.9"/><line x1="1528.8" y1="98.0" x2="1460.5" y2="341.4"/><line x1="124.1" y1="371.6" x2="258.9" y2="335.0"/><line x1="124.1" y1="371.6" x2="118.5" y2="485.5"/><line x1="258.9" y1="335.0" x2="118.5" y2="485.5"/><line x1="258.9" y1="335.0" x2="384.5" y2="435.6"/><line x1="258.9" y1="335.0" x2="451.3" y2="458.9"/><line x1="551.4" y1="247.2" x2="750.6" y2="293.5"/><line x1="551.4" y1="247.2" x2="384.5" y2="435.6"/><line x1="750.6" y1="293.5" x2="885.6" y2="333.5"/><line x1="750.6" y1="293.5" x2="737.9" y2="504.3"/><line x1="1107.7" y1="224.3" x2="1254.7" y2="253.9"/><line x1="1254.7" y1="253.9" x2="1460.5" y2="341.4"/><line x1="1460.5" y1="341.4" x2="1374.2" y2="548.3"/><line x1="1460.5" y1="341.4" x2="1483.9" y2="429.0"/><line x1="118.5" y1="485.5" x2="80.7" y2="703.8"/><line x1="384.5" y1="435.6" x2="451.3" y2="458.9"/><line x1="737.9" y1="504.3" x2="890.8" y2="579.5"/><line x1="737.9" y1="504.3" x2="728.2" y2="662.1"/><line x1="890.8" y1="579.5" x2="728.2" y2="662.1"/><line x1="890.8" y1="579.5" x2="915.4" y2="620.9"/><line x1="1167.1" y1="569.8" x2="1374.2" y2="548.3"/><line x1="1167.1" y1="569.8" x2="1064.9" y2="704.3"/><line x1="1167.1" y1="569.8" x2="1215.4" y2="716.1"/><line x1="1167.1" y1="569.8" x2="1160.1" y2="821.0"/><line x1="1374.2" y1="548.3" x2="1483.9" y2="429.0"/><line x1="1374.2" y1="548.3" x2="1426.3" y2="642.8"/><line x1="1483.9" y1="429.0" x2="1426.3" y2="642.8"/><line x1="80.7" y1="703.8" x2="264.0" y2="767.0"/><line x1="80.7" y1="703.8" x2="75.6" y2="963.9"/><line x1="264.0" y1="767.0" x2="418.4" y2="726.2"/><line x1="264.0" y1="767.0" x2="304.9" y2="984.7"/><line x1="418.4" y1="726.2" x2="522.9" y2="866.2"/><line x1="728.2" y1="662.1" x2="915.4" y2="620.9"/><line x1="728.2" y1="662.1" x2="747.8" y2="926.0"/><line x1="915.4" y1="620.9" x2="1064.9" y2="704.3"/><line x1="915.4" y1="620.9" x2="881.7" y2="838.4"/><line x1="1064.9" y1="704.3" x2="1215.4" y2="716.1"/><line x1="1064.9" y1="704.3" x2="1160.1" y2="821.0"/><line x1="1215.4" y1="716.1" x2="1426.3" y2="642.8"/><line x1="1215.4" y1="716.1" x2="1160.1" y2="821.0"/><line x1="1426.3" y1="642.8" x2="1549.8" y2="940.4"/><line x1="75.6" y1="963.9" x2="304.9" y2="984.7"/><line x1="304.9" y1="984.7" x2="522.9" y2="866.2"/><line x1="522.9" y1="866.2" x2="747.8" y2="926.0"/><line x1="747.8" y1="926.0" x2="881.7" y2="838.4"/><line x1="1160.1" y1="821.0" x2="1379.5" y2="976.0"/><line x1="1379.5" y1="976.0" x2="1549.8" y2="940.4"/></g><g><circle cx="143.4" cy="93.9" r="24.9" fill="url(#nodeGlow)" opacity="0.98"/><circle cx="143.4" cy="93.9" r="4.14" fill="rgba(255,243,214,0.98)"/><circle cx="369.1" cy="178.6" r="18.6" fill="url(#nodeGlow)" opacity="0.58"/><circle cx="369.1" cy="178.6" r="3.11" fill="rgba(255,243,214,0.64)"/><circle cx="488.6" cy="80.6" r="22.3" fill="url(#nodeGlow)" opacity="0.81"/><circle cx="488.6" cy="80.6" r="3.72" fill="rgba(255,243,214,0.84)"/><circle cx="646.5" cy="55.2" r="21.7" fill="url(#nodeGlow)" opacity="0.78"/><circle cx="646.5" cy="55.2" r="3.62" fill="rgba(255,243,214,0.81)"/><circle cx="881.0" cy="115.1" r="19.5" fill="url(#nodeGlow)" opacity="0.64"/><circle cx="881.0" cy="115.1" r="3.25" fill="rgba(255,243,214,0.69)"/><circle cx="1108.2" cy="96.9" r="21.1" fill="url(#nodeGlow)" opacity="0.74"/><circle cx="1108.2" cy="96.9" r="3.52" fill="rgba(255,243,214,0.78)"/><circle cx="1300.8" cy="134.8" r="17.1" fill="url(#nodeGlow)" opacity="0.48"/><circle cx="1300.8" cy="134.8" r="2.85" fill="rgba(255,243,214,0.56)"/><circle cx="1528.8" cy="98.0" r="20.6" fill="url(#nodeGlow)" opacity="0.71"/><circle cx="1528.8" cy="98.0" r="3.44" fill="rgba(255,243,214,0.75)"/><circle cx="124.1" cy="371.6" r="23.0" fill="url(#nodeGlow)" opacity="0.86"/><circle cx="124.1" cy="371.6" r="3.84" fill="rgba(255,243,214,0.88)"/><circle cx="258.9" cy="335.0" r="15.6" fill="url(#nodeGlow)" opacity="0.39"/><circle cx="258.9" cy="335.0" r="2.61" fill="rgba(255,243,214,0.48)"/><circle cx="551.4" cy="247.2" r="23.6" fill="url(#nodeGlow)" opacity="0.90"/><circle cx="551.4" cy="247.2" r="3.94" fill="rgba(255,243,214,0.91)"/><circle cx="750.6" cy="293.5" r="23.7" fill="url(#nodeGlow)" opacity="0.90"/><circle cx="750.6" cy="293.5" r="3.95" fill="rgba(255,243,214,0.92)"/><circle cx="885.6" cy="333.5" r="23.3" fill="url(#nodeGlow)" opacity="0.88"/><circle cx="885.6" cy="333.5" r="3.88" fill="rgba(255,243,214,0.90)"/><circle cx="1107.7" cy="224.3" r="21.7" fill="url(#nodeGlow)" opacity="0.78"/><circle cx="1107.7" cy="224.3" r="3.62" fill="rgba(255,243,214,0.81)"/><circle cx="1254.7" cy="253.9" r="22.6" fill="url(#nodeGlow)" opacity="0.83"/><circle cx="1254.7" cy="253.9" r="3.76" fill="rgba(255,243,214,0.86)"/><circle cx="1460.5" cy="341.4" r="19.4" fill="url(#nodeGlow)" opacity="0.63"/><circle cx="1460.5" cy="341.4" r="3.23" fill="rgba(255,243,214,0.68)"/><circle cx="118.5" cy="485.5" r="18.8" fill="url(#nodeGlow)" opacity="0.59"/><circle cx="118.5" cy="485.5" r="3.13" fill="rgba(255,243,214,0.65)"/><circle cx="384.5" cy="435.6" r="15.1" fill="url(#nodeGlow)" opacity="0.35"/><circle cx="384.5" cy="435.6" r="2.51" fill="rgba(255,243,214,0.45)"/><circle cx="451.3" cy="458.9" r="22.6" fill="url(#nodeGlow)" opacity="0.83"/><circle cx="451.3" cy="458.9" r="3.77" fill="rgba(255,243,214,0.86)"/><circle cx="737.9" cy="504.3" r="19.5" fill="url(#nodeGlow)" opacity="0.64"/><circle cx="737.9" cy="504.3" r="3.25" fill="rgba(255,243,214,0.69)"/><circle cx="890.8" cy="579.5" r="20.3" fill="url(#nodeGlow)" opacity="0.69"/><circle cx="890.8" cy="579.5" r="3.39" fill="rgba(255,243,214,0.73)"/><circle cx="1167.1" cy="569.8" r="16.9" fill="url(#nodeGlow)" opacity="0.47"/><circle cx="1167.1" cy="569.8" r="2.82" fill="rgba(255,243,214,0.55)"/><circle cx="1374.2" cy="548.3" r="25.0" fill="url(#nodeGlow)" opacity="0.99"/><circle cx="1374.2" cy="548.3" r="4.17" fill="rgba(255,243,214,0.99)"/><circle cx="1483.9" cy="429.0" r="21.3" fill="url(#nodeGlow)" opacity="0.75"/><circle cx="1483.9" cy="429.0" r="3.55" fill="rgba(255,243,214,0.79)"/><circle cx="80.7" cy="703.8" r="15.3" fill="url(#nodeGlow)" opacity="0.36"/><circle cx="80.7" cy="703.8" r="2.55" fill="rgba(255,243,214,0.46)"/><circle cx="264.0" cy="767.0" r="23.6" fill="url(#nodeGlow)" opacity="0.90"/><circle cx="264.0" cy="767.0" r="3.93" fill="rgba(255,243,214,0.91)"/><circle cx="418.4" cy="726.2" r="17.4" fill="url(#nodeGlow)" opacity="0.50"/><circle cx="418.4" cy="726.2" r="2.90" fill="rgba(255,243,214,0.58)"/><circle cx="728.2" cy="662.1" r="15.2" fill="url(#nodeGlow)" opacity="0.36"/><circle cx="728.2" cy="662.1" r="2.53" fill="rgba(255,243,214,0.45)"/><circle cx="915.4" cy="620.9" r="15.1" fill="url(#nodeGlow)" opacity="0.35"/><circle cx="915.4" cy="620.9" r="2.51" fill="rgba(255,243,214,0.45)"/><circle cx="1064.9" cy="704.3" r="17.7" fill="url(#nodeGlow)" opacity="0.52"/><circle cx="1064.9" cy="704.3" r="2.95" fill="rgba(255,243,214,0.59)"/><circle cx="1215.4" cy="716.1" r="18.3" fill="url(#nodeGlow)" opacity="0.56"/><circle cx="1215.4" cy="716.1" r="3.05" fill="rgba(255,243,214,0.63)"/><circle cx="1426.3" cy="642.8" r="24.5" fill="url(#nodeGlow)" opacity="0.95"/><circle cx="1426.3" cy="642.8" r="4.08" fill="rgba(255,243,214,0.96)"/><circle cx="75.6" cy="963.9" r="15.8" fill="url(#nodeGlow)" opacity="0.40"/><circle cx="75.6" cy="963.9" r="2.64" fill="rgba(255,243,214,0.49)"/><circle cx="304.9" cy="984.7" r="17.4" fill="url(#nodeGlow)" opacity="0.50"/><circle cx="304.9" cy="984.7" r="2.90" fill="rgba(255,243,214,0.58)"/><circle cx="522.9" cy="866.2" r="18.7" fill="url(#nodeGlow)" opacity="0.58"/><circle cx="522.9" cy="866.2" r="3.12" fill="rgba(255,243,214,0.65)"/><circle cx="747.8" cy="926.0" r="22.0" fill="url(#nodeGlow)" opacity="0.79"/><circle cx="747.8" cy="926.0" r="3.66" fill="rgba(255,243,214,0.82)"/><circle cx="881.7" cy="838.4" r="22.4" fill="url(#nodeGlow)" opacity="0.82"/><circle cx="881.7" cy="838.4" r="3.73" fill="rgba(255,243,214,0.85)"/><circle cx="1160.1" cy="821.0" r="22.7" fill="url(#nodeGlow)" opacity="0.84"/><circle cx="1160.1" cy="821.0" r="3.78" fill="rgba(255,243,214,0.86)"/><circle cx="1379.5" cy="976.0" r="22.2" fill="url(#nodeGlow)" opacity="0.81"/><circle cx="1379.5" cy="976.0" r="3.70" fill="rgba(255,243,214,0.84)"/><circle cx="1549.8" cy="940.4" r="21.0" fill="url(#nodeGlow)" opacity="0.73"/><circle cx="1549.8" cy="940.4" r="3.50" fill="rgba(255,243,214,0.77)"/></g></svg></div>
+
+<header>
+  <h1>Chain Checker</h1>
+  <p>A test bench for LLM chains: score a chain against a labelled corpus, then let a
+  second LLM rewrite its system prompt, epoch by epoch, until it scores higher.<br>
+  This document describes how the checker and the training loop work.</p>
+  <div class="badges">
+    <span class="badge">LLM in the loop</span>
+    <span class="badge">labelled YAML corpora</span>
+    <span class="badge">accuracy first, tokens second</span>
+    <span class="badge">resumable runs</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section style="margin-top:34px;">
+  <h3 style="margin:0 0 12px;">What is Chain Checker?</h3>
+  <p>An LLM chain is a prompt, a model and a parser wired together. Whether it works is usually
+  judged by reading a handful of outputs, and whether a prompt change helped is judged the same
+  way. Chain Checker replaces that with a measurement. A chain runs against a fixed corpus of
+  cases, each with an expected output, and every key of the real output is compared with the
+  label. The result is an accuracy, a token count and a list of every case the chain got wrong.</p>
+
+  <p>On top of that measurement sits a training loop. Each epoch it scores the chain, hands the
+  prompt and the report to a separate <strong>modifier</strong> LLM, and asks it for a better
+  prompt. The next epoch scores the new prompt and the loop repeats. The goal is a prompt that
+  scores higher without costing more tokens, found by the loop rather than by hand.</p>
+
+  <p>It is written in Python on LangChain and Pydantic. The modifier runs either through a LiteLLM
+  proxy or on a local Ollama server, so a small local model can tune the prompt of a larger
+  hosted one.</p>
+</section>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#overview">Two tools, one measurement</a></li>
+    <li><a href="#corpus">The corpus</a></li>
+    <li><a href="#chain">What a chain must expose</a></li>
+    <li><a href="#metrics">Metrics</a></li>
+    <li><a href="#loop">The training loop</a></li>
+    <li><a href="#instruction">What the modifier reads</a></li>
+    <li><a href="#steering">Steering: small steps, then a restart</a></li>
+    <li><a href="#resume">Caching and resuming</a></li>
+    <li><a href="#usage">Running it</a></li>
+    <li><a href="#filemap">File map</a></li>
+  </ol>
+</nav>
+
+<h2 id="overview">Two tools, one measurement</h2>
+<table>
+  <tr><th>Tool</th><th>What it does</th><th>Output</th></tr>
+  <tr><td><code>checker</code></td><td>One pass over a corpus. Every case is run through the chain and its
+  output compared with the label, key by key.</td><td><code>report.html</code>, pass count</td></tr>
+  <tr><td><code>trainingLoop</code></td><td>The same pass once per epoch, then a modifier LLM rewrites the
+  chain's <code>SYSTEM_PROMPT</code> for the next epoch.</td><td>per-epoch reports, a run summary with
+  trend charts, an overview across runs</td></tr>
+</table>
+
+<div class="flow">
+  <div class="flow-row"><div class="flow-stage">Corpus</div><div class="flow-body">labelled cases in <code>.yaml</code> · <span class="sh">input</span> validated against the chain's <code>InputSchema</code></div></div>
+  <div class="flow-row"><div class="flow-stage">Model</div><div class="flow-body">wraps the registered chain · captures token usage per call</div></div>
+  <div class="flow-row"><div class="flow-stage">Loop</div><div class="flow-body">run every case · compare output with label · cache each prediction</div></div>
+  <div class="flow-row"><div class="flow-stage">Metrics</div><div class="flow-body">accuracy · token usage · parsing failures · mispredictions</div></div>
+  <div class="flow-row"><div class="flow-stage">Modifier</div><div class="flow-body">reads the prompt and the reports · writes a new <code>SYSTEM_PROMPT</code> <span class="muted">(training loop only)</span></div></div>
+</div>
+<div class="arrowdown">▲ &nbsp; <span class="muted">next epoch starts from the new prompt</span></div>
+
+<h2 id="corpus">The corpus</h2>
+<p>A corpus is a YAML file of cases. Each case has an <code>id</code>, the <code>input</code> the chain
+receives and the <code>output</code> keys it is graded on. An optional <code>info</code> block is carried
+along for a human reader and never compared.</p>
+<pre><span class="k">cases:</span>
+  - <span class="k">id:</span> 2
+    <span class="k">input:</span>
+      <span class="k">text:</span> <span class="s">"With ACME, your home just works."</span>
+      <span class="k">threshold:</span> 0.8
+    <span class="k">output:</span>
+      <span class="k">verdicts:</span>
+        <span class="k">brand-uppercase:</span> true
+        <span class="k">no-exclamation-spam:</span> true
+      <span class="k">passed:</span> true</pre>
+<p>Everything is checked before the first model call. That covers ids that are unique and safe as
+file names, inputs that match <code>InputSchema</code> exactly, and output keys that the chain's
+<code>OutputSchema</code> actually declares. The label may check just a subset of the output.
+A broken corpus fails in a second, not after the fortieth paid call.</p>
+<div class="key"><strong>Held-out cases.</strong> A second corpus passed as <code>--val-file</code> is scored
+every epoch for the report only. The modifier never sees it, so it shows whether a gain carries
+over to cases the rewrite had no access to.</div>
+
+<h2 id="chain">What a chain must expose</h2>
+<p>The checker finds a chain by name in the host project's registry and reads a few class
+attributes from it:</p>
+<table>
+  <tr><th>Name</th><th>Role</th></tr>
+  <tr><td><code>name</code></td><td>the chain type that <code>--chain-type</code> selects</td></tr>
+  <tr><td><code>InputSchema</code></td><td>validates each case's <code>input</code> before the chain runs</td></tr>
+  <tr><td><code>OutputSchema</code></td><td>declares every key a label may check</td></tr>
+  <tr><td><code>tier</code></td><td>the LLM tier <code>build()</code> is called with; <code>--chain-tier</code> overrides it</td></tr>
+  <tr><td><code>build()</code></td><td>returns the LangChain <code>Runnable</code> that answers a call</td></tr>
+</table>
+<p>To be trainable, a chain also keeps its prompt in a module-level <code>SYSTEM_PROMPT</code>
+string, which the loop replaces directly. If the prompt has placeholders filled with live data,
+the prompt is split into three pieces:</p>
+<ol>
+  <li><strong><code>SYSTEM_PROMPT</code></strong>: the rewritable template, the only piece the modifier edits.</li>
+  <li><strong><code>generateSystemPrompt(payload)</code></strong>: resolves the template on every call, so a
+  placeholder always renders current data. Its return value is exactly what the modifier reads.</li>
+  <li><strong><code>insertInput(prompt, payload)</code></strong>: appends the case's own data. The modifier
+  never sees it, so a rewrite cannot overfit to a single input.</li>
+</ol>
+
+<h2 id="metrics">Metrics</h2>
+<p>Each output key is graded by a metric that matches its type. Booleans, floats, keywords,
+lists, pairs and single values each have their own comparison.</p>
+<table>
+  <tr><th>Metric</th><th>Measures</th></tr>
+  <tr><td>Accuracy</td><td>share of cases where every checked value matches the label, overall and per rule</td></tr>
+  <tr><td>Parsing</td><td>replies that produced a scoreable answer vs. replies that did not</td></tr>
+  <tr><td>Tokens</td><td>prompt, completion and total tokens of the chain, and separately of the modifier</td></tr>
+  <tr><td>Mispredicted</td><td>every wrong case with its input, expected and actual value, which is what the modifier reads</td></tr>
+</table>
+<p>Replies that are almost JSON, such as an unescaped quote inside a string or reasoning wrapped in
+<code>&lt;think&gt;</code> tags, are repaired before parsing. A chain is graded on what it answered, not on how
+the model formatted it.</p>
+
+<h2 id="loop">The training loop</h2>
+<p>One epoch has four steps:</p>
+<ol>
+  <li><strong>Record.</strong> This epoch's prompt and metrics become a new run record, kept raw and
+  rendered afresh on every build.</li>
+  <li><strong>Build.</strong> Fixed instructions, the run history, a per-rule trend table and the
+  steering notes are put together into one instruction.</li>
+  <li><strong>Ask.</strong> The whole instruction goes to the modifier in a single call, with no chat
+  history and no second turn.</li>
+  <li><strong>Extract.</strong> The new prompt is cut out of the reply and becomes
+  <code>SYSTEM_PROMPT</code> for the next epoch.</li>
+</ol>
+<p>The modifier is always a separate model from the chain under test. <code>--modifier-tier</code> and
+<code>--chain-tier</code> are independent, so a cheap model can rewrite the prompt of an expensive one
+or the other way round.</p>
+
+<h2 id="instruction">What the modifier reads</h2>
+<table>
+  <tr><th>#</th><th>Block</th><th>Included</th></tr>
+  <tr><td>1</td><td>System instructions: role, how to read the run history, how to diagnose, how to rewrite</td><td>always</td></tr>
+  <tr><td>2</td><td><code>METRIC-DEFINITIONS</code></td><td>when a metric has a description</td></tr>
+  <tr><td>3</td><td><code>Run-0</code> … <code>Run-N</code>: prompt, accuracy, false examples, parse failures</td><td>one per epoch, old runs pruned</td></tr>
+  <tr><td>4</td><td><code>RULE-TREND</code>: per-rule accuracy and error direction across every run</td><td>multi-rule chains</td></tr>
+  <tr><td>5</td><td>Steering notes</td><td>when their input is known</td></tr>
+  <tr><td>6</td><td>One closing note</td><td>zero false examples, or stagnation</td></tr>
+  <tr><td>7</td><td><code>NEW-LLM-PROMPT</code> marker, where the reply starts</td><td>always</td></tr>
+</table>
+<p>The instructions set a priority order. Parse failures come first. Then every false example is
+read against the wording that governs it, then patterns the prompt never states, and finally
+cases that fail in every run, which point to a bad label rather than a bad prompt. A rewrite
+should test <strong>one hypothesis</strong>, should rest on a pattern shared by several failures
+rather than a single case, and should not grow the prompt overall. Accuracy always wins. Tokens
+only matter once no false examples are left.</p>
+<div class="key"><strong>History pruning.</strong> Printing every run in full makes the instruction grow
+without bound. Only the latest two runs, the best run overall and the best run for each rule are
+printed in full. Every other run shrinks to a one-line stub with its accuracy. A case's input is
+printed by the first shown run that gets it wrong, so pruning never loses an input.</div>
+
+<h2 id="steering">Steering: small steps, then a restart</h2>
+<p>A sampled model scores the same prompt differently from run to run, so a free rewrite each
+epoch mostly wanders. The notes push the other way: small steps from the best prompt so far.</p>
+<table>
+  <tr><th>Note</th><th>Tells the modifier</th></tr>
+  <tr><td><code>MEASUREMENT</code></td><td>each score rests on N cases and one case moves it by 1/N, so a few cases are noise</td></tr>
+  <tr><td><code>BASE</code></td><td>Run-K scored best and the latest run did not beat it, so write Run-K's prompt plus one change</td></tr>
+  <tr><td><code>LENGTH BUDGET</code></td><td>the base prompt has N characters; stay within N plus 10%, and add by merging or deleting</td></tr>
+</table>
+<p>When small steps stop paying off, the loop changes mode. If two runs in a row fail to beat
+the best score by more than 0.02, a <strong>stagnation note</strong> lifts the "keep what works"
+rule and asks for a new prompt from scratch. The best prompt stays in the history, so a failed
+restart costs one run. Once a run has no false examples, a different note allows a free
+rewrite whose only goal is fewer tokens.</p>
+<table>
+  <tr><th>Overall accuracy per run</th><th class="r">Runs without gain</th><th>Note</th></tr>
+  <tr><td><code>0.60 → 0.65 → 0.70 → 0.75</code></td><td class="r">0</td><td>none</td></tr>
+  <tr><td><code>0.70 → 0.81 → 0.80 → 0.79</code></td><td class="r">2</td><td>stagnation, base = Run-1</td></tr>
+  <tr><td><code>0.800 → 0.810 → 0.815</code></td><td class="r">2</td><td>stagnation, every step within noise</td></tr>
+  <tr><td><code>0.80 → 0.80 → 0.80 → 0.90</code></td><td class="r">0</td><td>none, a real gain resets the count</td></tr>
+</table>
+
+<h2 id="resume">Caching and resuming</h2>
+<p>Every prediction is written to <code>&lt;id&gt;.txt</code> as soon as it arrives. <code>--continue</code>
+resumes the newest run made with the same chain, tier and prompt. Cached cases are recalled and
+only missing ones are sent to the model. A run made with anything else is never continued, so a
+resumed score always belongs to one configuration. A resumed training loop replays every past
+epoch into the modifier's history without calling the LLM, so it sends exactly the history an
+uninterrupted loop would have sent.</p>
+
+<h2 id="usage">Running it</h2>
+<pre><span class="c"># one pass over the corpus</span>
+python bin/checker.py --type &lt;type&gt; --chain-type template_checklist
+
+<span class="c"># four epochs of prompt rewriting, modifier on a local Ollama model</span>
+python bin/trainingLoop.py --type &lt;type&gt; --chain-type template_checklist \
+    --epochs 4 --modifier-backend ollama --modifier-model qwen3.5:4b
+
+<span class="c"># same, with a held-out corpus scored every epoch</span>
+python bin/trainingLoop.py --config my_run.yaml --val-file val.yaml</pre>
+<p>Every flag can also come from a <code>.yaml</code> or <code>.json</code> config file, with keys spelled like
+the flags. An unknown key fails loudly and lists the valid ones.</p>
+<div class="warn"><strong>Not standalone.</strong> Chain Checker is a package inside a Django host project.
+The host supplies the <code>bin/</code> entry points, the chain registry and the app config that hands out
+a chat model per tier.</div>
+
+<h2 id="filemap">File map</h2>
+<div class="fm">
+  <div><span class="f">baseclasses/chain/</span> <span class="d">— loads a registered chain, repairs near-JSON replies, captures usage</span></div>
+  <div><span class="f">baseclasses/corpus/</span> <span class="d">— reads and validates the corpus YAML</span></div>
+  <div><span class="f">baseclasses/loop/</span> <span class="d">— runs every case, caches predictions</span></div>
+  <div><span class="f">baseclasses/metrics/</span> <span class="d">— one metric per output type, plus parsing, tokens, mispredictions</span></div>
+  <div><span class="f">modifier/llm/</span> <span class="d">— modifier backends: LiteLLM proxy, Ollama</span></div>
+  <div><span class="f">modifier/model/</span> <span class="d">— builds the instruction, prunes history, extracts the new prompt</span></div>
+  <div><span class="f">utils/report/</span> <span class="d">— HTML reports: epoch, run summary, runs overview</span></div>
+  <div><span class="f">utils/training_utils/</span> <span class="d">— epochs, run paths, metrics I/O, resume</span></div>
+  <div><span class="f">documentation/</span> <span class="d">— usage, chain and dataset requirements, modifier prompt</span></div>
+</div>
+
+<p class="muted" style="margin-top:48px;">Chain Checker · companion to the package's <code>README.md</code> and
+<code>documentation/</code>.</p>
+
+</div>
+</body>
+</html>

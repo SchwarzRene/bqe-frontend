@@ -132,6 +132,8 @@ lists are served.
     │   └── utils/*.png     Its figures
     ├── marketjepa/         Self-supervised world model
     │   └── index.html
+    ├── chain-checker/      LLM chain test bench with prompt rewriting in the loop
+    │   └── index.html
     ├── tradingjournal/     Trade log, chart markup and journal (own README)
     ├── markettape.html     Write-up for Market News (replaced Market Tape)
     ├── markettape/         The Market News page (own README)
