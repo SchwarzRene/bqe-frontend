@@ -318,19 +318,19 @@ uninterrupted loop would have sent.</p>
 
 <h2 id="usage">Running it</h2>
 <pre><span class="c"># one pass over the corpus</span>
-python bin/checker.py --type &lt;type&gt; --chain-type template_checklist
+python chain_checker/checker.py --type &lt;type&gt; --chain-type template_checklist
 
 <span class="c"># four epochs of prompt rewriting, modifier on a local Ollama model</span>
-python bin/trainingLoop.py --type &lt;type&gt; --chain-type template_checklist \
+python chain_checker/trainingLoop.py --type &lt;type&gt; --chain-type template_checklist \
     --epochs 4 --modifier-backend ollama --modifier-model qwen3.5:4b
 
 <span class="c"># same, with a held-out corpus scored every epoch</span>
-python bin/trainingLoop.py --config my_run.yaml --val-file val.yaml</pre>
+python chain_checker/trainingLoop.py --config my_run.yaml --val-file val.yaml</pre>
 <p>Every flag can also come from a <code>.yaml</code> or <code>.json</code> config file, with keys spelled like
 the flags. An unknown key fails loudly and lists the valid ones.</p>
 <div class="warn"><strong>Not standalone.</strong> Chain Checker is a package inside a Django host project.
-The host supplies the <code>bin/</code> entry points, the chain registry and the app config that hands out
-a chat model per tier. The <a href="https://github.com/SchwarzRene/chain-checker">repository</a> is the package
+The host supplies the chain registry and the app config that hands out a chat model per tier;
+the entry points <code>checker.py</code> and <code>trainingLoop.py</code> ship with the package. The <a href="https://github.com/SchwarzRene/chain-checker">repository</a> is the package
 itself; clone it as <code>chain_checker/</code> on the host's import path.</div>
 
 <h2 id="filemap">File map</h2>
