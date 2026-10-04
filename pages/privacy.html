@@ -9,16 +9,18 @@
   <link rel="stylesheet" href="/assets/css/pages/disclaimer.css">
   <link rel="icon" href="/assets/images/logo.png" type="image/png" />
   <style>
-    ul {
+    /* Scoped to the page body: unscoped, these rules also hit the header's
+       nav list and the footer's link lists, which then lose their layout. */
+    main ul {
       list-style-type: none;
       padding-left: 1em;
     }
-    ul li::before {
+    main ul li::before {
       content: "- ";
     }
-    ul li,
-    ul li strong,
-    ul li a {
+    main ul li,
+    main ul li strong,
+    main ul li a {
       font-weight: inherit;
       color: var(--color-gray-300);
     }
