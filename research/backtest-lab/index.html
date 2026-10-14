@@ -83,8 +83,8 @@
 <header>
   <a class="back" href="/research/">← Research</a>
   <h1>Backtest Lab</h1>
-  <p>A tick-level backtest engine that runs entirely in your browser. Real bid/ask spread, commission, swap, margin, and order latency — no server, no sign-up, nothing leaves your device.</p>
-  <div class="badges"><span class="badge">Tick-level</span><span class="badge">Latency model</span><span class="badge">Runs offline</span><span class="badge">Deterministic</span></div>
+  <p>The tick-level backtesting engine we built for MetaTrader 5 strategies — the actual Rust code, compiled to WebAssembly and running in your browser. Real bid/ask spread, commission, swap, margin and order latency. No server, nothing leaves your device.</p>
+  <div class="badges"><span class="badge">Rust → WebAssembly</span><span class="badge">Tick-level</span><span class="badge">Latency model</span><span class="badge">Deterministic</span></div>
 </header>
 
 <main class="wrap">
@@ -96,6 +96,7 @@
   <div class="panel">
     <fieldset>
       <legend>Data</legend>
+      <p class="hint" id="engineInfo">Starting engine…</p>
       <p class="hint" id="dataInfo">Loading example dataset…</p>
       <div class="field"><label for="ownFile">Your tick CSV</label><input type="file" id="ownFile" accept=".csv,.txt"></div>
       <div class="field"><label for="ownDigits">Price digits</label><input type="number" id="ownDigits" min="0" max="8" value="5"></div>
@@ -146,6 +147,11 @@
       <div class="chart" id="priceChart"></div>
       <p class="chart-title" style="margin-top:16px">Closed trades (latest first)</p>
       <div class="tablewrap"><table id="deals"></table></div>
+      <details class="card" id="cmd" style="margin-top:16px" hidden>
+        <summary style="cursor:pointer;color:var(--accent-light);font-weight:600">Run the same thing on your machine</summary>
+        <p class="hint">This page sends the engine exactly what the command-line tool <code>mt5bt</code> would get. The same run as a command, with its parameter file:</p>
+        <pre id="cmdText" style="margin:0;overflow:auto;font:.8rem/1.5 ui-monospace,Menlo,Consolas,monospace;color:var(--fg-strong);background:var(--bg-muted);padding:12px 14px;border-radius:8px"></pre>
+      </details>
     </div>
   </div>
 </div>
@@ -172,21 +178,21 @@
   </div>
 </div>
 
-<h2><span class="num">3</span> What is under the hood</h2>
+<h2><span class="num">3</span> What you are running</h2>
 <div class="card">
-  <p style="margin-top:0">A small JavaScript version of the tick-level backtester we build in Rust for MetaTrader 5 strategies, here as a demo of how it works. It follows the same tick loop:</p>
+  <p style="margin-top:0">This is not a mock-up or a re-implementation. <code>mt5bt.wasm</code> is the backtesting engine we use for MetaTrader 5 strategies — the same Rust source as the command-line tool and the optimiser — compiled for the browser. The page only feeds it tick data and parameters and draws what comes back. In the engine:</p>
   <table class="plain">
     <tr><th>Rule</th><th>Behaviour</th></tr>
     <tr><td>Fills</td><td>Buy opens at the ask and closes at the bid; sell the opposite. The spread is whatever the ticks say.</td></tr>
-    <tr><td>Latency</td><td>An order sent at <code>t</code> executes at <code>t + open/close ms + jitter</code>, at the quote valid at that moment (the previous tick if the due time falls between two ticks). Jitter uses the same seeded generator as the Rust engine.</td></tr>
+    <tr><td>Latency</td><td>An order sent at <code>t</code> executes at <code>t + open/close ms + jitter</code>, at the quote valid at that moment (the previous tick if the due time falls between two ticks). Jitter is seeded and reproducible.</td></tr>
     <tr><td>Stops</td><td>SL and TP are server-side, not delayed. An SL fills at the tick price (a gap fills worse), a TP at its level.</td></tr>
-    <tr><td>Bars</td><td>Built from the bid price, only closed bars are used by the strategies, and the bars before <em>From</em> warm the indicators up without trading.</td></tr>
-    <tr><td>Costs</td><td>Commission per lot and side, swap in points with the Wednesday triple rate, margin from leverage, stop-out at 50 % margin level; money is rounded to cents per deal.</td></tr>
+    <tr><td>Bars</td><td>Built from the bid price, strategies see closed bars only, and ticks before <em>From</em> warm the indicators up without trading.</td></tr>
+    <tr><td>Costs</td><td>Commission per lot and side, swap in points with the Wednesday triple rate, margin from leverage, stop-out at 50 % margin level; money rounded to cents per deal.</td></tr>
     <tr><td>Determinism</td><td>The same data and settings always give bit-identical results.</td></tr>
   </table>
-  
-  <p class="warn"><strong>A demo, not a research result.</strong> The example data is a seeded random walk, not a market, and the three strategies are textbook toys. This version is simplified: no pending orders, trade-session calendars or non-USD accounts. Nothing here is investment advice.</p>
-  <p class="muted" style="margin-bottom:0">Everything — parsing, bars, execution, charts — happens in <code>engine.js</code> and <code>lab.js</code> on your device. The only network requests are for the page's own files. The full Rust version, with a memory-mapped tick store and a parallel optimiser, is what this page mirrors.</p>
+  <p class="key"><strong>Why it exists.</strong> MetaTrader's optimiser holds the tick history once per process and runs out of memory. This engine shares one memory-mapped tick file across all workers and runs a pass in milliseconds; in the browser the tick data is simply a buffer in the module's memory.</p>
+  <p class="warn"><strong>A demo, not a research result.</strong> The data here is a seeded random walk, not a market, and the three strategies are textbook examples (SMA crossover, RSI, Donchian). Nothing here is investment advice.</p>
+  <p class="muted" style="margin-bottom:0">Files you can inspect: <a href="/research/backtest-lab/broker.cfg">broker.cfg</a> (account, costs, latency), <a href="/research/backtest-lab/data/example_ticks.csv">example_ticks.csv</a>, <a href="/research/backtest-lab/mt5bt.wasm">mt5bt.wasm</a>. Everything runs on your device; the only requests are for these files.</p>
 </div>
 
 </main>
