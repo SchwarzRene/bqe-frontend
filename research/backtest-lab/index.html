@@ -11,12 +11,15 @@
   .lab-back{margin-right:14px;font-size:.85rem;color:var(--muted,#7c8da6);text-decoration:none;white-space:nowrap}
   .lab-back:hover{text-decoration:underline}
   .bridge-error{padding:12px 16px;background:#7a1f2b;color:#fff;font:14px/1.4 system-ui,sans-serif}
-  .lab-note{margin:0;padding:6px 16px;font-size:.8rem;color:var(--muted,#7c8da6);border-bottom:1px solid var(--line,rgba(127,127,127,.25))}
+  .lab-note{padding:4px 16px;font-size:.8rem;color:var(--muted,#7c8da6);border-bottom:1px solid var(--line,rgba(127,127,127,.25))}
+  .lab-note summary{cursor:pointer;padding:2px 0}
+  .lab-note p{margin:4px 0 6px}
+  @media (max-width:700px){.lab-back span{display:none}.lab-back{margin-right:0;font-size:1rem}.lab-note{padding:2px 12px}}
 </style>
 </head>
 <body>
 <header class="top">
-  <a class="lab-back" href="/research/">← Research</a>
+  <a class="lab-back" href="/research/" aria-label="Back to Research">← <span>Research</span></a>
   <a class="brand" href="#runs">mt5bt <span>tick backtester</span></a>
   <nav id="nav" class="roadmap" aria-label="workflow">
     <a href="#data" data-tab="data"><span class="dot">1</span><span class="lbl">Data &amp; files</span></a>
@@ -28,7 +31,7 @@
   </nav>
   <div id="status" class="status"></div>
 </header>
-<p class="lab-note">This is the real mt5bt app — the same code as the local <code>mt5bt serve</code> — compiled to WebAssembly and running in your browser. Example data is a random walk, nothing is uploaded, and your workspace lives in memory until you close the tab. The strategy editor needs a local install.</p>
+<details class="lab-note"><summary>About this demo</summary><p>This is the real mt5bt app — the same code as the local <code>mt5bt serve</code> — compiled to WebAssembly and running in your browser. Example data is a random walk, nothing is uploaded, and your workspace lives in memory until you close the tab. The strategy editor needs a local install.</p></details>
 <main id="view"></main>
 <div id="toasts"></div>
 <script src="/research/backtest-lab/bridge.js"></script>

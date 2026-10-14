@@ -1763,3 +1763,43 @@ hr {
     text-align: left;
   }
 }
+
+/* Phones: a slimmer header and a cookie banner that leaves the page visible */
+@media (max-width: 480px) {
+  .header-content {
+    padding: var(--space-2) 0;
+  }
+
+  .logo-image {
+    height: 36px;
+  }
+
+  .nav-toggle {
+    min-width: 40px;
+    min-height: 40px;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .cookie-banner {
+    padding: 10px 0;
+  }
+
+  .cookie-banner .container {
+    gap: 8px;
+  }
+
+  .cookie-banner p {
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .cookie-banner .btn {
+    padding: 8px 16px;
+    min-height: 40px;
+  }
+}
+
+audio,
+video {
+  max-width: 100%;
+}

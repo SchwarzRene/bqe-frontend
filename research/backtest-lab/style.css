@@ -265,3 +265,31 @@ main.wide { max-width: none; padding-bottom: 16px; }
 @media (min-width: 1501px) { .datafit .pricecard { overflow: hidden !important; } }
 .heatwrap { flex: 1 1 0; min-height: 0; overflow: hidden; }
 .mheat.compact td, .mheat.compact th { line-height: 1; }
+
+/* ---------- phones: one compact header row, no sideways scrolling ---------- */
+.grid2 { grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); }
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { white-space: nowrap; }
+@media (max-width: 700px) {
+  .top { gap: 8px; padding: 6px 10px; flex-wrap: nowrap; }
+  .top .brand span, .top .status { display: none; }
+  .brand { font-size: 15px; }
+  /* the six workflow steps become six numbered dots; the page's own title says where you are */
+  nav.roadmap { margin: 0 0 0 auto; flex: 0 1 auto; }
+  nav.roadmap a { width: 40px; padding: 0; }
+  nav.roadmap a::before { top: 12px; }
+  nav.roadmap .dot { width: 24px; height: 24px; }
+  nav.roadmap .lbl, nav.roadmap .pct { position: absolute; width: 1px; height: 1px; min-height: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  nav.roadmap .dot .ring { margin: -19px 0 0 -19px; width: 38px; height: 38px; }
+  .runbar { position: static; padding: 10px 12px; gap: 8px 10px; }
+  .runbar label.f { flex: 1 1 130px; }
+  .runbar label.f input, .runbar label.f select { width: 100% !important; }
+  .runbar button.primary { flex: 1 1 100%; padding: 11px 16px; }
+  #toasts { left: 12px; right: 12px; bottom: 12px; }
+  .toast { max-width: none; }
+  .kpi .v { font-size: 18px; }
+  h1 { font-size: 18px; }
+  button, input, select { min-height: 36px; }
+}
+@media (max-width: 380px) { .top .brand { font-size: 14px; } nav.roadmap a { width: 36px; } }
