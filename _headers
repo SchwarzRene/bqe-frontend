@@ -40,3 +40,10 @@
 # The same for the Stack page's script, which index.html loads by name.
 /research/stack/stack.js
   Cache-Control: no-cache
+
+# The Backtest Lab's engine and UI are plain files imported by name; the engine
+# is covered by test/backtest-lab.test.ts, so a stale copy must never linger.
+/research/backtest-lab/*.js
+  Cache-Control: no-cache
+/research/backtest-lab/data/*
+  Cache-Control: public, max-age=86400
