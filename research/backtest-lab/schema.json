@@ -51,19 +51,6 @@
     ]}
   ],
   "strategies": [
-    {"name": "turtle_linebreak", "label": "Turtle Line-Break EA (M20)", "params": [
-      {"key": "EnableLong", "default": "true"}, {"key": "EnableShort", "default": "true"},
-      {"key": "LongLineBreakPeriod", "default": "8"}, {"key": "LongEnterPeriod", "default": "1"}, {"key": "LongExitPeriod", "default": "16"},
-      {"key": "LongAtrMultiplier", "default": "5"}, {"key": "LongAtrPeriod", "default": "50"}, {"key": "LongTrailingAtrMultiplier", "default": "0.1"},
-      {"key": "LongMinimumProfit", "default": "0.20"}, {"key": "LongBB_Period", "default": "40"}, {"key": "LongBB_Deviation", "default": "0.6"},
-      {"key": "LongBB_Offset", "default": "25"}, {"key": "LongBB_Method", "default": "1"},
-      {"key": "ShortLineBreakPeriod", "default": "8"}, {"key": "ShortEnterPeriod", "default": "1"}, {"key": "ShortExitPeriod", "default": "16"},
-      {"key": "ShortAtrMultiplier", "default": "7"}, {"key": "ShortAtrPeriod", "default": "25"}, {"key": "ShortTrailingAtrMultiplier", "default": "0.1"},
-      {"key": "ShortMinimumProfit", "default": "0.21"}, {"key": "ShortBB_Period", "default": "40"}, {"key": "ShortBB_Deviation", "default": "3.0"},
-      {"key": "ShortBB_Offset", "default": "30"}, {"key": "ShortBB_Method", "default": "0"},
-      {"key": "positionSize", "default": "1"}, {"key": "ExpertMagicNumber", "default": "1"}, {"key": "MaxLossRiskPct", "default": "2000"},
-      {"key": "setupRealTime", "default": "false"}, {"key": "VerboseLogging", "default": "false"}
-    ]},
     {"name": "ma_cross", "label": "SMA cross (example)", "params": [
       {"key": "Timeframe", "default": "M5"}, {"key": "FastPeriod", "default": "10"}, {"key": "SlowPeriod", "default": "30"},
       {"key": "Lots", "default": "0.1"}, {"key": "StopLossPoints", "default": "300"}, {"key": "TakeProfitPoints", "default": "600"}, {"key": "Magic", "default": "1"}

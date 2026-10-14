@@ -55,7 +55,7 @@ function every(fn, ms) { const t = setInterval(guard(fn), ms); timers.push(t); r
 function clearTimers() { timers.forEach(clearInterval); timers = []; }
 
 // ---------------------------------------------------------------- persisted form state
-const defaultForm = () => ({ name: "", dataset: "", symbol: "", configFile: "", setFile: "", strategy: "turtle_linebreak", from: "2026.01.01", to: "", warmup: "", config: {}, extra: {}, params: {}, ranges: {}, opt: {} });
+const defaultForm = () => ({ name: "", dataset: "", symbol: "", configFile: "", setFile: "", strategy: "", from: "2026.01.01", to: "", warmup: "", config: {}, extra: {}, params: {}, ranges: {}, opt: {} });
 let form = defaultForm();
 try { const s = JSON.parse(localStorage.getItem("mt5bt.form") || "null"); if (s) form = Object.assign(defaultForm(), s); } catch (e) { /* ignore */ }
 function saveForm() { try { localStorage.setItem("mt5bt.form", JSON.stringify(form)); } catch (e) { /* ignore */ } }
@@ -67,6 +67,8 @@ function canonicalParam(strategy, key) {
 }
 function ensureDefaults() {
   for (const f of cfgFields()) if (form.config[f.key] === undefined) form.config[f.key] = f.default;
+  // first strategy of the list unless the saved form names one this server does not have
+  if (!strategyDef(form.strategy) && schema.strategies.length) { form.strategy = schema.strategies[0].name; form.params = {}; }
   const d = strategyDef(form.strategy);
   if (d && !Object.keys(form.params).length) for (const p of d.params) form.params[p.key] = p.default;
 }
