@@ -174,7 +174,7 @@
 
 <h2><span class="num">3</span> What is under the hood</h2>
 <div class="card">
-  <p style="margin-top:0">The engine is a JavaScript port of the Rust backtester we use for MetaTrader 5 strategies, which was validated deal-for-deal against a MetaTrader 5 Strategy Tester run. It follows the same tick loop:</p>
+  <p style="margin-top:0">A small JavaScript version of the tick-level backtester we build in Rust for MetaTrader 5 strategies, here as a demo of how it works. It follows the same tick loop:</p>
   <table class="plain">
     <tr><th>Rule</th><th>Behaviour</th></tr>
     <tr><td>Fills</td><td>Buy opens at the ask and closes at the bid; sell the opposite. The spread is whatever the ticks say.</td></tr>
@@ -184,8 +184,8 @@
     <tr><td>Costs</td><td>Commission per lot and side, swap in points with the Wednesday triple rate, margin from leverage, stop-out at 50 % margin level; money is rounded to cents per deal.</td></tr>
     <tr><td>Determinism</td><td>The same data and settings always give bit-identical results.</td></tr>
   </table>
-  <p class="key"><strong>Cross-checked.</strong> The test suite (<code>test/backtest-lab.test.ts</code>) pins this engine to balances, trade counts and drawdowns produced by the Rust binary for the same dataset, strategies, costs and latency settings.</p>
-  <p class="warn"><strong>Not for real decisions.</strong> The example data is a seeded random walk, not a market, and the three strategies are textbook toys. The browser version leaves out pending orders, trade-session calendars and non-USD accounts; the Rust engine supports those. Nothing here is investment advice.</p>
+  
+  <p class="warn"><strong>A demo, not a research result.</strong> The example data is a seeded random walk, not a market, and the three strategies are textbook toys. This version is simplified: no pending orders, trade-session calendars or non-USD accounts. Nothing here is investment advice.</p>
   <p class="muted" style="margin-bottom:0">Everything — parsing, bars, execution, charts — happens in <code>engine.js</code> and <code>lab.js</code> on your device. The only network requests are for the page's own files. The full Rust version, with a memory-mapped tick store and a parallel optimiser, is what this page mirrors.</p>
 </div>
 

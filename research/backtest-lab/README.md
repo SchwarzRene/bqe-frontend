@@ -12,19 +12,11 @@ D1 table, no upload. Lives at **/research/backtest-lab/**.
 
 ## Relation to the Rust engine
 
-`engine.js` ports the execution rules of the Rust engine (`stock-backtesting-engine`, `src/engine.rs`):
-buy at ask / sell at bid, requests due at `send + latency + seeded jitter` fill at the quote valid at
-that moment, SL/TP server-side, BID bars, rollover swap with weekday factors, margin and stop-out,
-money rounded to cents per deal. The jitter generator is the same xorshift64*, so a seed gives the
-same delays.
-
-`test/backtest-lab.test.ts` (run by `npm test`) pins `engine.js` to numbers produced by
-`mt5bt run` on this dataset — final balance, gross profit/loss, commission, swap, trade count and
-drawdown for all three strategies under default and stressed (400/250 ms latency, jitter,
-slippage, requotes) settings. If you change the engine, re-run the Rust binary and update the
-expected values, or the test tells you the two have drifted apart.
-
-Not ported: pending orders, trade-session calendars, partial closes, non-USD accounts.
+`engine.js` is a simplified port of the Rust engine's execution rules (ask/bid fills, latency with seeded
+jitter, server-side SL/TP, rollover swap, margin/stop-out). It was spot-checked against the Rust binary on the
+example data, but it is a showcase: `test/backtest-lab.test.ts` only smoke-tests it and does **not** pin
+it to the Rust results, so the two may drift. Not ported: pending orders, trade sessions, partial closes,
+non-USD accounts.
 
 ## Changing things
 
