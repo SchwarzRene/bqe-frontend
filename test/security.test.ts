@@ -175,7 +175,8 @@ describe("SEC-06: security headers", () => {
     const headers = readFileSync("_headers", "utf8");
     const csp = headers.match(/Content-Security-Policy: (.+)/)![1];
     const scriptSrc = csp.match(/script-src ([^;]+)/)![1];
-    expect(scriptSrc).not.toMatch(/unsafe-inline|unsafe-eval|jsdelivr|unpkg/);
+    // 'wasm-unsafe-eval' is allowed on purpose (Backtest Lab's WebAssembly engine); plain eval is not
+    expect(scriptSrc.replace("'wasm-unsafe-eval'", "")).not.toMatch(/unsafe-inline|unsafe-eval|jsdelivr|unpkg/);
     expect(csp).toMatch(/object-src 'none'/);
     expect(csp).toMatch(/frame-ancestors 'none'/);
   });

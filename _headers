@@ -11,10 +11,11 @@
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   # Scripts only from this site (the libraries are vendored in assets/vendor)
-  # plus Cloudflare Turnstile on sign-up; no inline scripts or handlers. Styles
+  # plus Cloudflare Turnstile on sign-up; 'wasm-unsafe-eval' only lets the Backtest Lab
+  # compile its WebAssembly engine (it does NOT allow eval() or new Function()); no inline scripts or handlers. Styles
   # may be inline (style="" attributes throughout). History Map reads
   # Wikipedia summaries. Change this together with test/security.test.ts.
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://en.wikipedia.org https://de.wikipedia.org; media-src 'self'; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://en.wikipedia.org https://de.wikipedia.org; media-src 'self'; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # Fingerprinted these are not, so a long cache would strand visitors on an
 # old build. An hour at the edge with revalidation is the safe middle.
@@ -42,8 +43,12 @@
   Cache-Control: no-cache
 
 # The Backtest Lab's engine and UI are plain files imported by name; the engine
-# is covered by test/backtest-lab.test.ts, so a stale copy must never linger.
+# is the compiled Rust engine, so a stale copy must never linger.
 /research/backtest-lab/*.js
   Cache-Control: no-cache
 /research/backtest-lab/data/*
   Cache-Control: public, max-age=86400
+/research/backtest-lab/mt5bt.wasm
+  Cache-Control: no-cache
+/research/backtest-lab/broker.cfg
+  Cache-Control: no-cache

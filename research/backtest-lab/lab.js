@@ -1,8 +1,9 @@
-// Backtest Lab UI. All computation happens in engine.js, in this browser tab.
-import { STRATEGIES, defaultParams, runBacktest, parseTicksCsv, parseDate } from "./engine.js";
+// Backtest Lab UI. Every backtest runs in the real mt5bt engine (WebAssembly) inside this browser tab.
+import { STRATEGIES, defaultParams, runBacktest, initEngine, loadTicks, parseDate, buildRequest, setName } from "./engine.js";
 
 const $ = (id) => document.getElementById(id);
-const EXAMPLE_URL = "/research/backtest-lab/data/example_ticks.csv";
+const BASE = "/research/backtest-lab/";
+const EXAMPLE_URL = BASE + "data/example_ticks.csv";
 const EXAMPLE_DIGITS = 5;
 
 let data = null;            // parsed ticks
@@ -31,7 +32,7 @@ const window_ = () => [parseDate($("from").value), parseDate($("to").value)];
 // ------------------------------------------------------------------ data
 function setData(d, label) {
   data = d;
-  const first = d.t[0], last = d.t[d.count - 1];
+  const first = d.first, last = d.last;
   $("dataInfo").textContent = `${label}: ${d.count.toLocaleString("en-US")} ticks, ${timeStr(first)} → ${timeStr(last)} UTC` +
     (d.bad ? `, ${d.bad} bad lines skipped` : "") + (d.backwards ? `, ⚠ ${d.backwards} ticks go backwards in time` : "") + ".";
   // default window: skip the first days (indicator warm-up) and keep the last 30 % as forward test
@@ -47,7 +48,7 @@ async function loadExample() {
   try {
     const res = await fetch(EXAMPLE_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    setData(parseTicksCsv(await res.text(), EXAMPLE_DIGITS), "Example dataset (random EURUSD-like walk)");
+    setData(loadTicks(await res.text(), EXAMPLE_DIGITS), "Example dataset (random EURUSD-like walk)");
     $("useExample").hidden = true;
     applyExampleWindow();
   } catch (e) {
@@ -66,7 +67,7 @@ $("ownFile").addEventListener("change", async (ev) => {
   const digits = Number($("ownDigits").value);
   setStatus($("runStatus"), "Reading file…");
   try {
-    const d = parseTicksCsv(await f.text(), digits);
+    const d = loadTicks(await f.text(), digits);
     if (d.count < 100) throw new Error("fewer than 100 valid ticks found (check the format and the digits)");
     setData(d, `${f.name}`);
     $("useExample").hidden = false;
@@ -155,10 +156,10 @@ function drawCharts(r, tf) {
   const [fromMs, toMs] = window_();
   const ms = { M1: 1, M5: 5, M15: 15, M30: 30, H1: 60, H4: 240, D1: 1440 }[tf] * 60000;
   const bars = []; let cur = null;
-  const { t, bid, count, digits } = data, inv = 10 ** -digits;
+  const { t, bid, k: count } = data;
   for (let i = 0; i < count; i++) {
     if (t[i] < fromMs) continue; if (t[i] >= toMs) break;
-    const o = t[i] - (t[i] % ms), p = bid[i] * inv;
+    const o = t[i] - (t[i] % ms), p = bid[i];
     if (cur && cur.time === o / 1000) { if (p > cur.high) cur.high = p; if (p < cur.low) cur.low = p; cur.close = p; }
     else { cur = { time: o / 1000, open: p, high: p, low: p, close: p }; bars.push(cur); }
   }
@@ -192,6 +193,20 @@ function drawDeals(deals) {
   t.append(body);
 }
 
+const iso = (ms) => new Date(ms).toISOString().slice(0, 10).replace(/-/g, ".");
+
+/** What this click corresponds to on the command line: the same engine, the same files. */
+function showCommand(from, to) {
+  const req = buildRequest(config(), stratName, params, from, to, false);
+  const set = req.params.map(([k, v]) => `${k}=${v}`).join("\n");
+  $("cmdText").textContent =
+    `mt5bt run --data example.tickbin --config broker.cfg --strategy ${stratName} --set ${stratName}.set \\\n` +
+    `        --from ${iso(from)} --to ${iso(to)}` +
+    req.config.filter(([k, v]) => !(BROKER_DEFAULT.get(k) === v || (BROKER_DEFAULT.has(k) && Number(BROKER_DEFAULT.get(k)) === Number(v)))).map(([k, v]) => ` \\\n        --opt ${k}=${v}`).join("") +
+    `\n\n# ${stratName}.set\n${set}`;
+  $("cmd").hidden = false;
+}
+
 function showResult(r, tf, ms) {
   $("placeholder").hidden = true; $("out").hidden = false;
   const s = $("stats"); s.replaceChildren(
@@ -223,6 +238,7 @@ $("run").addEventListener("click", async () => {
     const t0 = performance.now();
     const r = runBacktest(data, config(), stratName, params, from, to);
     showResult(r, params.timeframe, performance.now() - t0);
+    showCommand(from, to);
   } catch (e) { setStatus($("runStatus"), e.message, true); }
 });
 
@@ -261,7 +277,7 @@ $("optimize").addEventListener("click", async () => {
     if (token !== optRun) break;
     const p = { ...params, ...c };
     try {
-      const r = runBacktest(data, cfg, stratName, p, from, split);
+      const r = runBacktest(data, cfg, stratName, p, from, split, { detail: false });
       if (r.trades >= minTrades) results.push({ p, net: r.netProfit, trades: r.trades, pf: r.profitFactor, dd: r.maxDdRel });
     } catch { failed++; }
     done++;
@@ -275,7 +291,7 @@ $("optimize").addEventListener("click", async () => {
   results.sort((a, b) => b.net - a.net);
   const top = results.slice(0, 10);
   for (const r of top) {
-    const f = runBacktest(data, cfg, stratName, r.p, split, to);
+    const f = runBacktest(data, cfg, stratName, r.p, split, to, { detail: false });
     r.fNet = f.netProfit; r.fTrades = f.trades;
   }
   showOptimisation(axes.map((a) => a[0]), top);
@@ -314,5 +330,18 @@ function showOptimisation(keys, rows) {
 }
 
 // ------------------------------------------------------------------ boot
+let BROKER_DEFAULT = new Map();
 selectStrategy("sma_crossover");
-loadExample();
+(async () => {
+  try {
+    const cfgText = await (await fetch(BASE + "broker.cfg")).text();
+    const { wasmBytes } = await initEngine(BASE + "mt5bt.wasm", cfgText);
+    BROKER_DEFAULT = new Map(buildRequest({}, "sma_crossover", {}, NaN, NaN).config);
+    $("engineInfo").textContent = `Engine: mt5bt (Rust) as WebAssembly, ${(wasmBytes / 1024).toFixed(0)} KB`;
+  } catch (e) {
+    $("dataInfo").textContent = "Could not start the engine: " + e.message + " (WebAssembly is required).";
+    $("dataInfo").classList.add("neg");
+    return;
+  }
+  loadExample();
+})();
