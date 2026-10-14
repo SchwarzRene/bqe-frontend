@@ -113,6 +113,14 @@
   header { position: relative; z-index: 1; }
   /* Wide tables scroll inside their own box on phones instead of the page. */
   @media(max-width:640px){table{display:block;overflow-x:auto;} .wrap{padding:0 16px 72px;}}
+  /* phones: wide tables and long code scroll or wrap instead of stretching the page */
+  @media (max-width: 700px) {
+    table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+  @media (max-width: 480px) {
+    code { overflow-wrap: anywhere; }
+    pre { max-width: 100%; }
+  }
 </style>
 </head>
 <body>

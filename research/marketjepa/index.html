@@ -106,6 +106,14 @@
     box-shadow: 0 0 0 1px var(--border), 0 40px 120px rgba(0,0,0,0.55);
   }
   header { position: relative; z-index: 1; }
+  /* phones: a wide table scrolls inside its own box instead of stretching the whole page */
+  @media (max-width: 700px) {
+    table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+  @media (max-width: 480px) {
+    code { overflow-wrap: anywhere; }
+    pre { max-width: 100%; }
+  }
 </style>
 </head>
 <body>
