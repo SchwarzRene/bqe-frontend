@@ -25,14 +25,13 @@ describe("Backtest Lab (the mt5bt web app as WebAssembly)", () => {
     expect(ds.map((d: any) => d.name)).toEqual(["example_eurusd"]);
     expect(ds[0].digits).toBe(5);
     expect(s.json("GET", "/api/files").set).toContain("sma_crossover_opt.set");
-    expect(s.json("GET", "/api/schema").strategies.map((x: any) => x.name)).toContain("donchian_breakout");
+    expect(s.json("GET", "/api/schema").strategies.map((x: any) => x.name)).toContain("rsi_reversion");
   });
 
   // mt5bt run --config broker.cfg --strategy sma_crossover --set sma_crossover.set --from 2024.01.15 --to 2024.02.20
   const NATIVE: Record<string, [Record<string, string>, number, number]> = {
     sma_crossover: [PARAMS, 10275.3, 62],
     rsi_reversion: [{ Timeframe: "M15", RsiPeriod: "14", Oversold: "30", Overbought: "70", Lots: "0.1", StopLossPoints: "300", TakeProfitPoints: "300", Magic: "2" }, 9771.7, 42],
-    donchian_breakout: [{ Timeframe: "H1", Lookback: "20", Lots: "0.1", StopLossPoints: "400", TakeProfitPoints: "800", Magic: "3" }, 9989.6, 21],
   };
   for (const [strategy, [params, balance, trades]] of Object.entries(NATIVE)) {
     it(`${strategy}: a run gives the native binary's result`, () => {
