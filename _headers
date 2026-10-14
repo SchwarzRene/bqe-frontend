@@ -42,13 +42,9 @@
 /research/stack/stack.js
   Cache-Control: no-cache
 
-# The Backtest Lab's engine and UI are plain files imported by name; the engine
-# is the compiled Rust engine, so a stale copy must never linger.
-/research/backtest-lab/*.js
+# The Backtest Lab is the mt5bt web app (plain files imported by name) plus its WebAssembly server: a phone
+# must never pair a new page with an old module, so none of it is cached without revalidation.
+/research/backtest-lab/*
   Cache-Control: no-cache
 /research/backtest-lab/data/*
   Cache-Control: public, max-age=86400
-/research/backtest-lab/mt5bt.wasm
-  Cache-Control: no-cache
-/research/backtest-lab/broker.cfg
-  Cache-Control: no-cache

@@ -8,6 +8,7 @@ no outside server can run code next to a signed-in user's session.
 |---|---|---|---|
 | TradingView Lightweight Charts | 4.2.3 | npm `lightweight-charts@4.2.3`, `dist/lightweight-charts.standalone.production.js` | Apache-2.0 (`LICENSE`) |
 | Leaflet | 1.9.4 | npm `leaflet@1.9.4`, `dist/leaflet.js`, `dist/leaflet.css`, `dist/images/` | BSD-2-Clause (`LICENSE`) |
+| browser_wasi_shim | 0.4.2 | npm `@bjorn3/browser_wasi_shim@0.4.2`, `dist/*.js` (in-memory WASI file system for the Backtest Lab's WebAssembly server) | MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`) |
 
 The files are byte-for-byte those in the npm tarballs (which is also what
 jsDelivr and unpkg serve). To update one:

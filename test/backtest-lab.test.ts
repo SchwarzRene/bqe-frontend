@@ -1,72 +1,77 @@
-// The Backtest Lab runs the Rust engine as WebAssembly (research/backtest-lab/mt5bt.wasm, built by
-// wasm/build.sh in SchwarzRene/stock-backtesting-engine). These tests load that very file and check
-// it against what the native `mt5bt` binary printed for the same data, config and strategies.
+// The Backtest Lab hosts the real mt5bt web app: research/backtest-lab/mt5bt.wasm is `mt5bt serve` built for
+// WebAssembly (stock-backtesting-engine, wasm/build.sh), run here exactly as the page's web worker runs it.
+// These tests drive its HTTP API the way the app does and check the numbers against the native binary.
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-// @ts-ignore - plain browser ES module
-import { initEngine, loadTicks, parseDate, runBacktest, defaultParams, STRATEGIES, buildRequest } from "../research/backtest-lab/engine.js";
+// @ts-ignore - plain browser ES modules
+import { openServer, seedExample } from "../research/backtest-lab/server-core.js";
 
 const DIR = "research/backtest-lab/";
-const FROM = parseDate("2024.01.15");
-const TO = parseDate("2024.02.20");
-const near = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThan(0.005);
-let data: any;
+let s: any;
+
+const PARAMS = { Timeframe: "M15", FastPeriod: "10", SlowPeriod: "40", Lots: "0.1", StopLossPoints: "300", TakeProfitPoints: "600", Magic: "1" };
 
 beforeAll(async () => {
-  await initEngine(readFileSync(DIR + "mt5bt.wasm"), readFileSync(DIR + "broker.cfg", "utf8"));
-  data = loadTicks(readFileSync(DIR + "data/example_ticks.csv", "utf8"), 5);
+  s = await openServer(readFileSync(DIR + "mt5bt.wasm"));
+  await seedExample(s, async (name: string) => readFileSync(DIR + name));
 });
 
-describe("Backtest Lab (Rust engine as WebAssembly)", () => {
-  it("loads the example dataset", () => {
-    expect(data.count).toBe(70000);
-    expect(data.bad).toBe(0);
-    expect(data.backwards).toBe(0);
+const config = () => s.json("GET", "/api/files/config/example_eurusd.cfg/parsed").entries;
+
+describe("Backtest Lab (the mt5bt web app as WebAssembly)", () => {
+  it("is seeded with the example dataset, broker config and parameter files", () => {
+    const ds = s.json("GET", "/api/datasets");
+    expect(ds.map((d: any) => d.name)).toEqual(["example_eurusd"]);
+    expect(ds[0].digits).toBe(5);
+    expect(s.json("GET", "/api/files").set).toContain("sma_crossover_opt.set");
+    expect(s.json("GET", "/api/schema").strategies.map((x: any) => x.name)).toContain("donchian_breakout");
   });
 
-  // mt5bt run --config broker.cfg --strategy X --set X.set --from 2024.01.15 --to 2024.02.20
-  const NATIVE: Record<string, Record<string, number>> = {
-    sma_crossover: { finalBalance: 10275.3, grossProfit: 530.8, grossLoss: -255.5, commission: -43.4, swap: -5.8, trades: 62, wins: 28, maxDdAbs: 75.1 },
-    rsi_reversion: { finalBalance: 9771.7, grossProfit: 286.3, grossLoss: -514.6, commission: -29.4, swap: -7.4, trades: 42, wins: 20, maxDdAbs: 287.7 },
-    donchian_breakout: { finalBalance: 9989.6, grossProfit: 256.7, grossLoss: -267.1, commission: -14.7, swap: -9.0, trades: 21, wins: 5, maxDdAbs: 132.4 },
+  // mt5bt run --config broker.cfg --strategy sma_crossover --set sma_crossover.set --from 2024.01.15 --to 2024.02.20
+  const NATIVE: Record<string, [Record<string, string>, number, number]> = {
+    sma_crossover: [PARAMS, 10275.3, 62],
+    rsi_reversion: [{ Timeframe: "M15", RsiPeriod: "14", Oversold: "30", Overbought: "70", Lots: "0.1", StopLossPoints: "300", TakeProfitPoints: "300", Magic: "2" }, 9771.7, 42],
+    donchian_breakout: [{ Timeframe: "H1", Lookback: "20", Lots: "0.1", StopLossPoints: "400", TakeProfitPoints: "800", Magic: "3" }, 9989.6, 21],
   };
-  for (const [name, want] of Object.entries(NATIVE)) {
-    it(`${name} gives the same numbers as the native binary`, () => {
-      const r = runBacktest(data, {}, name, defaultParams(name), FROM, TO);
-      for (const [k, v] of Object.entries(want)) near((r as any)[k], v);
+  for (const [strategy, [params, balance, trades]] of Object.entries(NATIVE)) {
+    it(`${strategy}: a run gives the native binary's result`, () => {
+      const { id } = s.json("POST", "/api/runs", { dataset: "example_eurusd", config: config(), strategy, params, from: "2024.01.15", to: "2024.02.20" });
+      const run = s.json("GET", `/api/runs/${id}`);
+      expect(run.status).toBe("done"); // jobs finish inside the request (no threads in WebAssembly)
+      expect(Math.abs(run.summary.stats.final_balance - balance)).toBeLessThan(0.005);
+      expect(run.summary.stats.trades).toBe(trades);
+      expect(s.json("GET", `/api/runs/${id}/deals`).length).toBeGreaterThan(trades);
     });
   }
 
-  // + --opt latency.open_ms=400 latency.close_ms=250 latency.jitter_ms=300 latency.seed=7
-  //   costs.commission_per_lot=7 costs.slippage_points=3 costs.deviation_points=40 (the last one is in broker.cfg's default: -1)
-  it("applies latency, jitter, commission and slippage overrides", () => {
-    const stress = { openMs: 400, closeMs: 250, jitterMs: 300, seed: 7, commissionPerLot: 7, slippagePoints: 3 };
-    const r = runBacktest(data, stress, "sma_crossover", defaultParams("sma_crossover"), FROM, TO);
-    expect(r.trades).toBe(62);
-    expect(r.finalBalance).toBeLessThan(10275.3); // costs and delay hurt
-    const again = runBacktest(data, stress, "sma_crossover", defaultParams("sma_crossover"), FROM, TO);
-    expect(again.deals).toEqual(r.deals); // deterministic
+  it("optimises with a forward test and stores the passes", () => {
+    const { id, size } = s.json("POST", "/api/optimizations", {
+      dataset: "example_eurusd", config: config(), strategy: "sma_crossover", name: "t",
+      params: PARAMS,
+      ranges: [
+        { name: "FastPeriod", value: "10", start: "5", step: "5", stop: "30", optimize: true },
+        { name: "SlowPeriod", value: "40", start: "40", step: "10", stop: "90", optimize: true },
+      ],
+      from: "2024.01.15", to: "2024.02.05",
+      opt: { algo: "grid", criterion: "profit", min_trades: 5, forward_from: "2024.02.05", forward_to: "2024.02.20", forward_top: 5 },
+    });
+    expect(size).toBe(36);
+    const o = s.json("GET", `/api/optimizations/${id}`);
+    expect(o.status).toBe("done");
+    expect(o.results.total).toBe(36);
+    expect(o.results.rows.length).toBeGreaterThan(5);
+    // a row: [score, net, PF, trades, DD abs, DD %, balance, [parameter values], [forward net, ...]]
+    expect(o.results.rows[0][7]).toHaveLength(2);
+    expect(o.results.rows[0][8]).toHaveLength(5);
   });
 
-  it("returns deals and an equity curve on request, only stats otherwise", () => {
-    const full = runBacktest(data, {}, "donchian_breakout", defaultParams("donchian_breakout"), FROM, TO);
-    expect(full.deals.length).toBe(full.trades * 2);
-    expect(full.curve.length).toBeGreaterThan(10);
-    const brief = runBacktest(data, {}, "donchian_breakout", defaultParams("donchian_breakout"), FROM, TO, { detail: false });
-    expect(brief.deals.length).toBe(0);
-    near(brief.finalBalance, full.finalBalance);
-  });
-
-  it("reports bad input as an error instead of a result", () => {
-    expect(() => runBacktest(data, {}, "sma_crossover", { ...defaultParams("sma_crossover"), fastPeriod: 50, slowPeriod: 40 }, FROM, TO)).toThrow(/FastPeriod/);
-    expect(() => runBacktest(data, {}, "nope", {}, FROM, TO)).toThrow(/unknown strategy/);
-  });
-
-  it("sends the engine its .set names and config keys", () => {
-    const req = buildRequest({ openMs: 7 }, "sma_crossover", defaultParams("sma_crossover"), FROM, TO);
-    expect(req.params).toContainEqual(["FastPeriod", "10"]);
-    expect(req.config).toContainEqual(["latency.open_ms", "7"]);
-    expect(Object.keys(STRATEGIES)).toEqual(["sma_crossover", "rsi_reversion", "donchian_breakout"]);
+  it("answers errors as JSON, and the strategy editor politely", () => {
+    const r = s.request("GET", "/api/nope");
+    expect(r.status).toBe(404);
+    expect(s.text(r.body)).toContain("error");
+    expect(s.json("GET", "/api/studio")).toEqual([]);
+    expect(() => s.json("POST", "/api/studio/x/compile", {})).toThrow(/local server/);
+    expect(() => s.json("POST", "/api/runs", { dataset: "missing", strategy: "sma_crossover" })).toThrow();
   });
 });

@@ -1,0 +1,84 @@
+{
+  "config": [
+    {"group": "Account", "fields": [
+      {"key": "account.initial_balance", "label": "Initial balance", "type": "number", "default": "10000", "help": "Deposit in account currency"},
+      {"key": "account.leverage", "label": "Leverage", "type": "number", "default": "500", "help": "1:N. Not part of the symbol export - take it from your account"},
+      {"key": "account.stop_out_level", "label": "Stop-out level %", "type": "number", "default": "50", "help": "Positions are closed when the margin level falls to this"},
+      {"key": "account.quote_to_account", "label": "Quote to account rate", "type": "number", "default": "1.0", "help": "1.0 when the quote currency (USD for XAUUSD) is the account currency"}
+    ]},
+    {"group": "Costs", "fields": [
+      {"key": "costs.commission_per_lot", "label": "Commission per lot", "type": "number", "default": "0", "help": "Per deal side, positive = cost"},
+      {"key": "costs.commission_mode", "label": "Commission charged", "type": "select", "options": ["both", "in", "out"], "default": "both", "help": "On entry, exit or both"},
+      {"key": "costs.slippage_points", "label": "Slippage (points)", "type": "int", "default": "0", "help": "Adverse slippage added to every market execution"},
+      {"key": "costs.deviation_points", "label": "Deviation / requote (points)", "type": "int", "default": "-1", "help": "-1 = off. N = reject the order if price moved more than N points while the order was in flight"},
+      {"key": "costs.round_money", "label": "Round money to cents", "type": "bool", "default": "true", "help": "Like the MT5 deal list"}
+    ]},
+    {"group": "Latency (ms)", "fields": [
+      {"key": "latency.feed_ms", "label": "Feed delay", "type": "int", "default": "0", "help": "Broker tick -> your EA sees it"},
+      {"key": "latency.open_ms", "label": "Open delay", "type": "int", "default": "0", "help": "Order send -> execution"},
+      {"key": "latency.close_ms", "label": "Close delay", "type": "int", "default": "0", "help": "Close request -> execution"},
+      {"key": "latency.modify_ms", "label": "Modify delay", "type": "int", "default": "0", "help": "SL/TP modification -> effective"},
+      {"key": "latency.jitter_ms", "label": "Jitter (max extra ms)", "type": "int", "default": "0", "help": "Uniform random extra delay 0..N on every request"},
+      {"key": "latency.seed", "label": "Jitter seed", "type": "int", "default": "1", "help": "Same seed = same result"}
+    ]},
+    {"group": "Symbol", "fields": [
+      {"key": "symbol.contract_size", "label": "Contract size", "type": "number", "default": "100", "help": ""},
+      {"key": "symbol.volume_min", "label": "Volume min", "type": "number", "default": "0.01", "help": ""},
+      {"key": "symbol.volume_max", "label": "Volume max", "type": "number", "default": "100", "help": ""},
+      {"key": "symbol.volume_step", "label": "Volume step", "type": "number", "default": "0.01", "help": ""},
+      {"key": "symbol.volume_limit", "label": "Volume limit", "type": "number", "default": "0", "help": "Max volume per order for position sizing, 0 = none"},
+      {"key": "symbol.stops_level", "label": "Stops level (points)", "type": "int", "default": "0", "help": "Minimum SL/TP distance"},
+      {"key": "symbol.swap_mode", "label": "Swap mode", "type": "select", "options": ["points", "money", "percent"], "default": "points", "help": ""},
+      {"key": "symbol.swap_long", "label": "Swap long", "type": "number", "default": "0", "help": ""},
+      {"key": "symbol.swap_short", "label": "Swap short", "type": "number", "default": "0", "help": ""},
+      {"key": "symbol.swap_rate_sun", "label": "Swap rate Sun", "type": "number", "default": "0", "help": "Multiplier for the night ending that weekday"},
+      {"key": "symbol.swap_rate_mon", "label": "Swap rate Mon", "type": "number", "default": "1", "help": ""},
+      {"key": "symbol.swap_rate_tue", "label": "Swap rate Tue", "type": "number", "default": "1", "help": ""},
+      {"key": "symbol.swap_rate_wed", "label": "Swap rate Wed", "type": "number", "default": "3", "help": "3 = covers the weekend"},
+      {"key": "symbol.swap_rate_thu", "label": "Swap rate Thu", "type": "number", "default": "1", "help": ""},
+      {"key": "symbol.swap_rate_fri", "label": "Swap rate Fri", "type": "number", "default": "1", "help": ""},
+      {"key": "symbol.swap_rate_sat", "label": "Swap rate Sat", "type": "number", "default": "0", "help": ""},
+      {"key": "symbol.margin_initial", "label": "Margin initial", "type": "number", "default": "0", "help": "0 = contract size"},
+      {"key": "symbol.margin_rate_buy", "label": "Margin rate buy", "type": "number", "default": "1", "help": ""},
+      {"key": "symbol.margin_rate_sell", "label": "Margin rate sell", "type": "number", "default": "1", "help": ""},
+      {"key": "symbol.rollover_offset_min", "label": "Rollover offset (min)", "type": "int", "default": "0", "help": "Minutes after server midnight"}
+    ]},
+    {"group": "Tester", "fields": [
+      {"key": "tester.use_trade_sessions", "label": "Use trade sessions", "type": "bool", "default": "false", "help": "Reject orders / skip SL-TP outside the symbol JSON's sessions (needs a symbol file)"},
+      {"key": "tester.close_at_end", "label": "Close positions at end", "type": "bool", "default": "true", "help": ""},
+      {"key": "tester.equity_sample_ms", "label": "Equity sample interval (ms)", "type": "int", "default": "60000", "help": "Resolution of the equity curve"},
+      {"key": "tester.bar_history", "label": "Bar history length", "type": "int", "default": "1024", "help": ""}
+    ]}
+  ],
+  "strategies": [
+    {"name": "turtle_linebreak", "label": "Turtle Line-Break EA (M20)", "params": [
+      {"key": "EnableLong", "default": "true"}, {"key": "EnableShort", "default": "true"},
+      {"key": "LongLineBreakPeriod", "default": "8"}, {"key": "LongEnterPeriod", "default": "1"}, {"key": "LongExitPeriod", "default": "16"},
+      {"key": "LongAtrMultiplier", "default": "5"}, {"key": "LongAtrPeriod", "default": "50"}, {"key": "LongTrailingAtrMultiplier", "default": "0.1"},
+      {"key": "LongMinimumProfit", "default": "0.20"}, {"key": "LongBB_Period", "default": "40"}, {"key": "LongBB_Deviation", "default": "0.6"},
+      {"key": "LongBB_Offset", "default": "25"}, {"key": "LongBB_Method", "default": "1"},
+      {"key": "ShortLineBreakPeriod", "default": "8"}, {"key": "ShortEnterPeriod", "default": "1"}, {"key": "ShortExitPeriod", "default": "16"},
+      {"key": "ShortAtrMultiplier", "default": "7"}, {"key": "ShortAtrPeriod", "default": "25"}, {"key": "ShortTrailingAtrMultiplier", "default": "0.1"},
+      {"key": "ShortMinimumProfit", "default": "0.21"}, {"key": "ShortBB_Period", "default": "40"}, {"key": "ShortBB_Deviation", "default": "3.0"},
+      {"key": "ShortBB_Offset", "default": "30"}, {"key": "ShortBB_Method", "default": "0"},
+      {"key": "positionSize", "default": "1"}, {"key": "ExpertMagicNumber", "default": "1"}, {"key": "MaxLossRiskPct", "default": "2000"},
+      {"key": "setupRealTime", "default": "false"}, {"key": "VerboseLogging", "default": "false"}
+    ]},
+    {"name": "ma_cross", "label": "SMA cross (example)", "params": [
+      {"key": "Timeframe", "default": "M5"}, {"key": "FastPeriod", "default": "10"}, {"key": "SlowPeriod", "default": "30"},
+      {"key": "Lots", "default": "0.1"}, {"key": "StopLossPoints", "default": "300"}, {"key": "TakeProfitPoints", "default": "600"}, {"key": "Magic", "default": "1"}
+    ]},
+    {"name": "sma_crossover", "label": "SMA crossover (research example)", "params": [
+      {"key": "Timeframe", "default": "M15"}, {"key": "FastPeriod", "default": "10"}, {"key": "SlowPeriod", "default": "40"},
+      {"key": "Lots", "default": "0.1"}, {"key": "StopLossPoints", "default": "300"}, {"key": "TakeProfitPoints", "default": "600"}, {"key": "Magic", "default": "1"}
+    ]},
+    {"name": "rsi_reversion", "label": "RSI mean reversion (research example)", "params": [
+      {"key": "Timeframe", "default": "M15"}, {"key": "RsiPeriod", "default": "14"}, {"key": "Oversold", "default": "30"}, {"key": "Overbought", "default": "70"},
+      {"key": "Lots", "default": "0.1"}, {"key": "StopLossPoints", "default": "300"}, {"key": "TakeProfitPoints", "default": "600"}, {"key": "Magic", "default": "1"}
+    ]},
+    {"name": "donchian_breakout", "label": "Donchian breakout (research example)", "params": [
+      {"key": "Timeframe", "default": "H1"}, {"key": "Lookback", "default": "20"},
+      {"key": "Lots", "default": "0.1"}, {"key": "StopLossPoints", "default": "300"}, {"key": "TakeProfitPoints", "default": "600"}, {"key": "Magic", "default": "1"}
+    ]}
+  ]
+}
