@@ -135,6 +135,7 @@ lists are served.
     ├── chain-checker/      LLM chain test bench with prompt rewriting in the loop
     │   └── index.html
     ├── tradingjournal/     Trade log, chart markup and journal (own README)
+    ├── backtest-lab/       Tick-level backtester that runs in the browser (own README)
     ├── markettape.html     Write-up for Market News (replaced Market Tape)
     ├── markettape/         The Market News page (own README)
     ├── historymap/         Interactive history atlas (own README)
