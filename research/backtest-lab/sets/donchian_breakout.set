@@ -1,0 +1,6 @@
+Timeframe=H1
+Lookback=20
+Lots=0.10
+StopLossPoints=400
+TakeProfitPoints=800
+Magic=3

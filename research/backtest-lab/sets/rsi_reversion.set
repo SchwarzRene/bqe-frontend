@@ -1,0 +1,8 @@
+Timeframe=M15
+RsiPeriod=14
+Oversold=30
+Overbought=70
+Lots=0.10
+StopLossPoints=300
+TakeProfitPoints=300
+Magic=2

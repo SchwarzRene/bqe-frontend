@@ -1,0 +1,8 @@
+; SMA crossover - single pass
+Timeframe=M15
+FastPeriod=10
+SlowPeriod=40
+Lots=0.10
+StopLossPoints=300
+TakeProfitPoints=600
+Magic=1

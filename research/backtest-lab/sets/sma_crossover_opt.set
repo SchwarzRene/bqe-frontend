@@ -1,0 +1,8 @@
+; SMA crossover with optimisation ranges (Name=value||start||step||stop||Y)
+Timeframe=M15
+FastPeriod=10||5||5||30||Y
+SlowPeriod=40||40||10||90||Y
+Lots=0.10
+StopLossPoints=300||100||100||500||Y
+TakeProfitPoints=600
+Magic=1

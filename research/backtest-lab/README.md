@@ -1,32 +1,60 @@
 # Backtest Lab
 
-The real mt5bt backtesting engine (Rust, `SchwarzRene/stock-backtesting-engine`) compiled to WebAssembly and
-run **entirely in the visitor's browser** — no Worker route, no D1 table, no upload. Lives at
-**/research/backtest-lab/**.
+The real **mt5bt** backtesting workbench — the web app, the engine and the optimizer from
+`SchwarzRene/stock-backtesting-engine` — running **entirely in the visitor's browser**. No Worker route, no D1
+table, no upload. Lives at **/research/backtest-lab/**.
+
+## How it works
+
+`mt5bt serve` is a small HTTP server in front of the engine. Here the same server code is compiled to
+WebAssembly (`wasm32-wasip1`) and the page talks to it in-process instead of over the network:
+
+```
+app.js / optimizer.js / charts.js        the web app, unmodified, calls fetch("/api/...")
+        │
+bridge.js                                 intercepts /api/* (fetch and the upload XMLHttpRequest)
+        │ postMessage
+server-worker.js ── server-core.js        web worker: runs mt5bt.wasm on a RAM-disk workspace
+        │
+mt5bt.wasm                                Rust: datasets, runs, sweeps, optimizer, the tick-level engine
+```
 
 | File | Role |
 |---|---|
-| `mt5bt.wasm` | The engine (~250 KB): CSV parsing, bars, strategies, order execution with latency, costs, swap, margin. Built from the Rust repo with `wasm/build.sh`. |
-| `engine.js` | Thin adapter: copies tick text and a JSON request into the module, turns the JSON answer into objects. Contains no trading logic. Also the form metadata for the three strategies. |
-| `lab.js` | The UI: forms, charts (vendored Lightweight Charts), trade table, grid optimiser with forward test, the "run the same on your machine" command. |
-| `broker.cfg` | The engine's own account/costs/latency config for the example symbol. Edited values from the form are applied on top (`--opt` style). |
-| `data/example_ticks.csv` | 70 000 random EURUSD-like ticks (2024-01-01 … 2024-02-20) in the MT5 export format. A seeded random walk, **not market data**. |
-| `index.html` | Page (self-contained styling, paper style guide). |
+| `index.html` | The app's own page (header roadmap, tabs) plus a back link to /research/ |
+| `app.js`, `charts.js`, `optimizer.js`, `style.css`, `schema.json` | The web app, **copied unmodified** from the engine repo's `web/` |
+| `mt5bt.wasm` | The server + engine (~1 MB), built from the Rust repo with `wasm/build.sh` |
+| `bridge.js` | Routes the app's API calls to the worker |
+| `server-worker.js`, `server-core.js` | Worker, and the WASI glue (in-memory file system from `assets/vendor/browser_wasi_shim-0.4.2/`) |
+| `data/example_ticks.csv`, `broker.cfg`, `sets/*.set` | The seeded example: 70 000 random EURUSD-like ticks (a seeded random walk, **not market data**), its broker config and ready-made parameter files, including optimiser ranges |
 
-## Updating the engine
+On load the worker starts the module and seeds the workspace *through the app's own API* (upload the CSV, convert
+it, save the config and `.set` files), so the example goes through exactly the path a user's data would.
 
-In the Rust repo: `wasm/build.sh ../bqe-frontend` builds `wasm32-unknown-unknown` and copies `mt5bt.wasm` here.
-`test/backtest-lab.test.ts` (run by `npm test`) loads this exact file and checks it against what the native
-`mt5bt` binary printed for the same data and settings, so a stale or broken build fails CI.
+## Limits compared with a local `mt5bt serve`
 
-The module's interface is five C functions (`mt5_alloc`, `mt5_free`, `mt5_load_csv`, `mt5_run`, `mt5_out_ptr`),
-documented at the top of `wasm/src/lib.rs` in the Rust repo. No wasm-bindgen, no imports.
+* **No threads in WebAssembly**: a job (run, sweep, optimisation) finishes inside the request that starts it, so
+  there is no live progress or cancel while it runs; results appear when it is done. Optimizer results do not depend
+  on thread count, so they are identical to the native ones.
+* **Workspace in memory**: datasets, runs and files vanish when the tab closes. Upload your own tick CSV in
+  *Data & files*; it is read locally and never leaves the browser.
+* **Strategy editor** (Claude-assisted MQL5 → Rust port) needs cargo and the Claude CLI, so it is disabled with a message.
+* "Register a file by path" refers to the visitor's own disk and does nothing here.
+
+## Updating
+
+In the Rust repo: `wasm/build.sh ../bqe-frontend` rebuilds `mt5bt.wasm` and copies it, together with the web UI
+files, into this folder. Commit the result. `test/backtest-lab.test.ts` (run by `npm test`) loads that exact module,
+drives the API the way the app does, and compares run results with the native binary, so a stale or broken build
+fails CI.
+
+The module's interface is five C functions (`mt5_open`, `mt5_request`, `mt5_out_ptr`, `mt5_alloc`, `mt5_free`),
+documented at the top of `wasm/src/lib.rs` in the Rust repo.
 
 ## Notes
 
-* **CSP**: instantiating WebAssembly needs `'wasm-unsafe-eval'` in `script-src` (set in `_headers`, allowed in
-  `test/security.test.ts`). It does not permit `eval()` or `new Function()`.
-* **Strategies**: the three shown are the engine's example strategies (`src/strategies/examples.rs`). To add one,
-  implement it in Rust, rebuild the module, and add its parameters to `STRATEGIES` in `engine.js`.
-* **Your own data**: any MT5 tick CSV works through the file picker (read locally, never uploaded).
-* `engine.js`/`lab.js`/`mt5bt.wasm`/`broker.cfg` are `no-cache` in `_headers` so a deploy is never shadowed by a stale copy.
+* **CSP**: instantiating WebAssembly needs `'wasm-unsafe-eval'` in `script-src` (set in `_headers`, allowed by name in
+  `test/security.test.ts`). It does not permit `eval()` or `new Function()`. Workers and `fetch` stay on `'self'`.
+* All files here are `no-cache` in `_headers`, so a deploy is never shadowed by a stale copy.
+* To add a strategy: implement it in Rust (`src/strategies/`), add its parameters to `web/schema.json` in the Rust repo,
+  rebuild, and add a `.set` file to `sets/` and to `seedExample()` if you want it pre-loaded.
