@@ -8,13 +8,14 @@ import { buildBriefing, latestBriefing } from "../worker/news/briefing";
 import { CALENDAR, type CalendarConfig, readCalendar, refreshCalendar } from "../worker/news/calendar";
 import type { Config } from "../worker/news/feeds";
 import { handleChat, handleNews, newsTick } from "../worker/news/index";
+import { chatHeadlines, searchHeadlines } from "../worker/news/chat";
 import { handleConversations } from "../worker/news/conversations";
 import { handleAnalysis, priceStats } from "../worker/news/analyst";
 import { toProfile } from "../worker/profile";
 import { rankCalendar } from "../worker/news/rank";
 import { mergeScreen, screenRow } from "../worker/screen";
 import { rankHeadlines } from "../worker/news/headlines";
-import { ingest as ingestPart, pruneNews } from "../worker/news/store";
+import { ingest as ingestPart, pruneNews, recentItems, topItems } from "../worker/news/store";
 
 // Every source in one run: the rotation over runs is tested on its own.
 const ALL = { part: 0, of: 1, budget: Infinity };
@@ -485,13 +486,51 @@ describe("Market News flow", () => {
     expect(report.added).toBe(2);
   });
 
-  it("prunes what is older than 7 days", async () => {
+  it("keeps headlines 180 days, with their search index, and prunes them after", async () => {
     internet();
     const env = envWith();
     await ingest(env, NOW, cfg);
+    const count = (table: string) => (env.DB.raw.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as any).n;
     await pruneNews(env, NOW + 8 * 86_400_000);
-    expect(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM news_items").get()).toEqual({ n: 0 });
-    expect(env.DB.raw.prepare("SELECT COUNT(*) AS n FROM news_item_tickers").get()).toEqual({ n: 0 });
+    expect([count("news_items"), count("news_fts"), count("news_item_tickers")]).toEqual([5, 5, 1]);
+    await pruneNews(env, NOW + 181 * 86_400_000);
+    expect([count("news_items"), count("news_fts"), count("news_item_tickers")]).toEqual([0, 0, 0]);
+  });
+
+  it("picks the chat's week of headlines in the database the way pickInput does in code", async () => {
+    internet();
+    const env = envWith();
+    await ingest(env, NOW, cfg);
+    env.DB.raw.exec("UPDATE news_items SET importance = 5 WHERE title LIKE 'Kremlin%'");
+    env.DB.raw.exec("UPDATE news_items SET importance = 1 WHERE title LIKE 'US GDP%'");
+    const now = NOW + 30 * 60_000;
+    const top = await topItems(env, now, 7 * 24, 3);
+    expect(top.map((i) => i.id)).toEqual(chatHeadlines(await recentItems(env, now, 7 * 24, 100), now, 3).map((i) => i.id));
+    // A market-moving headline makes the cut; a ranked-down one does not.
+    expect(top.map((i) => i.title)).toContain("Kremlin rejects new EU sanctions package");
+    expect(top.map((i) => i.title)).not.toContain("US GDP growth revised up in third estimate");
+  });
+
+  it("searches headlines through the full-text index: all words, word beginnings, then any word", async () => {
+    internet();
+    const env = envWith();
+    await ingest(env, NOW, cfg);
+    // A second ingest adds nothing, and nothing twice to the index.
+    await ingest(env, NOW + 60_000, cfg);
+    expect((env.DB.raw.prepare("SELECT COUNT(*) AS n FROM news_fts").get() as any).n).toBe(5);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW + 60 * 86_400_000);
+    const titles = async (q: string, days = 90, region = "any") => (await searchHeadlines(env, q, days, region)).map((i) => i.title);
+    expect(await titles("GDP revised")).toEqual(["US GDP growth revised up in third estimate"]);
+    // "sanction" is the start of "sanctions"; case and word order do not matter.
+    expect(await titles("SANCTION kremlin")).toEqual(["Kremlin rejects new EU sanctions package"]);
+    // No headline has both words: any word.
+    expect(await titles("oil ecb")).toEqual(["ECB officials split on October cut", "Oil slips as OPEC+ supply talk returns"]);
+    expect(await titles("ecb", 90, "russia")).toEqual([]);
+    // Older than the window asked for: not found.
+    expect(await titles("GDP revised", 30)).toEqual([]);
+    // Typed FTS syntax is only words.
+    expect(await titles('"GDP" OR NEAR(x')).toEqual(["US GDP growth revised up in third estimate"]);
   });
 });
 

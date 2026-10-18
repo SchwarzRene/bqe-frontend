@@ -23,7 +23,11 @@ export interface Item {
 }
 
 const DAY_MS = 86_400_000;
-const KEEP_DAYS = 7;
+// Headlines are kept half a year, so the chat can search back that far
+// (~150 MB at ~800 a day, well inside D1's 500 MB). Briefings, past events
+// and chat counters are only needed for a week.
+export const KEEP_DAYS = 180;
+const KEEP_BRIEFING_DAYS = 7;
 const OVERLAP = 0.7;
 
 // --------------------------------------------------------------------------
@@ -238,6 +242,17 @@ export async function ingest(
       statements.push(env.DB.prepare("INSERT OR IGNORE INTO news_item_tickers (item_id, ticker) VALUES (?, ?)").bind(m.id, t));
     }
   }
+  // The new headlines into the search index, in one statement, after the
+  // inserts: `fetched_at = stamp` skips any id INSERT OR IGNORE left alone.
+  if (added.length) {
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO news_fts (title, id, published_at)
+         SELECT title, id, published_at FROM news_items
+          WHERE id IN (SELECT value FROM json_each(?1)) AND fetched_at = ?2`,
+      ).bind(JSON.stringify(added.map((a) => a.id)), stamp),
+    );
+  }
   for (let i = 0; i < statements.length; i += 50) await env.DB.batch(statements.slice(i, i + 50));
 
   await recordHealth(env, health, now);
@@ -339,6 +354,23 @@ export function toItem(r: Row): Item {
   };
 }
 
+/**
+ * The `limit` most important headlines of the last `hours`, newest first:
+ * effectiveScore() plus a recency bonus that fades over a day (the same
+ * ranking as briefing.ts pickInput), worked out by the database so the Worker
+ * never loads the thousands of rows a week holds.
+ */
+export async function topItems(env: Env, now: number, hours: number, limit: number): Promise<Item[]> {
+  const rows = await env.DB.prepare(
+    `SELECT ${COLUMNS} FROM news_items WHERE published_at > ?1
+      ORDER BY ${EFFECTIVE_SCORE_SQL} + MAX(0, 25 * (1 - (julianday(?2) - julianday(published_at)))) DESC
+      LIMIT ?3`,
+  )
+    .bind(iso(now - hours * 3_600_000), iso(now), limit)
+    .all<Row>();
+  return (rows.results ?? []).map(toItem).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+}
+
 /** Headlines of the last `hours`, newest first. */
 export async function recentItems(env: Env, now: number, hours = 24, limit = 250): Promise<Item[]> {
   const rows = await env.DB.prepare(`SELECT ${COLUMNS} FROM news_items WHERE published_at > ? ORDER BY published_at DESC LIMIT ?`)
@@ -376,15 +408,17 @@ async function todayEventWords(env: Env, now: number): Promise<string[]> {
   }
 }
 
-/** Items, briefings and past events older than 7 days. Run daily. */
+/** Headlines older than 180 days; briefings and chat counters older than 7; past events older than 14. Run daily. */
 export async function pruneNews(env: Env, now = Date.now()): Promise<void> {
   const cutoff = iso(now - KEEP_DAYS * DAY_MS);
+  const shortCutoff = iso(now - KEEP_BRIEFING_DAYS * DAY_MS);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM news_item_tickers WHERE item_id IN (SELECT id FROM news_items WHERE published_at < ?)").bind(cutoff),
+    env.DB.prepare("DELETE FROM news_fts WHERE published_at < ?").bind(cutoff),
     env.DB.prepare("DELETE FROM news_items WHERE published_at < ?").bind(cutoff),
-    env.DB.prepare("DELETE FROM news_briefings WHERE generated_at < ?").bind(cutoff),
+    env.DB.prepare("DELETE FROM news_briefings WHERE generated_at < ?").bind(shortCutoff),
     env.DB.prepare("DELETE FROM news_events WHERE start_at < ?").bind(iso(now - 14 * DAY_MS)),
-    env.DB.prepare("DELETE FROM news_chat_usage WHERE day < ?").bind(cutoff.slice(0, 10)),
+    env.DB.prepare("DELETE FROM news_chat_usage WHERE day < ?").bind(shortCutoff.slice(0, 10)),
     // What Market Tape, which Market News replaced, left behind.
     env.DB.prepare("DELETE FROM documents WHERE key LIKE 'markettape:%'"),
   ]);
