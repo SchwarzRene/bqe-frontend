@@ -5,13 +5,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { d1 } from "./d1";
 import { analyse, atr, atrSeries, swings, trendState, type Bar, breakout, highN, isStale, lowN, sma, weekdaysSince } from "../worker/prices/indicators";
-import { handlePrices, isPricesRun, pricesTick } from "../worker/prices";
+import { handlePrices, isPricesRun, pricesTick, slotKind } from "../worker/prices";
 import { INSTRUMENTS, type Instrument } from "../worker/prices/store";
 import { parseChart } from "../worker/prices/yahoo";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const OFF = { backfill: 0 }; // the backfill has its own tests
+const OFF = { kind: "refresh" as const }; // the backfill has its own tests
 
 // 30 bars: close = 100 + i, high = close + 2, low = close - 2, open = close.
 // Every true range is max(4, 3, 1) = 4, so ATR is exactly 4 whatever the seed.
@@ -158,6 +158,15 @@ describe("indicators", () => {
   it("stale: an old bar, or an old fetch on a weekday", () => {
     const wed = Date.parse("2026-10-21T14:00:00Z");
     expect(weekdaysSince("2026-10-16", "2026-10-19")).toBe(1); // Fri -> Mon
+    expect(weekdaysSince("2026-10-19", "2026-10-19")).toBe(0);
+    expect(weekdaysSince("2026-10-21", "2026-10-19")).toBe(0);
+    // the same as counting the days one by one, for every start and length over a few weeks
+    for (let a = 0; a < 21; a++) for (let b = 0; b < 40; b++) {
+      const from = new Date(Date.UTC(2026, 0, 1 + a)).toISOString().slice(0, 10), to = new Date(Date.UTC(2026, 0, 1 + a + b)).toISOString().slice(0, 10);
+      let n = 0;
+      for (let k = 1; k <= b; k++) { const dow = new Date(Date.UTC(2026, 0, 1 + a + k)).getUTCDay(); if (dow >= 1 && dow <= 5) n++; }
+      expect(weekdaysSince(from, to)).toBe(n);
+    }
     expect(isStale("2026-10-20", "2026-10-21T12:00:00Z", wed)).toBe(false);
     expect(isStale("2026-10-20", "2026-10-21T07:00:00Z", wed)).toBe(true); // 7 h old on a weekday
     expect(isStale("2026-10-15", "2026-10-21T13:00:00Z", wed)).toBe(true); // Thu bar: Fri Mon Tue Wed = 4
@@ -244,30 +253,30 @@ const get = (env: any, query = "", now = NOW) =>
   handlePrices(new Request(`https://x.test/api/commodities/prices${query}`), env, now, TEST);
 
 describe("pricesTick", () => {
-  it("refreshes five at a time round-robin and rebuilds the snapshot", async () => {
+  it("refreshes three at a time round-robin and rebuilds the snapshot", async () => {
     const env: any = { DB: d1() };
     const y = yahoo();
-    expect(await pricesTick(env, NOW, TEST, y.fetch, OFF)).toBe("5/5 refreshed");
-    expect(y.calls).toHaveLength(5);
-    expect((await get(env)).status).toBe(200);
+    expect(await pricesTick(env, NOW, TEST, y.fetch, OFF)).toBe("3/3 refreshed");
+    expect(y.calls).toHaveLength(3);
     let body: any = await (await get(env)).json();
-    expect(body.instruments.map((i: any) => i.ok)).toEqual([true, true, true, true, true, false, false]);
+    expect(body.instruments.map((i: any) => i.ok)).toEqual([true, true, true, false, false, false, false]);
 
-    // 5 + 2 wrap around to the start: XAUUSD and XAGUSD again
-    expect(await pricesTick(env, NOW + 20 * 60_000, TEST, y.fetch, OFF)).toBe("5/5 refreshed");
-    expect(y.calls.slice(5).map((u) => decodeURIComponent(u.match(/chart\/([^?]+)/)![1]))).toEqual(["T5=F", "T6=F", "T0=F", "T1=F", "T2=F"]);
+    // 3 + 3 + 3 wraps around the 7 instruments: the third run takes XNGUSD, then XAUUSD and XAGUSD again
+    await pricesTick(env, NOW + 30 * 60_000, TEST, y.fetch, OFF);
+    expect(await pricesTick(env, NOW + 60 * 60_000, TEST, y.fetch, OFF)).toBe("3/3 refreshed");
+    expect(y.calls.slice(6).map((u) => decodeURIComponent(u.match(/chart\/([^?]+)/)![1]))).toEqual(["T6=F", "T0=F", "T1=F"]);
     body = await (await get(env)).json();
     expect(body.instruments.every((i: any) => i.ok)).toBe(true);
   });
 
   it("a failed instrument keeps its data with ok:false; the others and the endpoint are fine", async () => {
     const env: any = { DB: d1() };
-    await pricesTick(env, NOW, TEST, yahoo().fetch, OFF);
-    await pricesTick(env, NOW + 15 * 60_000, TEST, yahoo().fetch, OFF);
+    await pricesTick(env, NOW, TEST, yahoo().fetch, OFF); // T0 T1 T2
+    await pricesTick(env, NOW + 30 * 60_000, TEST, yahoo().fetch, OFF); // T3 T4 T5
     const before: any = ((await (await get(env)).json()) as any).instruments[0];
 
-    // the third tick takes T3 T4 T5 T6 T0
-    const later = NOW + 30 * 60_000;
+    // the third run takes T6 T0 T1
+    const later = NOW + 60 * 60_000;
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const out = await pricesTick(env, later, TEST, yahoo(["T0=F"]).fetch, OFF);
     expect(out).toContain("failed: XAUUSD");
@@ -315,8 +324,7 @@ describe("pricesTick", () => {
       b.chart.result[0].meta.regularMarketPrice = 2.123456;
       return new Response(JSON.stringify(b), { status: 200 });
     });
-    await pricesTick(env, NOW, TEST, f as any, OFF); // XAU..XPD, XTI
-    await pricesTick(env, NOW + 15 * 60_000, TEST, f as any, OFF); // XBR, XNG, ...
+    for (let k = 0; k < 3; k++) await pricesTick(env, NOW + k * 30 * 60_000, TEST, f as any, OFF); // ... XNGUSD is the seventh
     const ng = ((await (await get(env)).json()) as any).instruments.find((i: any) => i.symbol === "XNGUSD");
     expect(ng.last).toBe(2.123);
   });
@@ -324,10 +332,14 @@ describe("pricesTick", () => {
   it("only runs when due: weekdays, Saturday morning, never Sunday", () => {
     expect(isPricesRun(Date.parse("2026-10-20T13:05:00Z"))).toBe(true); // Tue
     expect(isPricesRun(Date.parse("2026-10-24T11:05:00Z"))).toBe(true); // Sat 07:05 ET
-    expect(isPricesRun(Date.parse("2026-10-24T11:35:00Z"))).toBe(true); // Sat 07:35, third tick of 15
-    expect(isPricesRun(Date.parse("2026-10-24T11:50:00Z"))).toBe(false); // a fourth tick is not needed
-    expect(isPricesRun(Date.parse("2026-10-24T15:05:00Z"))).toBe(false); // Sat afternoon
+    expect(isPricesRun(Date.parse("2026-10-24T13:35:00Z"))).toBe(true); // Sat 09:35 ET: the last hour of 3 (15 instruments, 6 an hour)
+    expect(isPricesRun(Date.parse("2026-10-24T14:05:00Z"))).toBe(false); // Sat 10:05 ET
+    expect(isPricesRun(Date.parse("2026-10-24T09:05:00Z"))).toBe(false); // Sat 05:05 ET
     expect(isPricesRun(Date.parse("2026-10-25T13:05:00Z"))).toBe(false); // Sun
+  });
+
+  it("the run alternates between refreshing and backfilling", () => {
+    expect(["05", "20", "35", "50"].map((m) => slotKind(Date.parse(`2026-10-20T13:${m}:00Z`)))).toEqual(["refresh", "backfill", "refresh", "backfill"]);
   });
 
   it("the config lists the 15 instruments, each with a unique symbol and ticker", () => {
@@ -562,14 +574,14 @@ describe("the backfill", () => {
   it("fetches a few year-files per run, newest first, one instrument after the other", async () => {
     const env: any = { DB: d1() };
     const feed = feeds();
-    const out = await pricesTick(env, NOW, MIX, feed.fetch, { backfill: 3 });
+    const out = await pricesTick(env, NOW, MIX, feed.fetch, { kind: "backfill", files: 3 });
     expect(out).toContain("backfill: 3 years, 1 instruments to go"); // oil and corn start in 2025: only gold has 2024 left
     const done = feed.calls.filter((u) => !u.includes("from=") && !u.includes("range=1y")).map((u) => u.replace(/^https:\/\/[^/]+/, "").slice(0, 60));
     expect(done[0]).toBe("/v1/candles/day/XAU-USD/BID/2025");
     expect(done[1]).toBe("/v1/candles/day/LIGHT.CMD-USD/BID/2025");
     expect(done[2]).toContain("ZC%3DF?period1="); // Yahoo's year for the corn
     // the next run goes a year further back for gold (since 2024), nothing more for the others
-    await pricesTick(env, NOW + 15 * 60_000, MIX, feed.fetch, { backfill: 3 });
+    await pricesTick(env, NOW + 15 * 60_000, MIX, feed.fetch, { kind: "backfill", files: 3 });
     expect(feed.calls.some((u) => u.endsWith("XAU-USD/BID/2024"))).toBe(true);
   });
 
@@ -577,10 +589,10 @@ describe("the backfill", () => {
     const env: any = { DB: d1() };
     const feed = feeds();
     const sunday = Date.parse("2026-10-25T13:00:00Z"); // no refresh on a Sunday: the backfill alone
-    for (let k = 0; k < 4; k++) await pricesTick(env, sunday + k * 15 * 60_000, MIX, feed.fetch, { backfill: 3 });
+    for (let k = 0; k < 4; k++) await pricesTick(env, sunday + k * 15 * 60_000, MIX, feed.fetch, { kind: "backfill", files: 3 });
     const files = feed.calls.length;
     expect(files).toBe(4); // gold 2025 2024, oil 2025, corn 2025 (oil, corn start in 2025)
-    expect(await pricesTick(env, sunday + 3_600_000, MIX, feed.fetch, { backfill: 3 })).toBe("skipped");
+    expect(await pricesTick(env, sunday + 3_600_000, MIX, feed.fetch, { kind: "backfill", files: 3 })).toBe("skipped");
     expect(feed.calls).toHaveLength(files);
     const snap: any = await (await history(env, "")).json();
     expect(snap.instruments.map((i: any) => i.historyComplete)).toEqual([true, true, true]);
@@ -590,21 +602,21 @@ describe("the backfill", () => {
     const env: any = { DB: d1() };
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const sunday = Date.parse("2026-10-25T13:00:00Z");
-    const out = await pricesTick(env, sunday, [GOLD], feeds(["BID/2025"]).fetch, { backfill: 1 });
+    const out = await pricesTick(env, sunday, [GOLD], feeds(["BID/2025"]).fetch, { kind: "backfill", files: 1 });
     expect(out).toContain("1 failed");
     const feed = feeds();
-    expect(await pricesTick(env, sunday + 900_000, [GOLD], feed.fetch, { backfill: 1 })).toContain("1 years");
+    expect(await pricesTick(env, sunday + 900_000, [GOLD], feed.fetch, { kind: "backfill", files: 1 })).toContain("1 years");
     expect(feed.calls[0]).toContain("BID/2025"); // the same year again
     const oil = feeds();
-    await pricesTick(env, sunday + 1_800_000, [{ ...OIL, since: 2024 }], oil.fetch, { backfill: 3 });
-    await pricesTick(env, sunday + 2_700_000, [{ ...OIL, since: 2024 }], oil.fetch, { backfill: 3 });
+    await pricesTick(env, sunday + 1_800_000, [{ ...OIL, since: 2024 }], oil.fetch, { kind: "backfill", files: 3 });
+    await pricesTick(env, sunday + 2_700_000, [{ ...OIL, since: 2024 }], oil.fetch, { kind: "backfill", files: 3 });
     expect(oil.calls.filter((u) => u.includes("/2024"))).toHaveLength(1); // the 404 year was not retried
   });
 
   it("the archive answers from/to, days, years and ohlc", async () => {
     const env: any = { DB: d1() };
     const feed = feeds();
-    for (let k = 0; k < 5; k++) await pricesTick(env, NOW + k * 15 * 60_000, MIX, feed.fetch, { backfill: 3 });
+    for (let k = 0; k < 5; k++) await pricesTick(env, NOW + k * 15 * 60_000, MIX, feed.fetch, { kind: "backfill", files: 3 });
 
     const one: any = await (await history(env, "history=1&symbol=XAUUSD&from=2025-03-03&to=2025-03-07")).json();
     expect(one.range).toEqual({ from: "2025-03-03", to: "2025-03-07" });
@@ -648,7 +660,7 @@ describe("the backfill", () => {
       return feed.fetch(input, init);
     });
     const prepare = vi.spyOn(env.DB, "prepare");
-    await pricesTick(env, NOW, INSTRUMENTS, stub as any, { backfill: 3 });
+    await pricesTick(env, NOW, INSTRUMENTS, stub as any, { kind: "backfill", files: 3 });
     expect(prepare.mock.calls.length).toBeLessThanOrEqual(50);
     expect(stub.mock.calls.length).toBeLessThanOrEqual(50);
   });
@@ -661,9 +673,9 @@ describe("the backfill", () => {
         ? new Response(JSON.stringify(encode(weekdays("2026-01-01", "2026-12-31"), (i) => 100 + i)))
         : feed.fetch(input, init));
     // the archive is complete: only the refresh is left
-    await pricesTick(env, NOW, INSTRUMENTS, stub as any, { backfill: 0 });
+    await pricesTick(env, NOW, INSTRUMENTS, stub as any, OFF);
     const prepare = vi.spyOn(env.DB, "prepare");
-    await pricesTick(env, NOW + 15 * 60_000, INSTRUMENTS, stub as any, { backfill: 0 });
+    await pricesTick(env, NOW + 15 * 60_000, INSTRUMENTS, stub as any, OFF);
     const writes = prepare.mock.calls.filter(([sql]) => /^\s*INSERT/i.test(String(sql))).length;
     // 5 instruments x (recent window + current year) + cursor + snapshot; a written row costs two with its index
     expect(writes).toBeLessThanOrEqual(14);
@@ -676,5 +688,76 @@ describe("the backfill", () => {
     await pricesTick(env, NOW, TEST, yahoo().fetch, OFF);
     await handlePrices(new Request("https://x.test/api/commodities/prices?history=1"), env, NOW, TEST);
     expect(prepare.mock.calls.some(([sql]) => /LIKE/i.test(String(sql)))).toBe(false);
+  });
+
+  it("a history answer bigger than one request can serve is refused with a way forward", async () => {
+    const env: any = { DB: d1() };
+    // 40 years of a single instrument: 40 documents of ~13 KB
+    for (let y = 1990; y < 2026; y++) {
+      const bars = weekdays(`${y}-01-01`, `${y}-12-31`).map((d, i): Bar => [d, 100.12 + i, 102.55 + i, 98.34 + i, 101.01 + i]);
+      env.DB.raw.prepare("INSERT INTO documents (key, body, updated) VALUES (?, ?, 'x')").run(`prices:years:XAUUSD:${y}`, JSON.stringify(bars));
+    }
+    await pricesTick(env, NOW, [GOLD], feeds().fetch, OFF);
+    const res = await handlePrices(new Request("https://x.test/api/commodities/prices?history=1&symbol=XAUUSD&from=1990-01-01"), env, NOW, [GOLD]);
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as any).error).toContain("in pieces with from and to");
+    const piece = await handlePrices(new Request("https://x.test/api/commodities/prices?history=1&symbol=XAUUSD&from=2015-01-01&to=2020-12-31"), env, NOW, [GOLD]);
+    expect(piece.status).toBe(200);
+  });
+
+  it("the cursor moves on even when every fetch fails, so a bad instrument cannot stall the rotation", async () => {
+    const env: any = { DB: d1() };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const down = yahoo(["T0=F", "T1=F", "T2=F"]);
+    await pricesTick(env, NOW, TEST, down.fetch, OFF);
+    const ok = yahoo();
+    await pricesTick(env, NOW + 30 * 60_000, TEST, ok.fetch, OFF);
+    expect(ok.calls.map((u) => decodeURIComponent(u.match(/chart\/([^?]+)/)![1]))).toEqual(["T3=F", "T4=F", "T5=F"]);
+  });
+
+  it("backfill progress is saved file by file", async () => {
+    const env: any = { DB: d1() };
+    const sunday = Date.parse("2026-10-25T13:20:00Z");
+    // the second file's fetch blows up in a way the job does not catch, as a CPU cut-off would
+    let n = 0;
+    const feed = feeds();
+    const f = (async (u: any, init?: any) => {
+      if (++n === 2) throw new Error("killed");
+      return feed.fetch(u, init);
+    }) as typeof fetch;
+    await pricesTick(env, sunday, [GOLD, OIL], f, { kind: "backfill", files: 2 }).catch(() => {});
+    const state = JSON.parse(env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'prices:backfill'").get().body);
+    expect(state.next.XAUUSD).toBe(2024); // 2025 done and remembered
+  });
+
+  it("the recent window reaches into the archive until it is full", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    await pricesTick(env, Date.parse("2026-01-12T14:20:00Z"), [GOLD], feed.fetch, { kind: "backfill", files: 1 }); // 2025 into the archive
+    await pricesTick(env, Date.parse("2026-01-12T14:35:00Z"), [GOLD], feed.fetch, OFF);
+    const recent = JSON.parse(env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'prices:bars:XAUUSD'").get().body);
+    expect(recent.bars).toHaveLength(268); // 7 days of January and the 261 of 2025: all there is so far
+    const entry = () => JSON.parse(env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'prices:entry:XAUUSD'").get().body);
+    expect(entry().sma200).not.toBeNull();
+    expect(entry().structure.atrPercentile1y).not.toBeNull();
+    // 2024 arrives; the next refresh fills the window
+    await pricesTick(env, Date.parse("2026-01-12T14:50:00Z"), [GOLD], feed.fetch, { kind: "backfill", files: 1 });
+    await pricesTick(env, Date.parse("2026-01-12T15:05:00Z"), [GOLD], feed.fetch, OFF);
+    expect(JSON.parse(env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'prices:bars:XAUUSD'").get().body).bars).toHaveLength(300);
+  });
+});
+
+import { wallClock, ET } from "../worker/news/time";
+import { newYorkWall } from "../worker/prices/indicators";
+
+describe("newYorkWall", () => {
+  it("agrees with Intl across two years, DST changes included", () => {
+    let checked = 0;
+    for (let ms = Date.parse("2025-01-01T00:00:00Z"); ms < Date.parse("2027-01-01T00:00:00Z"); ms += 37 * 60_000) {
+      const a = newYorkWall(ms), b = wallClock(ms, ET);
+      if (a.date !== b.date || a.weekday !== b.weekday || a.hour !== b.hour) throw new Error(`mismatch at ${new Date(ms).toISOString()}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(28_000);
   });
 });

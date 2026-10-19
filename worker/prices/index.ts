@@ -9,45 +9,50 @@
 //
 // pricesTick() is the job behind it: its own cron (minutes :05/:20/:35/:50,
 // which the news cron's :00/:15/:30/:45 never uses), so it takes no run from
-// the briefings or the headline fetch. Every run:
-//   refresh   weekdays: the next PER_TICK instruments round-robin (a full pass
-//             every 45 minutes); Saturday morning one full pass; Sunday none.
-//             Only this year's candles are fetched (last year's too in the first
-//             days of January), so "later only the last week" is a small request.
-//   backfill  until every instrument's archive reaches its `since` year: a few
-//             year-files per run, newest year first, round-robin over the instruments.
-// A run stays inside the free plan's 50 external subrequests.
+// the briefings or the headline fetch. The free plan gives a run 10 ms of CPU,
+// so a run does ONE kind of small job (see slotKind):
+//   :05 :35  refresh   the next PER_TICK instruments, round-robin. Weekdays; Saturday
+//                      morning one full pass; Sunday none. Only this year's candles are
+//                      fetched (last year's too in early January): "later only the last week".
+//   :20 :50  backfill  a few year-files of the archive, newest year first, round-robin
+//                      over the instruments, until every archive reaches its `since` year
+//                      (then these runs refresh too). It is slow on purpose.
+// Progress is saved before the heavy work and after every file, so a run that
+// is cut off by the CPU limit moves on instead of repeating itself.
 
 import type { Env } from "../env";
 import { json, jsonText, mapLimit } from "../http";
-import { ET, wallClock } from "../news/time";
 import { fetchRecent, fetchYearBars } from "./dukascopy";
-import { type Bar, isStale, round } from "./indicators";
+import { type Bar, isStale, newYorkWall, round } from "./indicators";
 import {
   type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, readBackfill, readCursor, rebuildSnapshot,
-  saveChart, saveYear, SNAPSHOT_KEY, type Snapshot, type StoredBars, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
+  saveChart, saveYear, SNAPSHOT_KEY, type Snapshot, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
 } from "./store";
 import { fetchChart, fetchYahooYear } from "./yahoo";
 
-/** Instruments refreshed per run; drop to 3 if a run ever exceeds the free plan's CPU budget. */
-export const PER_TICK = 5;
+/** Instruments refreshed per refresh run (about 1.5 ms of CPU each); lower it if a run ever exceeds the free plan's 10 ms. */
+export const PER_TICK = 3;
 /**
- * Year-files fetched per run by the backfill: about 250 files in all, so the
- * archive is complete after ~60 runs (15 hours). Each file is one subrequest
- * and one or two D1 writes; the CPU budget (10 ms on the free plan) is what
- * limits this, not the storage.
+ * Year-files per backfill run (about 1 ms each). The ~250 files take about 40
+ * hours at two runs an hour; the admin run does one batch on request.
  */
-export const BACKFILL_PER_TICK = 4;
-/** What the admin run fetches in one go (50 external subrequests per invocation on the free plan). */
-export const ADMIN_BACKFILL = 20;
+export const BACKFILL_PER_TICK = 3;
 
 export const PRICES_CRON = "5,20,35,50 * * * *";
 
 /** The Saturday pass starts at this New York hour. */
 const WEEKEND_HOUR = 7;
+const REFRESH_RUNS_PER_HOUR = 2;
 
-/** More calendar years than this in one answer needs ?symbol= (CPU: the response is parsed from D1). */
+/** More calendar years than this in one answer needs ?symbol=. */
 const MAX_YEARS_ALL = 2;
+/**
+ * A history answer is parsed from D1 and serialised again within one request's
+ * 10 ms of CPU: at most this many bytes of year documents (~5,500 bars).
+ * Longer spans are fetched in pieces with from/to.
+ */
+const MAX_RANGE_BYTES = 250_000;
+const BYTES_PER_BAR = 45;
 const DEFAULT_HISTORY_BARS = 260;
 
 const HEADERS = { "Cache-Control": "public, max-age=60", "Access-Control-Allow-Origin": "*" };
@@ -123,6 +128,12 @@ export async function handlePrices(request: Request, env: Env, now = Date.now(),
   const row = results.find((r) => r.key === SNAPSHOT_KEY);
   if (!row) return json({ error: "no price data yet" }, 503, { "Retry-After": "300" });
 
+  if (range) {
+    const bytes = results.reduce((n, r) => (r.key.startsWith(YEARS_PREFIX) ? n + r.body.length : n), 0);
+    if (bytes > MAX_RANGE_BYTES) {
+      return json({ error: `range too large (about ${Math.round(bytes / BYTES_PER_BAR)} bars, at most ${Math.round(MAX_RANGE_BYTES / BYTES_PER_BAR)} per request): fetch it in pieces with from and to` }, 400, HEADERS);
+    }
+  }
   const snapshot = JSON.parse(row.body) as Snapshot;
   const decimals = new Map(instruments.map((i) => [i.symbol, i.decimals ?? 2]));
 
@@ -137,7 +148,7 @@ export async function handlePrices(request: Request, env: Env, now = Date.now(),
         .filter((b) => b[0] >= range.from && b[0] <= range.to);
     }
     const recent = results.find((r) => r.key === BARS_PREFIX + sym);
-    return recent ? (JSON.parse(recent.body) as StoredBars).bars.slice(-DEFAULT_HISTORY_BARS) : [];
+    return recent ? (JSON.parse(recent.body) as { bars: Bar[] }).bars.slice(-DEFAULT_HISTORY_BARS) : [];
   };
 
   const body = {
@@ -167,31 +178,60 @@ export async function handlePrices(request: Request, env: Env, now = Date.now(),
 // the cron
 // --------------------------------------------------------------------------
 
-/** Whether the run at `ms` refreshes prices: weekdays always, Saturday morning one full pass, Sunday never. */
+export type Kind = "refresh" | "backfill";
+
+/** What the run at `ms` does: refresh at :05 and :35, backfill at :20 and :50. */
+export function slotKind(ms: number): Kind {
+  return Math.floor(new Date(ms).getUTCMinutes() / 15) % 2 === 0 ? "refresh" : "backfill";
+}
+
+/** Whether a refresh is due at `ms`: weekdays always, Saturday morning one full pass, Sunday never. */
 export function isPricesRun(ms: number, count = INSTRUMENTS.length): boolean {
-  const w = wallClock(ms, ET);
+  const w = newYorkWall(ms);
   if (w.weekday >= 1 && w.weekday <= 5) return true;
-  return w.weekday === 6 && w.hour === WEEKEND_HOUR && Math.floor(w.minute / 15) < Math.ceil(count / PER_TICK);
+  const hours = Math.ceil(count / (PER_TICK * REFRESH_RUNS_PER_HOUR));
+  return w.weekday === 6 && w.hour >= WEEKEND_HOUR && w.hour < WEEKEND_HOUR + hours;
 }
 
 export interface TickOptions {
-  /** Refresh even when the schedule says this run is not due (the admin run). */
+  /** What to do, instead of what the time says (the admin run, tests). */
+  kind?: Kind;
+  /** Refresh even when the schedule says it is not due. */
   force?: boolean;
-  /** Year-files the backfill fetches; defaults to BACKFILL_PER_TICK (the admin run asks for more). */
-  backfill?: number;
+  /** Year-files the backfill fetches; defaults to BACKFILL_PER_TICK. */
+  files?: number;
 }
 
 /** Refresh one instrument from its source. */
 async function refresh(env: Env, inst: Instrument, fetcher: typeof fetch, ms: number): Promise<void> {
-  const year = new Date(ms).getUTCFullYear();
-  const early = new Date(ms).getUTCMonth() === 0 && new Date(ms).getUTCDate() <= 10;
+  const d = new Date(ms);
+  const year = d.getUTCFullYear();
+  const early = d.getUTCMonth() === 0 && d.getUTCDate() <= 10;
   if (inst.dukascopy) {
     const { chart, years } = await fetchRecent(inst.dukascopy, fetcher, ms);
-    await saveChart(env, inst.symbol, chart, ms, { replace: years });
+    await saveChart(env, inst, chart, ms, { replace: years });
   } else {
     // A year of Yahoo bars covers this year completely and the one before only in part.
-    await saveChart(env, inst.symbol, await fetchChart(inst.yahoo, fetcher, ms), ms, { replace: [year], merge: early ? [year - 1] : [] });
+    await saveChart(env, inst, await fetchChart(inst.yahoo, fetcher, ms), ms, { replace: [year], merge: early ? [year - 1] : [] });
   }
+}
+
+async function refreshBatch(env: Env, ms: number, instruments: Instrument[], fetcher: typeof fetch): Promise<string> {
+  const start = (await readCursor(env)) % instruments.length;
+  const batch = Array.from({ length: Math.min(PER_TICK, instruments.length) }, (_, k) => instruments[(start + k) % instruments.length]);
+  // First: if this run is cut off by the CPU limit, the next one takes the following instruments.
+  await writeCursor(env, (start + batch.length) % instruments.length);
+  const failed: string[] = [];
+  for (const inst of batch) {
+    try {
+      await refresh(env, inst, fetcher, ms);
+    } catch (err) {
+      console.warn(`prices: fetch failed for ${inst.dukascopy ?? inst.yahoo} (${err instanceof Error ? err.message : err})`);
+      failed.push(inst.symbol);
+      await markFailed(env, inst, ms);
+    }
+  }
+  return `${batch.length - failed.length}/${batch.length} refreshed` + (failed.length ? `, failed: ${failed.join(" ")}` : "");
 }
 
 /**
@@ -212,7 +252,7 @@ async function backfill(
     const year = nextYear(state, inst, ms);
     try {
       const bars = inst.dukascopy ? await fetchYearBars(inst.dukascopy, year, fetcher, ms) : await fetchYahooYear(inst.yahoo, year, fetcher, ms);
-      await saveYear(env, inst.symbol, year, bars, ms);
+      await saveYear(env, inst.symbol, year, bars);
       state.next[inst.symbol] = year - 1;
       fetched++;
       finished ||= backfillDone(state, inst, ms);
@@ -220,42 +260,36 @@ async function backfill(
       console.warn(`prices: backfill failed for ${inst.symbol} ${year} (${err instanceof Error ? err.message : err})`);
       failed++;
     }
+    await writeBackfill(env, state); // after every file: a cut-off run keeps what it did
   }
   if (!fetched && !failed) return { report: "", finished };
-  await writeBackfill(env, state);
   const left = instruments.filter((i) => !backfillDone(state, i, ms)).length;
   return { report: `${fetched} years${failed ? `, ${failed} failed` : ""}, ${left} instruments to go`, finished };
 }
 
-/** Refresh the next PER_TICK instruments, run the backfill, and rebuild the snapshot. A failed instrument keeps its stored data. */
+/**
+ * One run of the prices job (see the header): a refresh or a backfill, then the
+ * snapshot when something it shows has changed. A failed instrument keeps its stored data.
+ */
 export async function pricesTick(
   env: Env, ms = Date.now(), instruments: Instrument[] = INSTRUMENTS, fetcher: typeof fetch = fetch, options: TickOptions = {},
 ): Promise<string> {
+  const kind = options.kind ?? slotKind(ms);
   const report: string[] = [];
-  if (options.force || isPricesRun(ms, instruments.length)) {
-    const start = (await readCursor(env)) % instruments.length;
-    const batch = Array.from({ length: Math.min(PER_TICK, instruments.length) }, (_, k) => instruments[(start + k) % instruments.length]);
-    const outcome = await mapLimit(batch, PER_TICK, async (inst) => {
-      try {
-        await refresh(env, inst, fetcher, ms);
-        return true;
-      } catch (err) {
-        console.warn(`prices: fetch failed for ${inst.dukascopy ?? inst.yahoo} (${err instanceof Error ? err.message : err})`);
-        await markFailed(env, inst.symbol);
-        return false;
-      }
-    });
-    await writeCursor(env, (start + batch.length) % instruments.length);
-    const failed = batch.filter((_, i) => !outcome[i]).map((i) => i.symbol);
-    report.push(`${batch.length - failed.length}/${batch.length} refreshed` + (failed.length ? `, failed: ${failed.join(" ")}` : ""));
+  let changed = false;
+
+  if (kind === "backfill") {
+    const done = await backfill(env, ms, instruments, fetcher, options.files ?? BACKFILL_PER_TICK);
+    if (done.report) report.push(`backfill: ${done.report}`);
+    changed = done.finished;
   }
-  const refreshed = report.length > 0;
-  const files = options.backfill ?? BACKFILL_PER_TICK;
-  const filled = files > 0 ? await backfill(env, ms, instruments, fetcher, files) : { report: "", finished: false };
-  if (filled.report) report.push(`backfill: ${filled.report}`);
+  // A refresh run, or a backfill run with nothing left to backfill.
+  if (!report.length && (options.force || isPricesRun(ms, instruments.length))) {
+    report.push(await refreshBatch(env, ms, instruments, fetcher));
+    changed = true;
+  }
   if (!report.length) return "skipped";
-  // The snapshot only changes when a refresh ran or an archive just completed — or does not exist yet
-  // (a deploy on a weekend), so that a request gets "not ok" entries rather than a 503.
-  if (refreshed || filled.finished || !(await hasSnapshot(env))) await rebuildSnapshot(env, instruments, ms);
+  // Not rebuilt for every backfill file, but it must exist (a deploy on a weekend answers "not ok", not 503).
+  if (changed || !(await hasSnapshot(env))) await rebuildSnapshot(env, instruments, ms);
   return report.join(" · ");
 }

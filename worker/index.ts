@@ -14,7 +14,7 @@ import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
 import { rankHeadlines } from "./news/headlines";
 import { ingest } from "./news/store";
-import { ADMIN_BACKFILL, handlePrices, pricesTick, PRICES_CRON } from "./prices";
+import { handlePrices, pricesTick, PRICES_CRON } from "./prices";
 import { backfillScreen } from "./screen";
 import { refreshStack, serveStackFile } from "./stack";
 import { handleState } from "./state";
@@ -74,7 +74,7 @@ export default {
       if (m) {
         if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
         if (!authorised(request, env)) return json({ error: "unauthorised" }, 401);
-        return json(await adminRun(env, m[1]));
+        return json(await adminRun(env, m[1], url.searchParams.get("mode")));
       }
 
       m = path.match(/^\/research\/stack\/data\/([A-Za-z0-9.\-]+)\.json$/);
@@ -101,7 +101,11 @@ export default {
         break;
       }
       case PRICES_CRON: {
-        console.log("prices:", await pricesTick(env, controller.scheduledTime));
+        try {
+          console.log("prices:", await pricesTick(env, controller.scheduledTime));
+        } catch (err) {
+          console.error("prices failed", err); // never the news cron's problem
+        }
         break;
       }
       default:
@@ -136,7 +140,7 @@ async function quote(symbol: string, request: Request, ctx: ExecutionContext): P
 }
 
 /** POST /api/admin/run/:job — a scheduled job, now. */
-async function adminRun(env: Env, job: string): Promise<unknown> {
+async function adminRun(env: Env, job: string, mode: string | null): Promise<unknown> {
   switch (job) {
     case "stack":
       return refreshStack(env);
@@ -147,7 +151,7 @@ async function adminRun(env: Env, job: string): Promise<unknown> {
     case "calendar":
       return { calendar: await refreshCalendar(env) };
     case "prices":
-      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true, backfill: ADMIN_BACKFILL }) };
+      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true, kind: mode === "refresh" ? "refresh" : "backfill" }) };
     default:
       return { briefing: await buildBriefing(env, "manual", { force: true }) };
   }

@@ -171,20 +171,23 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/ru
 ```
 
 The commodity prices (`GET /api/commodities/prices`, see `worker/prices/index.ts`)
-fill themselves: their own cron fetches the daily history, 4 years of one
-instrument per run, newest first, about 250 files in all. That takes roughly 15
-hours; to finish it in minutes, run this until the response says "0 instruments
-to go" (20 files per call, and it refreshes five prices too):
+fill themselves, slowly on purpose: the free plan gives a run 10 ms of CPU, so
+the prices cron (minutes :05, :20, :35, :50) does one small job per run —
+refresh three instruments at :05 and :35, fetch three year-files of history at
+:20 and :50, newest year first. The ~250 files take about two days; until a
+instrument's `historyComplete` is true its older history is still arriving, but
+prices and indicators work from the first refresh. To fetch one batch now:
 
 ```bash
-curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/prices
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/run/prices?mode=backfill"
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/run/prices?mode=refresh"
 ```
 
 The whole archive is about 70,000 daily bars, ~4 MB of D1 (5 GB free in total).
 What the free plan limits is the daily row reads and writes (5 M and 100 k;
-since 1 September 2026 queries fail past them, for the whole site) and 10 ms of
-CPU per run, so the job reads by key range, never LIKE, and writes about 12
-rows per run once the history is in.
+since 1 September 2026 queries fail past them, for the whole site) and the 10 ms
+of CPU per run. The job reads by key range, never LIKE, writes about 11 rows
+per refresh run, and a request is one small read.
 
 **5. Retire `bqe-backend`.** Once the site serves from D1:
 

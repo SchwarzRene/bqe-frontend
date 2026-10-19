@@ -34,7 +34,7 @@
 //
 // A value that cannot be computed is null, never 0 or a guess.
 
-import { addDays, ET, wallClock } from "../news/time";
+import { addDays } from "../news/time";
 
 export type Bar = [date: string, open: number, high: number, low: number, close: number];
 
@@ -116,10 +116,14 @@ export function trendState(highs: Swing[], lows: Swing[]): "up" | "down" | "rang
 /** The most recent bar to close beyond the 55 bars before it: bars since, and which way. */
 export function lastBreakout55(bars: Bar[]): { daysSince: number; dir: "up" | "down" } | null {
   for (let j = bars.length - 1; j >= 55; j--) {
-    const prior = bars.slice(j - 55, j);
+    let hi = -Infinity, lo = Infinity;
+    for (let i = j - 55; i < j; i++) {
+      if (bars[i][HIGH] > hi) hi = bars[i][HIGH];
+      if (bars[i][LOW] < lo) lo = bars[i][LOW];
+    }
     const close = bars[j][CLOSE];
-    if (close > Math.max(...prior.map((b) => b[HIGH]))) return { daysSince: bars.length - 1 - j, dir: "up" };
-    if (close < Math.min(...prior.map((b) => b[LOW]))) return { daysSince: bars.length - 1 - j, dir: "down" };
+    if (close > hi) return { daysSince: bars.length - 1 - j, dir: "up" };
+    if (close < lo) return { daysSince: bars.length - 1 - j, dir: "down" };
   }
   return null;
 }
@@ -236,11 +240,29 @@ export function analyse(bars: Bar[], last: number | null, decimals = 2): Analysi
   };
 }
 
-/** Mon-Fri days after `date` up to and including `today` (both YYYY-MM-DD). */
+/**
+ * New York's calendar date and weekday (0 = Sunday) at `ms`, by the US DST rule
+ * (second Sunday of March to first Sunday of November, 02:00 local). Done by
+ * hand: this runs on every request, and building an Intl.DateTimeFormat in a
+ * fresh isolate costs milliseconds of the free plan's 10 ms.
+ */
+export function newYorkWall(ms: number): { date: string; weekday: number; hour: number } {
+  const year = new Date(ms).getUTCFullYear();
+  const sundayOnOrAfter = (month: number, day: number) => day + ((7 - new Date(Date.UTC(year, month, day)).getUTCDay()) % 7);
+  const dstStart = Date.UTC(year, 2, sundayOnOrAfter(2, 8), 7); // 02:00 EST
+  const dstEnd = Date.UTC(year, 10, sundayOnOrAfter(10, 1), 6); // 02:00 EDT
+  const local = new Date(ms + (ms >= dstStart && ms < dstEnd ? -4 : -5) * 3_600_000);
+  return { date: local.toISOString().slice(0, 10), weekday: local.getUTCDay(), hour: local.getUTCHours() };
+}
+
+/** Mon-Fri days after `date` up to and including `today` (both YYYY-MM-DD), by arithmetic: a long-dead instrument must not cost a loop. */
 export function weekdaysSince(date: string, today: string): number {
-  let n = 0;
-  for (let d = addDays(date, 1); d <= today; d = addDays(d, 1)) {
-    const dow = new Date(`${d}T12:00:00Z`).getUTCDay();
+  const from = Date.parse(`${date}T00:00:00Z`) / 86_400_000;
+  const total = Date.parse(`${today}T00:00:00Z`) / 86_400_000 - from;
+  if (!(total > 0)) return 0;
+  let n = Math.floor(total / 7) * 5;
+  for (let k = 1; k <= total % 7; k++) {
+    const dow = (from + k + 4) % 7; // 1970-01-01 was a Thursday
     if (dow >= 1 && dow <= 5) n++;
   }
   return n;
@@ -256,7 +278,7 @@ export const STALE_BAR_WEEKDAYS = 3;
  */
 export function isStale(lastBarDate: string | null, fetchedAt: string | null, now: number): boolean {
   if (!lastBarDate || !fetchedAt) return true;
-  const wall = wallClock(now, ET);
+  const wall = newYorkWall(now);
   if (weekdaysSince(lastBarDate, wall.date) > STALE_BAR_WEEKDAYS) return true;
   const fetched = Date.parse(fetchedAt);
   const weekday = wall.weekday >= 1 && wall.weekday <= 5;
