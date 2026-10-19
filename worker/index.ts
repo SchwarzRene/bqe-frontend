@@ -6,7 +6,7 @@ import { handleAdminAudit, handleAdminMessages, handleAdminUsers } from "./admin
 import { handleAuth } from "./auth";
 import { handleContact } from "./contact";
 import type { Env } from "./env";
-import { allowed, json, visitor } from "./http";
+import { allowed, cached, json, visitor } from "./http";
 import { handleMarket } from "./market";
 import { handleAnalysis, handleChat, handleNews, newsTick } from "./news";
 import { handleConversations } from "./news/conversations";
@@ -14,6 +14,7 @@ import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
 import { rankHeadlines } from "./news/headlines";
 import { ingest } from "./news/store";
+import { handlePrices, pricesTick, PRICES_CRON } from "./prices";
 import { backfillScreen } from "./screen";
 import { refreshStack, serveStackFile } from "./stack";
 import { handleState } from "./state";
@@ -58,7 +59,14 @@ export default {
       if (path === "/api/company/analysis") return handleAnalysis(request, env);
 
       m = path.match(/^\/api\/news(?:\/([a-z]+))?$/);
-      if (m) return handleNews(request, env, m[1] ?? "");
+      if (m) {
+        const news = () => handleNews(request, env, m![1] ?? "");
+        return method === "GET" && !m[1] ? cached(request, ctx, news) : news();
+      }
+
+      if (path === "/api/commodities/prices") {
+        return method === "GET" ? cached(request, ctx, () => handlePrices(request, env)) : handlePrices(request, env);
+      }
 
       m = path.match(/^\/api\/admin\/users(?:\/(\d+)(?:\/([a-z]+))?)?$/);
       if (m) return handleAdminUsers(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
@@ -67,15 +75,15 @@ export default {
       if (m) return handleAdminMessages(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
       if (path === "/api/admin/audit") return handleAdminAudit(request, env);
 
-      m = path.match(/^\/api\/admin\/run\/(stack|screen|news|calendar|briefing)$/);
+      m = path.match(/^\/api\/admin\/run\/(stack|screen|news|calendar|briefing|prices)$/);
       if (m) {
         if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
         if (!authorised(request, env)) return json({ error: "unauthorised" }, 401);
-        return json(await adminRun(env, m[1]));
+        return json(await adminRun(env, m[1], url.searchParams.get("mode")));
       }
 
       m = path.match(/^\/research\/stack\/data\/([A-Za-z0-9.\-]+)\.json$/);
-      if (m && method === "GET") return serveStackFile(request, env, m[1]);
+      if (m && method === "GET") return serveStackFile(request, env, m[1], ctx);
 
       if (path.startsWith("/api/")) return json({ error: "not found" }, 404);
     } catch (err) {
@@ -88,13 +96,22 @@ export default {
 
   async scheduled(controller, env): Promise<void> {
     switch (controller.cron) {
-      case "*/3 22-23 * * 1-5": {
+      case "* 22-23 * * 1-5":
+      case "*/2 0-5 * * 2-6": {
         const report = await refreshStack(env, new Date(controller.scheduledTime));
         console.log("stack refresh", JSON.stringify(report));
         break;
       }
       case "*/15 * * * *": {
         console.log("news:", await newsTick(env, controller.scheduledTime));
+        break;
+      }
+      case PRICES_CRON: {
+        try {
+          console.log("prices:", await pricesTick(env, controller.scheduledTime));
+        } catch (err) {
+          console.error("prices failed", err); // never the news cron's problem
+        }
         break;
       }
       default:
@@ -129,7 +146,7 @@ async function quote(symbol: string, request: Request, ctx: ExecutionContext): P
 }
 
 /** POST /api/admin/run/:job — a scheduled job, now. */
-async function adminRun(env: Env, job: string): Promise<unknown> {
+async function adminRun(env: Env, job: string, mode: string | null): Promise<unknown> {
   switch (job) {
     case "stack":
       return refreshStack(env);
@@ -139,6 +156,8 @@ async function adminRun(env: Env, job: string): Promise<unknown> {
       return { fetch: await ingest(env), rank: await rankHeadlines(env) };
     case "calendar":
       return { calendar: await refreshCalendar(env) };
+    case "prices":
+      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true, kind: mode === "refresh" ? "refresh" : "backfill" }) };
     default:
       return { briefing: await buildBriefing(env, "manual", { force: true }) };
   }

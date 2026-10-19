@@ -4,7 +4,7 @@
 // JSON into this repository every weekday.
 
 import type { Env } from "./env";
-import { isoNow, jsonText, mapLimit, utcDay } from "./http";
+import { cached, isoNow, jsonText, mapLimit, utcDay } from "./http";
 import { backfillScreen, mergeScreen, type ScreenRow, screenRow } from "./screen";
 import { type Quote, refreshQuote, yahooSymbol } from "./yahoo";
 
@@ -24,6 +24,10 @@ const RETRY_AFTER_MS = 20 * 60_000;
 // dividends and splits by itself; this is the safety net under it.
 const FULL_REFRESH_DAYS = 30;
 
+// Tickers per run. Two fit the free plan's 10 ms of CPU with the screen update that follows
+// (measured ~2 ms each); the cron runs every minute or two through the night to make up for it.
+const DEFAULT_BATCH = 2;
+
 const CACHE = { "Cache-Control": "public, max-age=3600" };
 
 export interface Constituent {
@@ -38,7 +42,12 @@ export interface Constituent {
 // --------------------------------------------------------------------------
 
 /** GET /research/stack/data/<name>.json — D1 first, the committed file after. */
-export async function serveStackFile(request: Request, env: Env, name: string): Promise<Response> {
+export function serveStackFile(request: Request, env: Env, name: string, ctx?: ExecutionContext): Promise<Response> {
+  // The index joins every price document (~500 rows, a 45 MB table): once an hour per edge location, not per visit.
+  return ctx ? cached(request, ctx, () => stackFile(request, env, name)) : stackFile(request, env, name);
+}
+
+async function stackFile(request: Request, env: Env, name: string): Promise<Response> {
   try {
     if (name === "index") {
       const index = await readIndex(env);
@@ -93,8 +102,16 @@ export interface RefreshReport {
 }
 
 /**
- * One cron tick: on the first tick of the day, refresh the constituent list;
- * then refresh the next batch of tickers that have not been refreshed today.
+ * One cron tick. The free plan gives a run 10 ms of CPU, and the two kinds of
+ * work do not fit in one: parsing Wikipedia's table (~7 ms) and refreshing a
+ * ticker (~2 ms, most of it parsing and rewriting its ~100 KB document). So the
+ * first tick of the day only refreshes the constituent list; every other tick
+ * refreshes the next few tickers that have not been refreshed today.
+ *
+ * Progress is recorded before the heavy work: the day's marker first, and each
+ * ticker's attempt before it is processed. A run that is cut off by the CPU
+ * limit therefore moves the rotation on instead of the next run repeating it
+ * (which, with the bookkeeping at the end, stalled the whole night).
  */
 export async function refreshStack(env: Env, now = new Date()): Promise<RefreshReport> {
   const today = utcDay(now);
@@ -103,11 +120,12 @@ export async function refreshStack(env: Env, now = new Date()): Promise<RefreshR
   const lastListDay = await env.DB.prepare("SELECT body FROM documents WHERE key = 'stack:constituents-day'")
     .first<{ body: string }>();
   if (lastListDay?.body !== today) {
-    report.constituents = await refreshConstituents(env);
     await putDocument(env, "stack:constituents-day", today);
+    report.constituents = await refreshConstituents(env);
+    return report;
   }
 
-  const batch = Math.max(1, Number(env.STACK_BATCH) || 20);
+  const batch = Math.max(1, Number(env.STACK_BATCH) || DEFAULT_BATCH);
   const retryCutoff = new Date(now.getTime() - RETRY_AFTER_MS).toISOString();
   const { results: due } = await env.DB.prepare(
     `SELECT symbol, file, name, sector FROM tickers
@@ -119,6 +137,14 @@ export async function refreshStack(env: Env, now = new Date()): Promise<RefreshR
   )
     .bind(today, retryCutoff, batch)
     .all<{ symbol: string; file: string; name: string; sector: string }>();
+
+  // Claim the batch before working on it (see above). The end-of-run bookkeeping below
+  // overwrites this with the outcome.
+  if (due.length) {
+    await env.DB.prepare("UPDATE tickers SET attempted_at = ?1 WHERE symbol IN (SELECT value FROM json_each(?2))")
+      .bind(isoNow(), JSON.stringify(due.map((t) => t.symbol)))
+      .run();
+  }
 
   // What is already stored, in one query rather than one per ticker.
   const stored = new Map<string, Quote>();

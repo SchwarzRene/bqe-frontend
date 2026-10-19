@@ -1,0 +1,150 @@
+[
+  {
+    "symbol": "XAUUSD",
+    "name": "Gold",
+    "group": "metals",
+    "yahoo": "GC=F",
+    "unit": "USD/oz",
+    "decimals": 2,
+    "dukascopy": "XAU-USD",
+    "since": 1999
+  },
+  {
+    "symbol": "XAGUSD",
+    "name": "Silver",
+    "group": "metals",
+    "yahoo": "SI=F",
+    "unit": "USD/oz",
+    "decimals": 2,
+    "dukascopy": "XAG-USD",
+    "since": 1999
+  },
+  {
+    "symbol": "XPTUSD",
+    "name": "Platinum",
+    "group": "metals",
+    "yahoo": "PL=F",
+    "unit": "USD/oz",
+    "decimals": 2,
+    "dukascopy": "XPT.CMD-USD",
+    "since": 2021
+  },
+  {
+    "symbol": "XPDUSD",
+    "name": "Palladium",
+    "group": "metals",
+    "yahoo": "PA=F",
+    "unit": "USD/oz",
+    "decimals": 2,
+    "dukascopy": "XPD.CMD-USD",
+    "since": 2021
+  },
+  {
+    "symbol": "XTIUSD",
+    "name": "WTI crude",
+    "group": "energy",
+    "yahoo": "CL=F",
+    "unit": "USD/bbl",
+    "decimals": 2,
+    "dukascopy": "LIGHT.CMD-USD",
+    "since": 1983
+  },
+  {
+    "symbol": "XBRUSD",
+    "name": "Brent crude",
+    "group": "energy",
+    "yahoo": "BZ=F",
+    "unit": "USD/bbl",
+    "decimals": 2,
+    "dukascopy": "BRENT.CMD-USD",
+    "since": 2006
+  },
+  {
+    "symbol": "XNGUSD",
+    "name": "US natural gas",
+    "group": "energy",
+    "yahoo": "NG=F",
+    "unit": "USD/MMBtu",
+    "decimals": 3,
+    "dukascopy": "GAS.CMD-USD",
+    "since": 2012
+  },
+  {
+    "symbol": "COCOA",
+    "name": "Cocoa",
+    "group": "softs",
+    "yahoo": "CC=F",
+    "unit": "USD/t",
+    "decimals": 2,
+    "dukascopy": "COCOA.CMD-USD",
+    "since": 2017
+  },
+  {
+    "symbol": "COFFEE",
+    "name": "Coffee",
+    "group": "softs",
+    "yahoo": "KC=F",
+    "unit": "US cents/lb",
+    "decimals": 2,
+    "dukascopy": "COFFEE.CMD-USX",
+    "since": 2017
+  },
+  {
+    "symbol": "CORN",
+    "name": "Corn",
+    "group": "softs",
+    "yahoo": "ZC=F",
+    "unit": "US cents/bu",
+    "decimals": 2,
+    "since": 2000
+  },
+  {
+    "symbol": "COTTON",
+    "name": "Cotton",
+    "group": "softs",
+    "yahoo": "CT=F",
+    "unit": "US cents/lb",
+    "decimals": 2,
+    "dukascopy": "COTTON.CMD-USX",
+    "since": 2017
+  },
+  {
+    "symbol": "OJ",
+    "name": "Orange juice",
+    "group": "softs",
+    "yahoo": "OJ=F",
+    "unit": "US cents/lb",
+    "decimals": 2,
+    "dukascopy": "OJUICE.CMD-USX",
+    "since": 2017
+  },
+  {
+    "symbol": "SOYBEAN",
+    "name": "Soybeans",
+    "group": "softs",
+    "yahoo": "ZS=F",
+    "unit": "US cents/bu",
+    "decimals": 2,
+    "dukascopy": "SOYBEAN.CMD-USX",
+    "since": 2017
+  },
+  {
+    "symbol": "SUGAR",
+    "name": "Sugar",
+    "group": "softs",
+    "yahoo": "SB=F",
+    "unit": "US cents/lb",
+    "decimals": 2,
+    "dukascopy": "SUGAR.CMD-USD",
+    "since": 2017
+  },
+  {
+    "symbol": "WHEAT",
+    "name": "Wheat",
+    "group": "softs",
+    "yahoo": "ZW=F",
+    "unit": "US cents/bu",
+    "decimals": 2,
+    "since": 2000
+  }
+]

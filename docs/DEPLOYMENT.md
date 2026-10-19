@@ -23,18 +23,22 @@ Everything fits Cloudflare's free tiers except, possibly, one thing:
 | D1 storage | 500 MB per database | ~45 MB of prices |
 | D1 writes | 100,000 rows / day | ~1,100 on a weekday evening |
 | Cron triggers | 5 per account | 2 |
-| **CPU per invocation** | **10 ms** | **a Stack batch merges 20 tickers** |
+| **CPU per invocation** | **10 ms** | **a Stack run: 2 tickers (~2 ms each), or the constituent list alone** |
 
 The Stack refresh is incremental: most tickers need only a month of days and
 five days of hours from Yahoo, merged onto what D1 holds, and just a few a
-night download the whole 10 years (see `research/stack/README.md`). It should
-fit the free plan's 10 ms CPU limit most nights. Nights with many full
-downloads cost more: the first night of all, and days when many stocks go
-ex-dividend at once. If the Worker's logs show Stack runs ending in
-`exceededCpu`, lower `STACK_BATCH` in `wrangler.toml`, or move to **Workers
-Paid ($5/month)**, which allows 30 s of CPU per invocation (raise
-`STACK_BATCH` to 100 there). A run that hits the limit writes nothing and is
-retried 20 minutes later. The other jobs wait on the network, which
+night download the whole 10 years (see `research/stack/README.md`). Even so a
+ticker costs about 2 ms of CPU, because its ~100 KB document is parsed and
+written again, and the constituent list from Wikipedia about 7 ms. So the
+runs are small and many: the first run of the day only refreshes the list, the
+others take `STACK_BATCH` (2) tickers, every minute from 22:00 to 23:59 UTC and
+every two minutes through the next six hours, oldest first (about 600 slots for
+~500 tickers). A run records its tickers as attempted *before* working on them
+and the day's list marker before fetching it, so a run that is cut off by the
+CPU limit (`exceededCpu` in the logs) moves the rotation on, and the same
+tickers are retried 20 minutes later. With **Workers Paid ($5/month)**, which
+allows 30 s of CPU per invocation, `STACK_BATCH` can go to 100.
+The other jobs wait on the network, which
 costs no CPU time, and fit the free plan comfortably. Market News is built
 for the 10 ms: one job per run, a third of its sources per fetch (see
 `research/markettape/README.md`); if its runs still end in `exceededCpu`,
@@ -169,6 +173,25 @@ build it right away from the prices already stored, run this until
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/screen
 ```
+
+The commodity prices (`GET /api/commodities/prices`, see `worker/prices/index.ts`)
+fill themselves, slowly on purpose: the free plan gives a run 10 ms of CPU, so
+the prices cron (minutes :05, :20, :35, :50) does one small job per run —
+refresh three instruments at :05 and :35, fetch three year-files of history at
+:20 and :50, newest year first. The ~250 files take about two days; until a
+instrument's `historyComplete` is true its older history is still arriving, but
+prices and indicators work from the first refresh. To fetch one batch now:
+
+```bash
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/run/prices?mode=backfill"
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/run/prices?mode=refresh"
+```
+
+The whole archive is about 70,000 daily bars, ~4 MB of D1 (5 GB free in total).
+What the free plan limits is the daily row reads and writes (5 M and 100 k;
+since 1 September 2026 queries fail past them, for the whole site) and the 10 ms
+of CPU per run. The job reads by key range, never LIKE, writes about 11 rows
+per refresh run, and a request is one small read.
 
 **5. Retire `bqe-backend`.** Once the site serves from D1:
 

@@ -61,17 +61,24 @@ simple = { limit = 120, period = 60 }  # /api/market/*, /api/quotes/*: 120 a min
 
 [triggers]
 crons = [
-  # Stack prices: a batch every 3 minutes for the two hours after 22:00 UTC
-  # on weekdays — the US close has settled by then. Each run takes the next
-  # tickers not yet refreshed today, so the 500 are spread over many small
-  # invocations instead of one that would hit the subrequest limit.
-  "*/3 22-23 * * 1-5",
+  # Stack prices: the free plan gives a run 10 ms of CPU, which fits the constituent
+  # list (the first run of the day, alone) or two tickers (~2 ms each), no more. So the
+  # runs are small and many: every minute for the two hours after 22:00 UTC (the US
+  # close has settled) and every two minutes through the following six, on the evenings
+  # that follow a weekday. Each run takes the tickers not yet refreshed today, oldest
+  # first, so ~500 are covered in a night.
+  "* 22-23 * * 1-5",
+  "*/2 0-5 * * 2-6",
   # Market News: every 15 minutes. worker/news/index.ts decides per run what
   # is due — fetching (every run on weekdays, hourly at weekends), the
   # briefings at fixed New York times, the calendar and the daily clean-up
   # (old contact messages, sessions, news) at 05:00 New York time.
   # One trigger instead of one per job: the free plan allows 5 per account.
   "*/15 * * * *",
+  # Commodity prices (worker/prices/index.ts): the minutes the news cron never
+  # runs in, so a prices run never takes a briefing's or a fetch's turn. Five
+  # instruments per run; the Worker decides per run whether it is due.
+  "5,20,35,50 * * * *",
 ]
 
 [vars]
