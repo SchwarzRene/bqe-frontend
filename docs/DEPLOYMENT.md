@@ -178,8 +178,8 @@ The commodity prices (`GET /api/commodities/prices`, see `worker/prices/index.ts
 fill themselves, slowly on purpose: the free plan gives a run 10 ms of CPU, so
 the prices cron (minutes :05, :20, :35, :50) does one small job per run —
 refresh three instruments at :05 and :35, fetch three year-files of history at
-:20 and :50, newest year first. The ~390 files (15 instruments, back to 2000)
-take about three days; until an instrument's `historyComplete` is true its
+:20 and :50, newest year first. The ~250 files (back to each instrument's first
+Dukascopy year, 2000 for corn and wheat) take about two days; until an instrument's `historyComplete` is true its
 older history is still arriving, but prices and indicators work from the first
 refresh. To fetch one batch now:
 
@@ -188,12 +188,17 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/r
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/run/prices?mode=refresh"
 ```
 
-The source is `PRICES_SOURCE` in `wrangler.toml`: `"yahoo"` (front-month
-futures, the default) or `"dukascopy"` (CFD-style spot, closer to IC Markets,
-13 of the 15 instruments). Dukascopy is off because the endpoint the
-dukascopy-node library uses answered the Worker with an empty `text/html` page
-(the entries' `error` field says what a failed fetch got). A series must not
-mix sources, so changing it later means clearing `prices:*` and refilling.
+The source is `PRICES_SOURCE` in `wrangler.toml`: `"dukascopy"` (CFD-style
+spot, closer to IC Markets; 13 of the 15 instruments, corn and wheat stay on
+Yahoo) or `"yahoo"` (front-month futures). Dukascopy's host sits behind a bot
+filter that answers anything not browser-like with an empty `202`; the Worker
+therefore sends the headers a browser on dukascopy.com sends
+(`worker/prices/dukascopy.ts`; the one-off `PRICES_PROBE` found this). Check
+Dukascopy's terms of use before relying on it commercially. A series must not
+mix sources, so when `PRICES_SOURCE` changes the next run clears the
+instruments that change source (entries, windows, archives, backfill progress)
+and they fill again from the new one. The entries' `error` field says what a
+failed fetch got.
 
 The whole archive is about 100,000 daily bars, ~5 MB of D1 (5 GB free in total).
 What the free plan limits is the daily row reads and writes (5 M and 100 k;

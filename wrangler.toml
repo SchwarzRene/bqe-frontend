@@ -83,13 +83,13 @@ crons = [
 
 [vars]
 # Where the commodity prices come from: "yahoo" (front-month futures) or "dukascopy" (CFD-style
-# spot, closer to IC Markets). Dukascopy is off until its endpoint is confirmed to answer the
-# Worker with JSON (worker/prices/dukascopy.ts); a series must not mix sources, so changing
-# this later means refilling the archive.
-PRICES_SOURCE = "yahoo"
+# spot, closer to IC Markets; 13 of the 15 instruments). Dukascopy needs browser-like request headers
+# (worker/prices/dukascopy.ts). A series must not mix sources: changing this clears the instruments
+# that change source and they fill again (worker/prices/store.ts, reconcileSource).
+PRICES_SOURCE = "dukascopy"
 # "on": one backfill run tries a few variants of the Dukascopy request and stores what comes back in
-# documents (key prices:probe), to find out why the Worker gets an empty page. Remove when done.
-PRICES_PROBE = "on"
+# documents (key prices:probe). It did its job (see dukascopy.ts); kept off.
+PRICES_PROBE = "off"
 # Tickers refreshed per cron run. 40 runs a night × 20 = 800 slots for ~503
 # tickers, so failures get retried. Each ticker is two Yahoo requests.
 STACK_BATCH = "20"

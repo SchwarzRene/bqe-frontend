@@ -12,8 +12,8 @@ import type { Env } from "../env";
 import { isoNow } from "../http";
 
 const BASE = "https://jetta.dukascopy.com/v1/candles/day";
-const CHROME =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+import { BROWSER_HEADERS } from "./dukascopy";
+
 const SITE = "https://www.dukascopy.com";
 export const PROBE_KEY = "prices:probe";
 
@@ -26,7 +26,7 @@ interface Variant {
 export const VARIANTS: Variant[] = [
   { name: "plain", url: `${BASE}/XAU-USD/BID/2025` },
   { name: "plain, current-year form", url: `${BASE}/XAU-USD/BID?from=${Date.UTC(2025, 0, 1)}` },
-  { name: "browser headers", url: `${BASE}/XAU-USD/BID/2025`, headers: { "User-Agent": CHROME, Accept: "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9", Referer: `${SITE}/`, Origin: SITE } },
+  { name: "browser headers", url: `${BASE}/XAU-USD/BID/2025`, headers: BROWSER_HEADERS },
   { name: "origin and referer only", url: `${BASE}/XAU-USD/BID/2025`, headers: { Referer: `${SITE}/`, Origin: SITE } },
   { name: "node user agent", url: `${BASE}/XAU-USD/BID/2025`, headers: { "User-Agent": "node", Accept: "*/*" } },
   { name: "another instrument", url: `${BASE}/EUR-USD/BID/2025` },

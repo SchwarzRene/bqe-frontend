@@ -25,7 +25,7 @@ import { json, jsonText, mapLimit } from "../http";
 import { fetchRecent, fetchYearBars } from "./dukascopy";
 import { type Bar, isStale, newYorkWall, round } from "./indicators";
 import {
-  type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, readBackfill, readCursor, rebuildSnapshot,
+  type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, readBackfill, readCursor, reconcileSource, rebuildSnapshot,
   saveChart, sourceFor, saveYear, SNAPSHOT_KEY, type Snapshot, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
 } from "./store";
 import { hasProbe, runProbe } from "./probe";
@@ -282,14 +282,21 @@ export async function pricesTick(
   env: Env, ms = Date.now(), instruments: Instrument[] = INSTRUMENTS, fetcher: typeof fetch = fetch, options: TickOptions = {},
 ): Promise<string> {
   const kind = options.kind ?? slotKind(ms);
-  const report: string[] = [];
-  let changed = false;
+
+  // A changed PRICES_SOURCE clears what the old source wrote (see reconcileSource): that is the whole run.
+  const switched = options.probe ? "" : await reconcileSource(env, instruments);
+  if (switched) {
+    await rebuildSnapshot(env, instruments, ms);
+    return switched;
+  }
 
   // The one-off diagnostic (see probe.ts): alone in its run, on demand or once after a deploy that asks for it.
   if (options.probe || (kind === "backfill" && env.PRICES_PROBE === "on" && !(await hasProbe(env)))) {
     return runProbe(env, fetcher);
   }
 
+  const report: string[] = [];
+  let changed = false;
   if (kind === "backfill") {
     const done = await backfill(env, ms, instruments, fetcher, options.files ?? BACKFILL_PER_TICK);
     if (done.report) report.push(`backfill: ${done.report}`);

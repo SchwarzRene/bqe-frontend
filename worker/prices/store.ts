@@ -204,6 +204,51 @@ export const backfillDone = (state: Backfill, inst: Instrument, now: number, env
   nextYear(state, inst, now) < firstYear(inst, env);
 
 // --------------------------------------------------------------------------
+// changing the source
+// --------------------------------------------------------------------------
+
+const SOURCE_KEY = "prices:source";
+
+/** Everything stored for one instrument: its recent window, its entry and its archive. */
+export function purge(env: Env, symbol: string): Promise<unknown> {
+  const years = `${YEARS_PREFIX}${symbol}:`;
+  return env.DB.prepare("DELETE FROM documents WHERE key IN (?1, ?2) OR (key >= ?3 AND key < ?4)")
+    .bind(BARS_PREFIX + symbol, ENTRY_PREFIX + symbol, years, prefixEnd(years))
+    .run();
+}
+
+/**
+ * A series must not mix sources: Yahoo's futures and Dukascopy's spot differ by a basis, and an SMA or a
+ * swing point computed across the join would be wrong. The source the archive was written with is kept
+ * (absent = "yahoo", all there was before the switch existed); when PRICES_SOURCE says otherwise the
+ * instruments that change source are cleared — their entries, windows, archives and backfill progress —
+ * and fill again from the new one. Returns what it did, or "".
+ */
+export async function reconcileSource(env: Env, instruments = INSTRUMENTS): Promise<string> {
+  const current: Source = env.PRICES_SOURCE === "dukascopy" ? "dukascopy" : "yahoo";
+  const stored = await get<string>(env, SOURCE_KEY);
+  if (stored === current) return "";
+  // No marker and nothing stored yet (a fresh database): nothing to clear, just remember the source.
+  const anything = async (prefix: string) =>
+    !!(await env.DB.prepare("SELECT 1 AS x FROM documents WHERE key >= ? AND key < ? LIMIT 1").bind(prefix, prefixEnd(prefix)).first());
+  const empty = stored === null && !(await anything(ENTRY_PREFIX)) && !(await anything(YEARS_PREFIX));
+  let reset = 0;
+  if (!empty && (stored ?? "yahoo") !== current) {
+    const backfill = await readBackfill(env);
+    for (const i of instruments) {
+      if (!i.dukascopy) continue; // Yahoo in both settings
+      await purge(env, i.symbol);
+      delete backfill.next[i.symbol];
+      reset++;
+    }
+    delete backfill.error;
+    await writeBackfill(env, backfill);
+  }
+  await put(env, SOURCE_KEY, JSON.stringify(current));
+  return reset ? `source ${stored ?? "yahoo"} -> ${current}: ${reset} instruments cleared` : "";
+}
+
+// --------------------------------------------------------------------------
 // the snapshot
 // --------------------------------------------------------------------------
 

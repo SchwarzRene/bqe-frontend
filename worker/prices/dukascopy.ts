@@ -17,6 +17,20 @@ import { type Chart, PriceFetchError } from "./yahoo";
 
 const ROOT = "https://jetta.dukascopy.com/v1";
 const TIMEOUT_MS = 10_000;
+
+/**
+ * The host sits behind a CDN with a bot filter: a plain request, one with only Origin/Referer, and one with
+ * a "node" User-Agent all got 202 with an empty body from the Worker (found with probe.ts), while this set
+ * — what a browser on dukascopy.com sends — got the JSON. The responses are public and CDN-cached
+ * (cache-control: public, max-age=604800); check Dukascopy's terms before relying on it commercially.
+ */
+export const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+  Accept: "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  Referer: "https://www.dukascopy.com/",
+  Origin: "https://www.dukascopy.com",
+};
 const DAY_MS = 86_400_000;
 
 /**
@@ -77,9 +91,7 @@ export async function fetchYear(code: string, year: number, fetcher: typeof fetc
       : `${ROOT}/candles/day/${code}/BID?from=${Date.UTC(year, 0, 1)}`;
   let res: Response;
   try {
-    // No headers of our own: the dukascopy-node library sends none, and this host answered a custom
-    // User-Agent / Accept with a 200 that was not JSON.
-    res = await fetcher(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetcher(url, { headers: BROWSER_HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (err) {
     throw new PriceFetchError(String(err));
   }
@@ -92,7 +104,7 @@ export async function fetchYear(code: string, year: number, fetcher: typeof fetc
   } catch {
     // What came back, so a block page or a changed endpoint can be told apart from a network error.
     const type = res.headers.get("content-type") ?? "no content-type";
-    throw new PriceFetchError(`dukascopy: not JSON (${type}, ${text.length} bytes: ${text.slice(0, 80).replace(/\s+/g, " ")})`);
+    throw new PriceFetchError(`dukascopy: not JSON (status ${res.status}, ${type}, ${text.length} bytes: ${text.slice(0, 80).replace(/\s+/g, " ")})`);
   }
   return parseCandles(body);
 }
