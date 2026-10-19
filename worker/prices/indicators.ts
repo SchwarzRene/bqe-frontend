@@ -16,6 +16,22 @@
 //               today's price outside the range of the N completed days.
 //   stale       see isStale.
 //
+// structure (the shape of the market):
+//   swings      fractal, k = 3: bar i is a swing high when its high is strictly
+//               above the highs of the 3 bars before and the 3 after it (swing
+//               low: strictly below the lows). The last 3 bars are never swings.
+//   trendState  "up" when the last swing high and low are both above the ones
+//               before them, "down" when both are below, else "range"; null
+//               without two swing highs and two swing lows.
+//   distToSma50InAtr   (last - sma50) / atr20.
+//   daysSinceBreakout55  bars after the most recent bar that closed above the
+//               high (or below the low) of the 55 bars before it; 0 = the latest
+//               completed bar itself. null when none in the stored history.
+//   atrPercentile1y    share of the last 252 daily atr20 values that are <= the
+//               current one (0-1, the current value counts).
+//   volRegime   atr20 against atr20 ten bars ago: > +10% "expanding",
+//               < -10% "contracting", else "stable".
+//
 // A value that cannot be computed is null, never 0 or a guess.
 
 import { addDays, ET, wallClock } from "../news/time";
@@ -49,8 +65,10 @@ export function sma(bars: Bar[], n: number): number | null {
   return sum / n;
 }
 
-export function atr(bars: Bar[], n = 20): number | null {
-  if (bars.length < n + 1) return null;
+/** Wilder ATR at every bar; null before the first has 20 true ranges (bar index n). */
+export function atrSeries(bars: Bar[], n = 20): (number | null)[] {
+  const out: (number | null)[] = bars.map(() => null);
+  if (bars.length < n + 1) return out;
   const tr = (i: number) => {
     const prev = bars[i - 1][CLOSE];
     return Math.max(bars[i][HIGH] - bars[i][LOW], Math.abs(bars[i][HIGH] - prev), Math.abs(bars[i][LOW] - prev));
@@ -58,8 +76,52 @@ export function atr(bars: Bar[], n = 20): number | null {
   let value = 0;
   for (let i = 1; i <= n; i++) value += tr(i);
   value /= n;
-  for (let i = n + 1; i < bars.length; i++) value = (value * (n - 1) + tr(i)) / n;
-  return value;
+  out[n] = value;
+  for (let i = n + 1; i < bars.length; i++) out[i] = value = (value * (n - 1) + tr(i)) / n;
+  return out;
+}
+
+export function atr(bars: Bar[], n = 20): number | null {
+  return atrSeries(bars, n).at(-1) ?? null;
+}
+
+export const SWING_K = 3;
+
+export interface Swing {
+  date: string;
+  price: number;
+}
+
+/** Confirmed swing highs (or lows), oldest first. */
+export function swings(bars: Bar[], kind: "high" | "low", k = SWING_K): Swing[] {
+  const col = kind === "high" ? HIGH : LOW;
+  const beats = kind === "high" ? (a: number, b: number) => a > b : (a: number, b: number) => a < b;
+  const out: Swing[] = [];
+  for (let i = k; i < bars.length - k; i++) {
+    let ok = true;
+    for (let j = 1; j <= k && ok; j++) ok = beats(bars[i][col], bars[i - j][col]) && beats(bars[i][col], bars[i + j][col]);
+    if (ok) out.push({ date: bars[i][DATE], price: bars[i][col] });
+  }
+  return out;
+}
+
+export function trendState(highs: Swing[], lows: Swing[]): "up" | "down" | "range" | null {
+  if (highs.length < 2 || lows.length < 2) return null;
+  const [ph, lh] = highs.slice(-2), [pl, ll] = lows.slice(-2);
+  if (lh.price > ph.price && ll.price > pl.price) return "up";
+  if (lh.price < ph.price && ll.price < pl.price) return "down";
+  return "range";
+}
+
+/** The most recent bar to close beyond the 55 bars before it: bars since, and which way. */
+export function lastBreakout55(bars: Bar[]): { daysSince: number; dir: "up" | "down" } | null {
+  for (let j = bars.length - 1; j >= 55; j--) {
+    const prior = bars.slice(j - 55, j);
+    const close = bars[j][CLOSE];
+    if (close > Math.max(...prior.map((b) => b[HIGH]))) return { daysSince: bars.length - 1 - j, dir: "up" };
+    if (close < Math.min(...prior.map((b) => b[LOW]))) return { daysSince: bars.length - 1 - j, dir: "down" };
+  }
+  return null;
 }
 
 /** Percent move from `from` to `to`; null when either is missing or `from` is 0. */
@@ -105,6 +167,18 @@ export interface Analysis {
     distToHigh20InAtr: number | null;
     distToLow20InAtr: number | null;
   };
+  structure: {
+    trendState: "up" | "down" | "range" | null;
+    lastSwingHigh: Swing | null;
+    lastSwingLow: Swing | null;
+    prevSwingHigh: Swing | null;
+    prevSwingLow: Swing | null;
+    distToSma50InAtr: number | null;
+    daysSinceBreakout55: number | null;
+    breakout55Dir: "up" | "down" | null;
+    atrPercentile1y: number | null;
+    volRegime: "expanding" | "contracting" | "stable" | null;
+  };
 }
 
 /** Everything the endpoint reports for one instrument, from its completed bars and the live price. */
@@ -112,8 +186,14 @@ export function analyse(bars: Bar[], last: number | null, decimals = 2): Analysi
   const p = (v: number | null) => round(v, decimals);
   const h20 = full(bars, 20, highN), l20 = full(bars, 20, lowN);
   const h55 = full(bars, 55, highN), l55 = full(bars, 55, lowN);
-  const a = atr(bars, 20);
+  const series = atrSeries(bars, 20);
+  const a = series.at(-1) ?? null;
   const s50 = sma(bars, 50), s200 = sma(bars, 200);
+  const sh = swings(bars, "high"), sl = swings(bars, "low");
+  const sw = (v: Swing | undefined): Swing | null => (v ? { date: v.date, price: p(v.price)! } : null);
+  const brk = lastBreakout55(bars);
+  const window = series.slice(-WEEK_52).filter((v): v is number => v != null);
+  const before = series.length > 10 ? series[series.length - 11] : null;
   const above = (x: number | null, y: number | null) => (x == null || y == null ? null : x > y);
 
   return {
@@ -140,6 +220,18 @@ export function analyse(bars: Bar[], last: number | null, decimals = 2): Analysi
       breakout55: breakout(last, h55, l55),
       distToHigh20InAtr: last == null || h20 == null || !a ? null : round((last - h20) / a),
       distToLow20InAtr: last == null || l20 == null || !a ? null : round((last - l20) / a),
+    },
+    structure: {
+      trendState: trendState(sh, sl),
+      lastSwingHigh: sw(sh.at(-1)),
+      lastSwingLow: sw(sl.at(-1)),
+      prevSwingHigh: sw(sh.at(-2)),
+      prevSwingLow: sw(sl.at(-2)),
+      distToSma50InAtr: last == null || s50 == null || !a ? null : round((last - s50) / a),
+      daysSinceBreakout55: brk?.daysSince ?? null,
+      breakout55Dir: brk?.dir ?? null,
+      atrPercentile1y: a == null ? null : round(window.filter((v) => v <= a).length / window.length),
+      volRegime: a == null || !before ? null : a > before * 1.1 ? "expanding" : a < before * 0.9 ? "contracting" : "stable",
     },
   };
 }

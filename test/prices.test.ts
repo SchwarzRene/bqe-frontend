@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { d1 } from "./d1";
-import { analyse, atr, type Bar, breakout, highN, isStale, lowN, sma, weekdaysSince } from "../worker/prices/indicators";
+import { analyse, atr, atrSeries, swings, trendState, type Bar, breakout, highN, isStale, lowN, sma, weekdaysSince } from "../worker/prices/indicators";
 import { handlePrices, isPricesRun, pricesTick } from "../worker/prices";
 import { INSTRUMENTS, type Instrument } from "../worker/prices/store";
 import { parseChart } from "../worker/prices/yahoo";
@@ -89,6 +89,68 @@ describe("indicators", () => {
     expect(a.sma200).toBe(299.5); // closes 200..399 (bars 100..299)
     expect(a.levels.low52w).toBe(98 + 48); // last 252 bars start at index 48
     expect(a.signals).toMatchObject({ aboveSma50: true, aboveSma200: true, sma50AboveSma200: true });
+  });
+
+  // A zigzag through the given [index, close] points, linear in between; high = close + 1, low = close - 1.
+  const zigzag = (points: [number, number][]): Bar[] => {
+    const out: Bar[] = [];
+    for (let i = points[0][0]; i <= points.at(-1)![0]; i++) {
+      const k = points.findIndex(([x]) => x >= i);
+      const [x1, y1] = points[k], [x0, y0] = k ? points[k - 1] : points[k];
+      const c = x1 === x0 ? y1 : y0 + ((y1 - y0) * (i - x0)) / (x1 - x0);
+      out.push([date(i), c, c + 1, c - 1, c]);
+    }
+    return out;
+  };
+
+  it("structure: swing points and trendState for an up-trend, a down-trend and a range", () => {
+    // peaks at 6 and 18, troughs at 12 and 24; 30 is too close to the end to be a swing
+    const up = analyse(zigzag([[0, 100], [6, 110], [12, 104], [18, 114], [24, 107], [30, 118]]), 118).structure;
+    expect(up).toMatchObject({
+      trendState: "up",
+      lastSwingHigh: { date: date(18), price: 115 }, prevSwingHigh: { date: date(6), price: 111 },
+      lastSwingLow: { date: date(24), price: 106 }, prevSwingLow: { date: date(12), price: 103 },
+    });
+    const down = analyse(zigzag([[0, 120], [6, 110], [12, 116], [18, 106], [24, 112], [30, 102]]), 102).structure;
+    expect(down.trendState).toBe("down");
+    expect(down.lastSwingLow).toEqual({ date: date(18), price: 105 });
+    const range = analyse(zigzag([[0, 100], [6, 110], [12, 104], [18, 114], [24, 100], [30, 108]]), 108).structure;
+    expect(range.trendState).toBe("range"); // higher high, lower low
+    // a plain line has no swings at all
+    expect(analyse(line, 130).structure).toMatchObject({ trendState: null, lastSwingHigh: null, prevSwingLow: null });
+    // strict: a flat top is no swing
+    expect(swings(zigzag([[0, 100], [3, 100], [4, 100], [10, 90]]), "high")).toEqual([]);
+    expect(trendState([], [])).toBeNull();
+  });
+
+  it("structure: distance to the 50-day average, in ATRs", () => {
+    const long: Bar[] = Array.from({ length: 300 }, (_, i) => [date(i), 100 + i, 102 + i, 98 + i, 100 + i]);
+    expect(analyse(long, 400).structure.distToSma50InAtr).toBe(6.38); // (400 - 374.5) / 4 = 6.375
+    expect(analyse(line, 130).structure.distToSma50InAtr).toBeNull(); // no sma50
+  });
+
+  it("structure: days since a 55-bar breakout, and its direction", () => {
+    const flat: Bar[] = Array.from({ length: 60 }, (_, i) => [date(i), 100, 101, 99, 100]);
+    const up: Bar[] = [...flat, [date(60), 100, 106, 100, 105], ...[61, 62, 63].map((i): Bar => [date(i), 104, 105, 103, 104])];
+    expect(analyse(up, 104).structure).toMatchObject({ daysSinceBreakout55: 3, breakout55Dir: "up" });
+    const down: Bar[] = [...flat, [date(60), 100, 100, 93, 94]];
+    expect(analyse(down, 94).structure).toMatchObject({ daysSinceBreakout55: 0, breakout55Dir: "down" });
+    expect(analyse(flat, 100).structure).toMatchObject({ daysSinceBreakout55: null, breakout55Dir: null });
+    expect(analyse(line, 130).structure.breakout55Dir).toBeNull(); // 30 bars: no 55-bar prior
+  });
+
+  it("structure: ATR percentile and volatility regime", () => {
+    expect(atrSeries(line, 20).filter((v) => v !== null)).toHaveLength(10); // idx 20..29
+    expect(analyse(line, 130).structure).toMatchObject({ atrPercentile1y: 1, volRegime: null }); // ten bars ago has no ATR yet
+    const longer: Bar[] = Array.from({ length: 40 }, (_, i) => [date(i), 100 + i, 102 + i, 98 + i, 100 + i]);
+    expect(analyse(longer, 140).structure).toMatchObject({ atrPercentile1y: 1, volRegime: "stable" }); // 4 vs 4
+    const wide: Bar[] = [...line, [date(30), 130, 142, 118, 130]]; // TR 24 -> ATR 5, ten bars ago 4
+    expect(analyse(wide, 130).structure).toMatchObject({ volRegime: "expanding", atrPercentile1y: 1 });
+    const calm: Bar[] = [...wide, [date(31), 130, 132, 128, 130]]; // ATR (5 * 19 + 4) / 20 = 4.95
+    // 11 of the 12 values (ten 4s, the 5, itself) are <= 4.95; ten bars ago it was 4: +23.75%
+    expect(analyse(calm, 130).structure).toMatchObject({ volRegime: "expanding", atrPercentile1y: 0.92 });
+    // a short history cannot say
+    expect(analyse(line.slice(0, 15), 110).structure).toMatchObject({ atrPercentile1y: null, volRegime: null });
   });
 
   it("stale: an old bar, or an old fetch on a weekday", () => {

@@ -111,6 +111,7 @@ export function entry(inst: Instrument, stored: StoredBars | undefined, now: num
     sma50: a.sma50,
     sma200: a.sma200,
     signals: a.signals,
+    structure: a.structure,
   };
 }
 
