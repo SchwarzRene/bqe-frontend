@@ -16,7 +16,6 @@ import { type Bar } from "./indicators";
 import { type Chart, PriceFetchError } from "./yahoo";
 
 const ROOT = "https://jetta.dukascopy.com/v1";
-const USER_AGENT = "Mozilla/5.0 (compatible; bqe-frontend/1.0; +https://github.com/SchwarzRene/bqe-frontend)";
 const TIMEOUT_MS = 10_000;
 const DAY_MS = 86_400_000;
 
@@ -78,17 +77,22 @@ export async function fetchYear(code: string, year: number, fetcher: typeof fetc
       : `${ROOT}/candles/day/${code}/BID?from=${Date.UTC(year, 0, 1)}`;
   let res: Response;
   try {
-    res = await fetcher(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    // No headers of our own: the dukascopy-node library sends none, and this host answered a custom
+    // User-Agent / Accept with a 200 that was not JSON.
+    res = await fetcher(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (err) {
     throw new PriceFetchError(String(err));
   }
   if (res.status === 404) return [];
   if (!res.ok) throw new PriceFetchError(`status ${res.status}`, res.status);
+  const text = await res.text();
   let body: unknown;
   try {
-    body = await res.json();
+    body = JSON.parse(text);
   } catch {
-    throw new PriceFetchError("dukascopy: not JSON");
+    // What came back, so a block page or a changed endpoint can be told apart from a network error.
+    const type = res.headers.get("content-type") ?? "no content-type";
+    throw new PriceFetchError(`dukascopy: not JSON (${type}, ${text.length} bytes: ${text.slice(0, 80).replace(/\s+/g, " ")})`);
   }
   return parseCandles(body);
 }
