@@ -288,6 +288,8 @@ describe("pricesTick", () => {
     const body: any = await res.json();
     const gold = body.instruments.find((i: any) => i.symbol === "XAUUSD");
     expect(gold.ok).toBe(false);
+    expect(gold.error).toBe("status 404"); // and the answer says why
+    expect(before.error).toBeNull();
     expect(gold.last).toBe(before.last); // the data is the previous data
     expect(gold.sma200).not.toBeNull();
     expect(body.instruments.filter((i: any) => i.ok)).toHaveLength(6);
@@ -300,6 +302,7 @@ describe("pricesTick", () => {
     const body: any = await (await get(env)).json();
     const bad = body.instruments[2];
     expect(bad).toMatchObject({ ok: false, stale: true, fetchedAt: null, last: null, sma200: null, atr20: null });
+    expect(bad.error).toBe("status 404");
   });
 
   it("computes the levels from the stored bars", async () => {
@@ -604,8 +607,11 @@ describe("the backfill", () => {
     const sunday = Date.parse("2026-10-25T13:00:00Z");
     const out = await pricesTick(env, sunday, [GOLD], feeds(["BID/2025"]).fetch, { kind: "backfill", files: 1 });
     expect(out).toContain("1 failed");
+    const state = () => JSON.parse(env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'prices:backfill'").get().body);
+    expect(state().error).toBe("XAUUSD 2025: status 503"); // visible to whoever wonders why the archive is not filling
     const feed = feeds();
     expect(await pricesTick(env, sunday + 900_000, [GOLD], feed.fetch, { kind: "backfill", files: 1 })).toContain("1 years");
+    expect(state().error).toBeUndefined(); // and gone once it works
     expect(feed.calls[0]).toContain("BID/2025"); // the same year again
     const oil = feeds();
     await pricesTick(env, sunday + 1_800_000, [{ ...OIL, since: 2024 }], oil.fetch, { kind: "backfill", files: 3 });

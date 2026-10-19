@@ -226,9 +226,10 @@ async function refreshBatch(env: Env, ms: number, instruments: Instrument[], fet
     try {
       await refresh(env, inst, fetcher, ms);
     } catch (err) {
-      console.warn(`prices: fetch failed for ${inst.dukascopy ?? inst.yahoo} (${err instanceof Error ? err.message : err})`);
+      const why = err instanceof Error ? err.message : String(err);
+      console.warn(`prices: fetch failed for ${inst.dukascopy ?? inst.yahoo} (${why})`);
       failed.push(inst.symbol);
-      await markFailed(env, inst, ms);
+      await markFailed(env, inst, ms, why);
     }
   }
   return `${batch.length - failed.length}/${batch.length} refreshed` + (failed.length ? `, failed: ${failed.join(" ")}` : "");
@@ -254,10 +255,13 @@ async function backfill(
       const bars = inst.dukascopy ? await fetchYearBars(inst.dukascopy, year, fetcher, ms) : await fetchYahooYear(inst.yahoo, year, fetcher, ms);
       await saveYear(env, inst.symbol, year, bars);
       state.next[inst.symbol] = year - 1;
+      delete state.error;
       fetched++;
       finished ||= backfillDone(state, inst, ms);
     } catch (err) {
-      console.warn(`prices: backfill failed for ${inst.symbol} ${year} (${err instanceof Error ? err.message : err})`);
+      const why = err instanceof Error ? err.message : String(err);
+      console.warn(`prices: backfill failed for ${inst.symbol} ${year} (${why})`);
+      state.error = `${inst.symbol} ${year}: ${why}`.slice(0, 200);
       failed++;
     }
     await writeBackfill(env, state); // after every file: a cut-off run keeps what it did
