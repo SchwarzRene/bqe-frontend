@@ -28,6 +28,7 @@ import {
   type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, readBackfill, readCursor, rebuildSnapshot,
   saveChart, sourceFor, saveYear, SNAPSHOT_KEY, type Snapshot, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
 } from "./store";
+import { hasProbe, runProbe } from "./probe";
 import { fetchChart, fetchYahooYear } from "./yahoo";
 
 /** Instruments refreshed per refresh run (about 1.5 ms of CPU each); lower it if a run ever exceeds the free plan's 10 ms. */
@@ -200,6 +201,8 @@ export interface TickOptions {
   force?: boolean;
   /** Year-files the backfill fetches; defaults to BACKFILL_PER_TICK. */
   files?: number;
+  /** Run the Dukascopy probe (probe.ts) instead of the usual job. */
+  probe?: boolean;
 }
 
 /** Refresh one instrument from its source. */
@@ -281,6 +284,11 @@ export async function pricesTick(
   const kind = options.kind ?? slotKind(ms);
   const report: string[] = [];
   let changed = false;
+
+  // The one-off diagnostic (see probe.ts): alone in its run, on demand or once after a deploy that asks for it.
+  if (options.probe || (kind === "backfill" && env.PRICES_PROBE === "on" && !(await hasProbe(env)))) {
+    return runProbe(env, fetcher);
+  }
 
   if (kind === "backfill") {
     const done = await backfill(env, ms, instruments, fetcher, options.files ?? BACKFILL_PER_TICK);

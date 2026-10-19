@@ -157,7 +157,7 @@ async function adminRun(env: Env, job: string, mode: string | null): Promise<unk
     case "calendar":
       return { calendar: await refreshCalendar(env) };
     case "prices":
-      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true, kind: mode === "refresh" ? "refresh" : "backfill" }) };
+      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true, kind: mode === "refresh" ? "refresh" : "backfill", probe: mode === "probe" }) };
     default:
       return { briefing: await buildBriefing(env, "manual", { force: true }) };
   }
