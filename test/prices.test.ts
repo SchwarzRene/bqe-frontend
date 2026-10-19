@@ -504,6 +504,13 @@ describe("dukascopy", () => {
     expect(urls[0]).toContain("/BID/2026");
   });
 
+  it("an answer that is not JSON says what it was, and asks with no headers of its own", async () => {
+    let init: any;
+    const html = (async (_u: any, i: any) => ((init = i), new Response("<html>\n Just a moment...</html>", { headers: { "content-type": "text/html" } }))) as unknown as typeof fetch;
+    await expect(fetchYear("X", 2001, html, NOW)).rejects.toThrow('dukascopy: not JSON (text/html, 31 bytes: <html> Just a moment...</html>)');
+    expect(init.headers).toBeUndefined();
+  });
+
   it("a 404 is an empty year, any other error is an error", async () => {
     expect(await fetchYear("X", 2001, (async () => new Response("", { status: 404 })) as any, NOW)).toEqual([]);
     await expect(fetchYear("X", 2001, (async () => new Response("", { status: 503 })) as any, NOW)).rejects.toThrow("status 503");
