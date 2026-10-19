@@ -27,6 +27,25 @@ export function jsonText(text: string, status = 200, headers: Record<string, str
   });
 }
 
+/**
+ * A public GET answered from the edge cache for as long as its own Cache-Control
+ * says, instead of from D1 on every visit. Worker responses are not cached
+ * unless the Worker does it: without this, every page view of /api/news is ~800
+ * D1 rows read, and the free plan's 5 M rows a day (enforced since 1 September
+ * 2026, for the whole site) would go to a few thousand visits. Only successful
+ * answers are stored. Without a cache (tests, local preview) it just builds.
+ */
+export async function cached(request: Request, ctx: ExecutionContext, build: () => Promise<Response>): Promise<Response> {
+  const cache = typeof caches === "undefined" ? null : (caches as unknown as { default: Cache }).default;
+  if (!cache) return build();
+  const key = new Request(request.url, { method: "GET" });
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  const res = await build();
+  if (res.status === 200 && /max-age=[1-9]/.test(res.headers.get("Cache-Control") ?? "")) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
+
 export function isoNow(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }

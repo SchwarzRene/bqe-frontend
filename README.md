@@ -477,7 +477,7 @@ shows who is signed in. A new app also needs its name added to `APPS` in
 
 | Cron (UTC) | Job | Writes to D1 |
 |---|---|---|
-| every 3 min, 22:00–23:59, Mon–Fri | Stack prices: constituents from Wikipedia, bars from Yahoo, 20 tickers a run | `tickers`, `series` |
+| every minute 22:00–23:59 UTC Mon–Fri, every 2 min 00:00–05:59 Tue–Sat | Stack prices: the first run of the day takes the constituents from Wikipedia, the others bars from Yahoo, 2 tickers a run (the free plan's 10 ms of CPU) | `tickers`, `series` |
 | every 15 min | Market News (`worker/news/`), one job per run: headlines (a third of the sources per run); Gemini briefings at 02:30, 08:00, 12:30, 16:30 New York time on weekdays and Sat 10:00; calendar results at :15 on weekdays; the calendar (no model calls) at 05:00 and 05:30 New York time, with the daily clean-up | `news_*`, `documents` |
 | with the 05:00 run | Deletes contact messages 30 days after they were answered, expired sessions | `contact_messages`, `sessions` |
 
@@ -514,7 +514,7 @@ To run the Worker too — API, D1 and all — against a local database:
 npm install
 npx wrangler d1 migrations apply bqe --local
 npm run dev                                  # → http://localhost:8787
-curl "localhost:8787/__scheduled?cron=*/3+22-23+*+*+1-5"   # fire the Stack job
+curl "localhost:8787/__scheduled?cron=*+22-23+*+*+1-5"     # fire the Stack job
 curl "localhost:8787/__scheduled?cron=*/15+*+*+*+*"        # fire the Market News tick
 ```
 

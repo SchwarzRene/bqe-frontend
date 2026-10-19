@@ -6,7 +6,7 @@ import { handleAdminAudit, handleAdminMessages, handleAdminUsers } from "./admin
 import { handleAuth } from "./auth";
 import { handleContact } from "./contact";
 import type { Env } from "./env";
-import { allowed, json, visitor } from "./http";
+import { allowed, cached, json, visitor } from "./http";
 import { handleMarket } from "./market";
 import { handleAnalysis, handleChat, handleNews, newsTick } from "./news";
 import { handleConversations } from "./news/conversations";
@@ -59,9 +59,14 @@ export default {
       if (path === "/api/company/analysis") return handleAnalysis(request, env);
 
       m = path.match(/^\/api\/news(?:\/([a-z]+))?$/);
-      if (m) return handleNews(request, env, m[1] ?? "");
+      if (m) {
+        const news = () => handleNews(request, env, m![1] ?? "");
+        return method === "GET" && !m[1] ? cached(request, ctx, news) : news();
+      }
 
-      if (path === "/api/commodities/prices") return handlePrices(request, env);
+      if (path === "/api/commodities/prices") {
+        return method === "GET" ? cached(request, ctx, () => handlePrices(request, env)) : handlePrices(request, env);
+      }
 
       m = path.match(/^\/api\/admin\/users(?:\/(\d+)(?:\/([a-z]+))?)?$/);
       if (m) return handleAdminUsers(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
@@ -78,7 +83,7 @@ export default {
       }
 
       m = path.match(/^\/research\/stack\/data\/([A-Za-z0-9.\-]+)\.json$/);
-      if (m && method === "GET") return serveStackFile(request, env, m[1]);
+      if (m && method === "GET") return serveStackFile(request, env, m[1], ctx);
 
       if (path.startsWith("/api/")) return json({ error: "not found" }, 404);
     } catch (err) {
@@ -91,7 +96,8 @@ export default {
 
   async scheduled(controller, env): Promise<void> {
     switch (controller.cron) {
-      case "*/3 22-23 * * 1-5": {
+      case "* 22-23 * * 1-5":
+      case "*/2 0-5 * * 2-6": {
         const report = await refreshStack(env, new Date(controller.scheduledTime));
         console.log("stack refresh", JSON.stringify(report));
         break;
