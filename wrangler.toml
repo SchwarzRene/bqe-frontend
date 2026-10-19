@@ -72,6 +72,10 @@ crons = [
   # (old contact messages, sessions, news) at 05:00 New York time.
   # One trigger instead of one per job: the free plan allows 5 per account.
   "*/15 * * * *",
+  # Commodity prices (worker/prices/index.ts): the minutes the news cron never
+  # runs in, so a prices run never takes a briefing's or a fetch's turn. Five
+  # instruments per run; the Worker decides per run whether it is due.
+  "5,20,35,50 * * * *",
 ]
 
 [vars]

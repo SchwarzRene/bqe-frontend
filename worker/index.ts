@@ -14,6 +14,7 @@ import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
 import { rankHeadlines } from "./news/headlines";
 import { ingest } from "./news/store";
+import { handlePrices, pricesTick, PRICES_CRON } from "./prices";
 import { backfillScreen } from "./screen";
 import { refreshStack, serveStackFile } from "./stack";
 import { handleState } from "./state";
@@ -60,6 +61,8 @@ export default {
       m = path.match(/^\/api\/news(?:\/([a-z]+))?$/);
       if (m) return handleNews(request, env, m[1] ?? "");
 
+      if (path === "/api/commodities/prices") return handlePrices(request, env);
+
       m = path.match(/^\/api\/admin\/users(?:\/(\d+)(?:\/([a-z]+))?)?$/);
       if (m) return handleAdminUsers(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
 
@@ -95,6 +98,10 @@ export default {
       }
       case "*/15 * * * *": {
         console.log("news:", await newsTick(env, controller.scheduledTime));
+        break;
+      }
+      case PRICES_CRON: {
+        console.log("prices:", await pricesTick(env, controller.scheduledTime));
         break;
       }
       default:
