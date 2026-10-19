@@ -1,4 +1,4 @@
--- Security hardening (see SECURITY_AUDIT.md).
+-- Security hardening (see docs/SECURITY_AUDIT.md).
 
 -- SEC-01: the owner account was seeded in 0002 with a hash that is public in
 -- this repository. If it was never changed, it can no longer be used to sign
