@@ -17,6 +17,7 @@ export interface Env {
   GEMINI_CHAT_MODEL?: string; // Market News chat; falls back to GEMINI_MODEL
   GEMINI_FALLBACK_MODEL?: string; // comma-separated, tried in order when the model is overloaded or over quota; "off" for none
   PRICES_SOURCE?: string; // "dukascopy" = Dukascopy candles for the instruments it has; anything else = Yahoo futures
+  PRICES_PROBE?: string; // "on" = run the one-off Dukascopy probe (worker/prices/probe.ts) once
   NEWS_CHAT_SEARCH?: string; // "on" = Google Search grounding for the chat
   NEWS_CHAT_DAILY_LIMIT?: string; // questions per user per day
   SIGNUP_HOURLY_LIMIT?: string; // new accounts per hour, site-wide

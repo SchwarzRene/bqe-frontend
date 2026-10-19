@@ -87,6 +87,9 @@ crons = [
 # Worker with JSON (worker/prices/dukascopy.ts); a series must not mix sources, so changing
 # this later means refilling the archive.
 PRICES_SOURCE = "yahoo"
+# "on": one backfill run tries a few variants of the Dukascopy request and stores what comes back in
+# documents (key prices:probe), to find out why the Worker gets an empty page. Remove when done.
+PRICES_PROBE = "on"
 # Tickers refreshed per cron run. 40 runs a night × 20 = 800 slots for ~503
 # tickers, so failures get retried. Each ticker is two Yahoo requests.
 STACK_BATCH = "20"

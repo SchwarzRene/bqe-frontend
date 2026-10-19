@@ -813,3 +813,43 @@ describe("the source switch", () => {
   });
 });
 
+import { PROBE_KEY, probeOne, VARIANTS } from "../worker/prices/probe";
+
+describe("the Dukascopy probe", () => {
+  const answer = (init: ResponseInit & { body?: string }) => (async () => new Response(init.body ?? "", init)) as unknown as typeof fetch;
+
+  it("records what an empty page looks like", async () => {
+    const r = await probeOne(VARIANTS[0], answer({ status: 200, headers: { "content-type": "text/html; charset=UTF-8", server: "nginx", "set-cookie": "a=b" } }));
+    expect(r).toMatchObject({ name: "plain", status: 200, type: "text/html; charset=UTF-8", bytes: 0, head: "" });
+    expect(r.headers).toEqual({ server: "nginx", "set-cookie": "(present)" });
+  });
+
+  it("records the start of a JSON body as text and of a binary one as hex, and a failure as an error", async () => {
+    expect((await probeOne(VARIANTS[0], answer({ body: '{"timestamp":1735689600000,"multiplier":0.001}' }))).head).toBe('{"timestamp":1735689600000,"multiplier":0.001}');
+    const bin = (async () => new Response(new Uint8Array([0x5d, 0x00, 0x00, 0x80, 0x00, 0xff, 0xfe, 0x01]))) as unknown as typeof fetch;
+    expect((await probeOne(VARIANTS[6], bin)).head).toBe("5d 00 00 80 00 ff fe 01");
+    const down = (async () => { throw new Error("connection reset"); }) as unknown as typeof fetch;
+    expect((await probeOne(VARIANTS[0], down)).error).toContain("connection reset");
+  });
+
+  it("runs once on the first backfill slot after a deploy that asks for it, and not again", async () => {
+    const env: any = { DB: d1(), PRICES_PROBE: "on" };
+    const feed = feeds();
+    const out = await pricesTick(env, Date.parse("2026-10-25T13:20:00Z"), [GOLD], answer({ status: 200, headers: { "content-type": "text/html" } }), { kind: "backfill" });
+    expect(out).toContain("probe: plain -> 200 0B");
+    const doc = JSON.parse(env.DB.raw.prepare("SELECT body FROM documents WHERE key = ?").get(PROBE_KEY).body);
+    expect(doc.results).toHaveLength(VARIANTS.length);
+    // the next backfill slot is a normal one
+    const next = await pricesTick(env, Date.parse("2026-10-25T13:50:00Z"), [GOLD], feed.fetch, { kind: "backfill" });
+    expect(next).toContain("backfill:");
+    expect(feed.calls.every((u) => u.includes("yahoo"))).toBe(true);
+  });
+
+  it("is off unless asked for, and on demand when asked", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    expect(await pricesTick(env, Date.parse("2026-10-25T13:20:00Z"), [GOLD], feed.fetch, { kind: "backfill" })).toContain("backfill:");
+    expect(await pricesTick(env, Date.parse("2026-10-25T13:35:00Z"), [GOLD], answer({ status: 403 }), { probe: true })).toContain("probe: plain -> 403");
+  });
+});
+
