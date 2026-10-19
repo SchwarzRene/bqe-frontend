@@ -36,7 +36,7 @@ and uses the stored bars if that is slow or fails. The page finds the API by
 probing `/api/health` on load; a static preview without the Worker skips it.
 `live.json` next to the page still overrides the quote URL if you ever need
 to (a URL on another origin must also be added to `connect-src` in `_headers`).
-The page's script is `stack.js`, not inline: the site's Content-Security-Policy
+The page's scripts (`js/*.js`, one per section: universe, simulated series, data, state, chart, saved, feed, fullscreen, main) are plain files, not inline; they share one global scope, so their order in `index.html` matters: the site's Content-Security-Policy
 refuses inline scripts.
 
 Until any data exists the page falls back to a built-in simulated series and

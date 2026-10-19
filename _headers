@@ -38,8 +38,8 @@
 /research/tradingjournal/*
   Cache-Control: no-cache
 
-# The same for the Stack page's script, which index.html loads by name.
-/research/stack/stack.js
+# The same for the Stack page's scripts, which index.html loads by name.
+/research/stack/js/*
   Cache-Control: no-cache
 
 # The Backtest Lab is the mt5bt web app (plain files imported by name) plus its WebAssembly server: a phone
