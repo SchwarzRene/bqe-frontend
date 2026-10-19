@@ -26,7 +26,7 @@ import { fetchRecent, fetchYearBars } from "./dukascopy";
 import { type Bar, isStale, newYorkWall, round } from "./indicators";
 import {
   type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, readBackfill, readCursor, rebuildSnapshot,
-  saveChart, saveYear, SNAPSHOT_KEY, type Snapshot, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
+  saveChart, sourceFor, saveYear, SNAPSHOT_KEY, type Snapshot, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
 } from "./store";
 import { fetchChart, fetchYahooYear } from "./yahoo";
 
@@ -207,8 +207,8 @@ async function refresh(env: Env, inst: Instrument, fetcher: typeof fetch, ms: nu
   const d = new Date(ms);
   const year = d.getUTCFullYear();
   const early = d.getUTCMonth() === 0 && d.getUTCDate() <= 10;
-  if (inst.dukascopy) {
-    const { chart, years } = await fetchRecent(inst.dukascopy, fetcher, ms);
+  if (sourceFor(inst, env) === "dukascopy") {
+    const { chart, years } = await fetchRecent(inst.dukascopy!, fetcher, ms);
     await saveChart(env, inst, chart, ms, { replace: years });
   } else {
     // A year of Yahoo bars covers this year completely and the one before only in part.
@@ -227,7 +227,7 @@ async function refreshBatch(env: Env, ms: number, instruments: Instrument[], fet
       await refresh(env, inst, fetcher, ms);
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
-      console.warn(`prices: fetch failed for ${inst.dukascopy ?? inst.yahoo} (${why})`);
+      console.warn(`prices: fetch failed for ${sourceFor(inst, env) === "dukascopy" ? inst.dukascopy : inst.yahoo} (${why})`);
       failed.push(inst.symbol);
       await markFailed(env, inst, ms, why);
     }
@@ -249,15 +249,15 @@ async function backfill(
   for (let looked = 0; looked < n && fetched + failed < files; looked++) {
     const inst = instruments[state.rr % n];
     state.rr = (state.rr + 1) % n;
-    if (backfillDone(state, inst, ms)) continue;
+    if (backfillDone(state, inst, ms, env)) continue;
     const year = nextYear(state, inst, ms);
     try {
-      const bars = inst.dukascopy ? await fetchYearBars(inst.dukascopy, year, fetcher, ms) : await fetchYahooYear(inst.yahoo, year, fetcher, ms);
+      const bars = sourceFor(inst, env) === "dukascopy" ? await fetchYearBars(inst.dukascopy!, year, fetcher, ms) : await fetchYahooYear(inst.yahoo, year, fetcher, ms);
       await saveYear(env, inst.symbol, year, bars);
       state.next[inst.symbol] = year - 1;
       delete state.error;
       fetched++;
-      finished ||= backfillDone(state, inst, ms);
+      finished ||= backfillDone(state, inst, ms, env);
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       console.warn(`prices: backfill failed for ${inst.symbol} ${year} (${why})`);
@@ -267,7 +267,7 @@ async function backfill(
     await writeBackfill(env, state); // after every file: a cut-off run keeps what it did
   }
   if (!fetched && !failed) return { report: "", finished };
-  const left = instruments.filter((i) => !backfillDone(state, i, ms)).length;
+  const left = instruments.filter((i) => !backfillDone(state, i, ms, env)).length;
   return { report: `${fetched} years${failed ? `, ${failed} failed` : ""}, ${left} instruments to go`, finished };
 }
 

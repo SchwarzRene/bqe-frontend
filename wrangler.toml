@@ -82,6 +82,11 @@ crons = [
 ]
 
 [vars]
+# Where the commodity prices come from: "yahoo" (front-month futures) or "dukascopy" (CFD-style
+# spot, closer to IC Markets). Dukascopy is off until its endpoint is confirmed to answer the
+# Worker with JSON (worker/prices/dukascopy.ts); a series must not mix sources, so changing
+# this later means refilling the archive.
+PRICES_SOURCE = "yahoo"
 # Tickers refreshed per cron run. 40 runs a night × 20 = 800 slots for ~503
 # tickers, so failures get retried. Each ticker is two Yahoo requests.
 STACK_BATCH = "20"
