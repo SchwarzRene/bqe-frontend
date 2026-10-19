@@ -504,11 +504,14 @@ describe("dukascopy", () => {
     expect(urls[0]).toContain("/BID/2026");
   });
 
-  it("an answer that is not JSON says what it was, and asks with no headers of its own", async () => {
+  it("an answer that is not JSON says what it was, and asks the way a browser on dukascopy.com does", async () => {
     let init: any;
     const html = (async (_u: any, i: any) => ((init = i), new Response("<html>\n Just a moment...</html>", { headers: { "content-type": "text/html" } }))) as unknown as typeof fetch;
-    await expect(fetchYear("X", 2001, html, NOW)).rejects.toThrow('dukascopy: not JSON (text/html, 31 bytes: <html> Just a moment...</html>)');
-    expect(init.headers).toBeUndefined();
+    await expect(fetchYear("X", 2001, html, NOW)).rejects.toThrow('dukascopy: not JSON (status 200, text/html, 31 bytes: <html> Just a moment...</html>)');
+    // the host's bot filter answers 202 with nothing to anything that does not look like a browser (found with the probe)
+    expect(init.headers["User-Agent"]).toContain("Chrome/");
+    expect(init.headers.Referer).toBe("https://www.dukascopy.com/");
+    expect(init.headers.Origin).toBe("https://www.dukascopy.com");
   });
 
   it("a 404 is an empty year, any other error is an error", async () => {
@@ -706,6 +709,7 @@ describe("the backfill", () => {
 
   it("a history answer bigger than one request can serve is refused with a way forward", async () => {
     const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
+    env.DB.raw.prepare("INSERT INTO documents (key, body, updated) VALUES ('prices:source', '\"dukascopy\"', 'x')").run(); // the archive below was written by Dukascopy
     // 40 years of a single instrument: 40 documents of ~13 KB
     for (let y = 1990; y < 2026; y++) {
       const bars = weekdays(`${y}-01-01`, `${y}-12-31`).map((d, i): Bar => [d, 100.12 + i, 102.55 + i, 98.34 + i, 101.01 + i]);
@@ -853,3 +857,57 @@ describe("the Dukascopy probe", () => {
   });
 });
 
+describe("changing the source", () => {
+  const read = (db: any, sql: string) => db.raw.prepare(sql).all() as any[];
+  const keys = (db: any, like: string) => read(db, `SELECT key FROM documents WHERE key LIKE '${like}' ORDER BY key`).map((r) => r.key);
+
+  it("clears the instruments that change source, keeps the others, and fills again from the new one", async () => {
+    const db = d1();
+    const feed = feeds();
+    const sunday = Date.parse("2026-10-25T13:20:00Z");
+    // written by Yahoo: gold and oil have a Dukascopy code, corn does not
+    const yahooEnv: any = { DB: db };
+    await pricesTick(yahooEnv, NOW, MIX, feed.fetch, OFF);
+    await pricesTick(yahooEnv, sunday, MIX, feed.fetch, { kind: "backfill", files: 3 });
+    expect(keys(db, "prices:entry:%")).toEqual(["prices:entry:CORN", "prices:entry:XAUUSD", "prices:entry:XTIUSD"]);
+    expect(keys(db, "prices:years:XAUUSD:%").length).toBeGreaterThan(0);
+    expect(keys(db, "prices:years:CORN:%").length).toBeGreaterThan(0);
+    const cornEntry = read(db, "SELECT body FROM documents WHERE key = 'prices:entry:CORN'")[0].body;
+
+    // switch
+    const duka: any = { DB: db, PRICES_SOURCE: "dukascopy" };
+    const out = await pricesTick(duka, NOW + 3_600_000, MIX, feed.fetch, OFF);
+    expect(out).toBe("source yahoo -> dukascopy: 2 instruments cleared");
+    expect(keys(db, "prices:entry:%")).toEqual(["prices:entry:CORN"]);
+    expect(keys(db, "prices:years:XAUUSD:%")).toEqual([]);
+    expect(keys(db, "prices:bars:XAUUSD")).toEqual([]);
+    expect(keys(db, "prices:years:CORN:%").length).toBeGreaterThan(0);
+    expect(read(db, "SELECT body FROM documents WHERE key = 'prices:entry:CORN'")[0].body).toBe(cornEntry);
+    const state = JSON.parse(read(db, "SELECT body FROM documents WHERE key = 'prices:backfill'")[0].body);
+    expect(state.next.XAUUSD).toBeUndefined();
+    expect(state.next.CORN).toBeDefined();
+
+    // and the next refresh writes the new source
+    await pricesTick(duka, NOW + 2 * 3_600_000, MIX, feed.fetch, OFF);
+    const gold = JSON.parse(read(db, "SELECT body FROM documents WHERE key = 'prices:entry:XAUUSD'")[0].body);
+    expect(gold).toMatchObject({ source: "dukascopy", ok: true });
+    // no more switching while it stays the same
+    expect(await pricesTick(duka, NOW + 3 * 3_600_000, MIX, feed.fetch, OFF)).toContain("refreshed");
+  });
+
+  it("a fresh database just remembers the source", async () => {
+    const db = d1();
+    const env: any = { DB: db, PRICES_SOURCE: "dukascopy" };
+    expect(await pricesTick(env, NOW, MIX, feeds().fetch, OFF)).toContain("refreshed"); // a normal first run
+    expect(JSON.parse(read(db, "SELECT body FROM documents WHERE key = 'prices:source'")[0].body)).toBe("dukascopy");
+  });
+
+  it("switching back clears again", async () => {
+    const db = d1();
+    const feed = feeds();
+    await pricesTick({ DB: db, PRICES_SOURCE: "dukascopy" } as any, NOW, [GOLD], feed.fetch, OFF);
+    expect(keys(db, "prices:entry:%")).toEqual(["prices:entry:XAUUSD"]);
+    expect(await pricesTick({ DB: db } as any, NOW + 3_600_000, [GOLD], feed.fetch, OFF)).toBe("source dukascopy -> yahoo: 1 instruments cleared");
+    expect(keys(db, "prices:entry:%")).toEqual([]);
+  });
+});
