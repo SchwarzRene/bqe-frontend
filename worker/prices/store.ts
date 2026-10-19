@@ -94,6 +94,8 @@ export interface Meta {
   fetchedAt: string | null;
   last: number | null;
   lastAt: string | null;
+  /** Why the latest fetch failed ("status 403", a timeout, ...); null while it works. */
+  error?: string | null;
 }
 
 /**
@@ -129,10 +131,11 @@ export function saveYear(env: Env, symbol: string, year: number, bars: Bar[]): P
 }
 
 /** A failed fetch keeps what is stored and flips `ok` off. */
-export async function markFailed(env: Env, inst: Instrument, now: number): Promise<void> {
+export async function markFailed(env: Env, inst: Instrument, now: number, error: string): Promise<void> {
   const stored = await get<BaseEntry>(env, ENTRY_PREFIX + inst.symbol);
   const doc = stored ?? buildEntry(inst, { ok: false, fetchedAt: null, last: null, lastAt: null }, [], now);
   doc.ok = false;
+  doc.error = error.slice(0, 200);
   await put(env, ENTRY_PREFIX + inst.symbol, JSON.stringify(doc));
 }
 
@@ -158,6 +161,8 @@ async function readEntries(env: Env): Promise<Map<string, BaseEntry>> {
 export interface Backfill {
   rr: number;
   next: Record<string, number>;
+  /** The latest failed file ("XAUUSD 2025: status 403"), for whoever is wondering why the archive is not filling. */
+  error?: string;
 }
 
 export async function hasSnapshot(env: Env): Promise<boolean> {
@@ -194,6 +199,7 @@ export function buildEntry(inst: Instrument, meta: Meta, bars: Bar[], now: numbe
     unit: inst.unit,
     source: sourceOf(inst),
     ok: meta.ok,
+    error: meta.error ?? null,
     stale: isStale(a.lastBarDate, meta.fetchedAt, now),
     fetchedAt: meta.fetchedAt,
     lastBarDate: a.lastBarDate,
