@@ -11,6 +11,8 @@ import { parseChart } from "../worker/prices/yahoo";
 
 afterEach(() => vi.unstubAllGlobals());
 
+const OFF = { backfill: 0 }; // the backfill has its own tests
+
 // 30 bars: close = 100 + i, high = close + 2, low = close - 2, open = close.
 // Every true range is max(4, 3, 1) = 4, so ATR is exactly 4 whatever the seed.
 const date = (i: number) => new Date(Date.UTC(2026, 0, 5 + i)).toISOString().slice(0, 10);
@@ -245,14 +247,14 @@ describe("pricesTick", () => {
   it("refreshes five at a time round-robin and rebuilds the snapshot", async () => {
     const env: any = { DB: d1() };
     const y = yahoo();
-    expect(await pricesTick(env, NOW, TEST, y.fetch)).toBe("5/5 refreshed");
+    expect(await pricesTick(env, NOW, TEST, y.fetch, OFF)).toBe("5/5 refreshed");
     expect(y.calls).toHaveLength(5);
     expect((await get(env)).status).toBe(200);
     let body: any = await (await get(env)).json();
     expect(body.instruments.map((i: any) => i.ok)).toEqual([true, true, true, true, true, false, false]);
 
     // 5 + 2 wrap around to the start: XAUUSD and XAGUSD again
-    expect(await pricesTick(env, NOW + 20 * 60_000, TEST, y.fetch)).toBe("5/5 refreshed");
+    expect(await pricesTick(env, NOW + 20 * 60_000, TEST, y.fetch, OFF)).toBe("5/5 refreshed");
     expect(y.calls.slice(5).map((u) => decodeURIComponent(u.match(/chart\/([^?]+)/)![1]))).toEqual(["T5=F", "T6=F", "T0=F", "T1=F", "T2=F"]);
     body = await (await get(env)).json();
     expect(body.instruments.every((i: any) => i.ok)).toBe(true);
@@ -260,14 +262,14 @@ describe("pricesTick", () => {
 
   it("a failed instrument keeps its data with ok:false; the others and the endpoint are fine", async () => {
     const env: any = { DB: d1() };
-    await pricesTick(env, NOW, TEST, yahoo().fetch);
-    await pricesTick(env, NOW + 15 * 60_000, TEST, yahoo().fetch);
+    await pricesTick(env, NOW, TEST, yahoo().fetch, OFF);
+    await pricesTick(env, NOW + 15 * 60_000, TEST, yahoo().fetch, OFF);
     const before: any = ((await (await get(env)).json()) as any).instruments[0];
 
     // the third tick takes T3 T4 T5 T6 T0
     const later = NOW + 30 * 60_000;
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const out = await pricesTick(env, later, TEST, yahoo(["T0=F"]).fetch);
+    const out = await pricesTick(env, later, TEST, yahoo(["T0=F"]).fetch, OFF);
     expect(out).toContain("failed: XAUUSD");
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("prices: fetch failed for T0=F (status 404)"));
     warn.mockRestore();
@@ -285,7 +287,7 @@ describe("pricesTick", () => {
   it("an instrument that never worked is ok:false with nulls", async () => {
     const env: any = { DB: d1() };
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    await pricesTick(env, NOW, TEST, yahoo(["T2=F"]).fetch);
+    await pricesTick(env, NOW, TEST, yahoo(["T2=F"]).fetch, OFF);
     const body: any = await (await get(env)).json();
     const bad = body.instruments[2];
     expect(bad).toMatchObject({ ok: false, stale: true, fetchedAt: null, last: null, sma200: null, atr20: null });
@@ -293,7 +295,7 @@ describe("pricesTick", () => {
 
   it("computes the levels from the stored bars", async () => {
     const env: any = { DB: d1() };
-    await pricesTick(env, NOW, TEST, yahoo().fetch);
+    await pricesTick(env, NOW, TEST, yahoo().fetch, OFF);
     const g: any = ((await (await get(env)).json()) as any).instruments[0];
     // base 1000, 255 bars of close 1000..1254, last = 1257
     expect(g).toMatchObject({ symbol: "XAUUSD", ok: true, stale: false, last: 1257, lastBarDate: "2026-10-19", fetchedAt: "2026-10-20T13:05:12Z" });
@@ -313,8 +315,8 @@ describe("pricesTick", () => {
       b.chart.result[0].meta.regularMarketPrice = 2.123456;
       return new Response(JSON.stringify(b), { status: 200 });
     });
-    await pricesTick(env, NOW, TEST, f as any); // XAU..XPD, XTI
-    await pricesTick(env, NOW + 15 * 60_000, TEST, f as any); // XBR, XNG, ...
+    await pricesTick(env, NOW, TEST, f as any, OFF); // XAU..XPD, XTI
+    await pricesTick(env, NOW + 15 * 60_000, TEST, f as any, OFF); // XBR, XNG, ...
     const ng = ((await (await get(env)).json()) as any).instruments.find((i: any) => i.symbol === "XNGUSD");
     expect(ng.last).toBe(2.123);
   });
@@ -338,8 +340,8 @@ describe("pricesTick", () => {
 describe("GET /api/commodities/prices", () => {
   async function loaded() {
     const env: any = { DB: d1() };
-    await pricesTick(env, NOW, TEST, yahoo().fetch);
-    await pricesTick(env, NOW + 15 * 60_000, TEST, yahoo().fetch);
+    await pricesTick(env, NOW, TEST, yahoo().fetch, OFF);
+    await pricesTick(env, NOW + 15 * 60_000, TEST, yahoo().fetch, OFF);
     return env;
   }
 
@@ -399,10 +401,255 @@ describe("GET /api/commodities/prices", () => {
   it("is under 50 KB for 15 instruments without history", async () => {
     const env: any = { DB: d1() };
     const fifteen: Instrument[] = Array.from({ length: 15 }, (_, i) => ({ symbol: `S${i}`, name: "n", group: "g", yahoo: `T${i}=F`, unit: "USD" }));
-    for (let k = 0; k < 3; k++) await pricesTick(env, NOW + k * 15 * 60_000, fifteen, yahoo().fetch);
+    for (let k = 0; k < 3; k++) await pricesTick(env, NOW + k * 15 * 60_000, fifteen, yahoo().fetch, OFF);
     const res = await handlePrices(new Request("https://x.test/api/commodities/prices"), env, NOW, fifteen);
     const text = await res.text();
     expect(JSON.parse(text).instruments).toHaveLength(15);
     expect(text.length).toBeLessThan(50_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dukascopy, the backfill and the history ranges
+// ---------------------------------------------------------------------------
+
+import { chartOf, fetchRecent, fetchYear, parseCandles } from "../worker/prices/dukascopy";
+
+const H3 = 3 * 3_600_000, DAY = 86_400_000;
+
+/** Weekdays (YYYY-MM-DD) from `from` to `to`, inclusive. */
+function weekdays(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += DAY) {
+    const dow = new Date(t).getUTCDay();
+    if (dow >= 1 && dow <= 5) out.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/** The delta-encoded body Dukascopy sends, for daily candles that open three hours before their date. */
+function encode(days: string[], price: (i: number) => number, multiplier = 0.001) {
+  const open = (d: string) => Date.parse(`${d}T00:00:00Z`) - H3;
+  const u = (i: number) => Math.round(price(i) / multiplier);
+  const col = (f: (i: number) => number) => days.map((_, i) => (i === 0 ? 0 : f(i) - f(i - 1)));
+  return {
+    timestamp: open(days[0]) - DAY, shift: DAY, multiplier,
+    open: price(0), high: price(0) + 2, low: price(0) - 2, close: price(0),
+    times: days.map((d, i) => (i === 0 ? 1 : Math.round((open(d) - open(days[i - 1])) / DAY))),
+    opens: col(u), highs: col((i) => u(i) + 2000), lows: col((i) => u(i) - 2000), closes: col(u),
+    volumes: days.map(() => 1000),
+  };
+}
+
+describe("dukascopy", () => {
+  it("decodes the delta-encoded candles and labels them with the trading day", () => {
+    const days = ["2026-10-15", "2026-10-16", "2026-10-19"]; // Thu Fri Mon: the weekend is a gap in `times`
+    const candles = parseCandles(encode(days, (i) => 4000 + i * 7.5));
+    expect(candles.map((c) => c.bar)).toEqual([
+      ["2026-10-15", 4000, 4002, 3998, 4000],
+      ["2026-10-16", 4007.5, 4009.5, 4005.5, 4007.5],
+      ["2026-10-19", 4015, 4017, 4013, 4015],
+    ]);
+    expect(parseCandles({ timestamp: 0, times: [] })).toEqual([]);
+    expect(() => parseCandles({ times: [1] })).toThrow();
+    expect(() => parseCandles({ ...encode(days, () => 1), highs: [1] })).toThrow(); // columns of different length
+  });
+
+  it("chartOf: completed days, the forming one as the price, no weekends or empty days", () => {
+    const days = weekdays("2026-10-14", "2026-10-20"); // Wed..Tue
+    const candles = parseCandles(encode(days, (i) => 100 + i));
+    const chart = chartOf(candles, NOW); // Tue 13:05Z: Tuesday's candle (opened Mon 21:00Z) is still forming
+    expect(chart.bars.map((b) => b[0])).toEqual(["2026-10-14", "2026-10-15", "2026-10-16", "2026-10-19"]);
+    expect(chart.last).toBe(104); // Tuesday's close so far (the fifth weekday)
+    expect(chart.lastAt).toBe("2026-10-20T13:05:12Z");
+    // Saturday: the week is complete, the price is Friday's close, as of the candle's end
+    const sat = chartOf(parseCandles(encode(days.slice(0, 3), (i) => 100 + i)), Date.parse("2026-10-17T10:00:00Z"));
+    expect(sat.bars.map((b) => b[0])).toEqual(["2026-10-14", "2026-10-15", "2026-10-16"]);
+    expect(sat.last).toBe(102);
+    expect(sat.lastAt).toBe("2026-10-16T21:00:00Z");
+    // a Sunday-evening candle and a zero-volume one are not trading days
+    const body = encode(["2026-10-17", "2026-10-19"], (i) => 100 + i); // 17th is a Saturday label
+    body.volumes = [500, 0];
+    expect(chartOf(parseCandles(body), NOW).bars).toEqual([]);
+  });
+
+  it("asks for a completed year by path and the current one from January 1st", async () => {
+    const urls: string[] = [];
+    const f = (async (u: any) => (urls.push(String(u)), new Response(JSON.stringify({ timestamp: 0, times: [] })))) as unknown as typeof fetch;
+    await fetchYear("XAU-USD", 2024, f, NOW);
+    await fetchYear("XAU-USD", 2026, f, NOW);
+    expect(urls).toEqual([
+      "https://jetta.dukascopy.com/v1/candles/day/XAU-USD/BID/2024",
+      `https://jetta.dukascopy.com/v1/candles/day/XAU-USD/BID?from=${Date.UTC(2026, 0, 1)}`,
+    ]);
+    // the first days of January reach back into last year
+    urls.length = 0;
+    await fetchRecent("XAU-USD", f, Date.parse("2027-01-04T10:00:00Z")).catch(() => {});
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain("/BID/2026");
+  });
+
+  it("a 404 is an empty year, any other error is an error", async () => {
+    expect(await fetchYear("X", 2001, (async () => new Response("", { status: 404 })) as any, NOW)).toEqual([]);
+    await expect(fetchYear("X", 2001, (async () => new Response("", { status: 503 })) as any, NOW)).rejects.toThrow("status 503");
+  });
+});
+
+const GOLD: Instrument = { symbol: "XAUUSD", name: "Gold", group: "metals", yahoo: "GC=F", unit: "USD/oz", dukascopy: "XAU-USD", since: 2024 };
+const OIL: Instrument = { symbol: "XTIUSD", name: "WTI", group: "energy", yahoo: "CL=F", unit: "USD/bbl", dukascopy: "LIGHT.CMD-USD", since: 2025 };
+const CORN: Instrument = { symbol: "CORN", name: "Corn", group: "softs", yahoo: "ZC=F", unit: "US cents/bu", since: 2025 };
+const MIX = [GOLD, OIL, CORN];
+
+/** Dukascopy and Yahoo stubbed: a rising price per instrument, bars on every weekday of the year asked for. */
+function feeds(failing: string[] = []) {
+  const calls: string[] = [];
+  const base: Record<string, number> = { "XAU-USD": 2000, "LIGHT.CMD-USD": 70, "ZC=F": 450 };
+  const f = vi.fn(async (input: any) => {
+    const url = String(input);
+    calls.push(url);
+    if (failing.some((k) => url.includes(k))) return new Response("", { status: 503 });
+    if (url.includes("dukascopy")) {
+      const [, code, year] = url.match(/day\/([^/]+)\/BID(?:\/(\d{4})|\?from=(\d+))?/)!.slice(0, 3).concat([]) as string[];
+      const y = Number(year ?? new Date(Number(url.split("from=")[1])).getUTCFullYear());
+      if (y < 2025 && code === "LIGHT.CMD-USD") return new Response("", { status: 404 });
+      return new Response(JSON.stringify(encode(weekdays(`${y}-01-01`, `${y}-12-31`), (i) => (base[code] ?? 100) + i)));
+    }
+    const ticker = decodeURIComponent(url.match(/chart\/([^?]+)/)![1]);
+    const p1 = Number(url.match(/period1=(\d+)/)?.[1] ?? Date.UTC(2025, 9, 20) / 1000);
+    const p2 = Number(url.match(/period2=(\d+)/)?.[1] ?? Date.UTC(2026, 9, 20) / 1000);
+    const days = weekdays(new Date(p1 * 1000).toISOString().slice(0, 10), new Date((p2 - 1) * 1000).toISOString().slice(0, 10));
+    const c = days.map((_, i) => (base[ticker] ?? 100) + i);
+    return new Response(JSON.stringify({
+      chart: { result: [{
+        meta: { gmtoffset: 0, regularMarketPrice: c.at(-1)! + 1, regularMarketTime: Math.floor(NOW / 1000) },
+        timestamp: days.map((d) => Date.parse(`${d}T12:00:00Z`) / 1000),
+        indicators: { quote: [{ open: c, high: c.map((v) => v + 2), low: c.map((v) => v - 2), close: c }] },
+      }] },
+    }));
+  });
+  return { fetch: f as unknown as typeof fetch, calls };
+}
+
+describe("refresh from Dukascopy", () => {
+  it("fetches only this year, stores it as the archive's current year, and reports the source", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    await pricesTick(env, NOW, MIX, feed.fetch, OFF);
+    expect(feed.calls.filter((u) => u.includes("dukascopy"))).toHaveLength(2);
+    expect(feed.calls.every((u) => !u.includes("/2025"))).toBe(true);
+    const body: any = await (await handlePrices(new Request("https://x.test/api/commodities/prices"), env, NOW, MIX)).json();
+    expect(body.instruments.map((i: any) => [i.symbol, i.source, i.ok])).toEqual([["XAUUSD", "dukascopy", true], ["XTIUSD", "dukascopy", true], ["CORN", "yahoo", true]]);
+    const gold = body.instruments[0];
+    expect(gold.lastBarDate).toBe("2026-10-19");
+    expect(gold.last).toBeGreaterThan(2000);
+    const year = env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'prices:years:XAUUSD:2026'").get();
+    expect(JSON.parse(year.body).at(-1)[0]).toBe("2026-10-19"); // completed bars only
+  });
+
+  it("one failing source flags only that instrument", async () => {
+    const env: any = { DB: d1() };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await pricesTick(env, NOW, MIX, feeds(["LIGHT.CMD-USD"]).fetch, OFF);
+    const body: any = await (await handlePrices(new Request("https://x.test/api/commodities/prices"), env, NOW, MIX)).json();
+    expect(body.instruments.map((i: any) => i.ok)).toEqual([true, false, true]);
+  });
+});
+
+describe("the backfill", () => {
+  const history = async (env: any, q: string, instruments = MIX) =>
+    handlePrices(new Request(`https://x.test/api/commodities/prices?${q}`), env, NOW, instruments);
+
+  it("fetches a few year-files per run, newest first, one instrument after the other", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    const out = await pricesTick(env, NOW, MIX, feed.fetch, { backfill: 3 });
+    expect(out).toContain("backfill: 3 years, 1 instruments to go"); // oil and corn start in 2025: only gold has 2024 left
+    const done = feed.calls.filter((u) => !u.includes("from=") && !u.includes("range=1y")).map((u) => u.replace(/^https:\/\/[^/]+/, "").slice(0, 60));
+    expect(done[0]).toBe("/v1/candles/day/XAU-USD/BID/2025");
+    expect(done[1]).toBe("/v1/candles/day/LIGHT.CMD-USD/BID/2025");
+    expect(done[2]).toContain("ZC%3DF?period1="); // Yahoo's year for the corn
+    // the next run goes a year further back for gold (since 2024), nothing more for the others
+    await pricesTick(env, NOW + 15 * 60_000, MIX, feed.fetch, { backfill: 3 });
+    expect(feed.calls.some((u) => u.endsWith("XAU-USD/BID/2024"))).toBe(true);
+  });
+
+  it("runs until every instrument reaches its first year, then stops fetching", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    const sunday = Date.parse("2026-10-25T13:00:00Z"); // no refresh on a Sunday: the backfill alone
+    for (let k = 0; k < 4; k++) await pricesTick(env, sunday + k * 15 * 60_000, MIX, feed.fetch, { backfill: 3 });
+    const files = feed.calls.length;
+    expect(files).toBe(4); // gold 2025 2024, oil 2025, corn 2025 (oil, corn start in 2025)
+    expect(await pricesTick(env, sunday + 3_600_000, MIX, feed.fetch, { backfill: 3 })).toBe("skipped");
+    expect(feed.calls).toHaveLength(files);
+    const snap: any = await (await history(env, "")).json();
+    expect(snap.instruments.map((i: any) => i.historyComplete)).toEqual([true, true, true]);
+  });
+
+  it("a failed year is retried, not skipped; a 404 year counts as empty", async () => {
+    const env: any = { DB: d1() };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const sunday = Date.parse("2026-10-25T13:00:00Z");
+    const out = await pricesTick(env, sunday, [GOLD], feeds(["BID/2025"]).fetch, { backfill: 1 });
+    expect(out).toContain("1 failed");
+    const feed = feeds();
+    expect(await pricesTick(env, sunday + 900_000, [GOLD], feed.fetch, { backfill: 1 })).toContain("1 years");
+    expect(feed.calls[0]).toContain("BID/2025"); // the same year again
+    const oil = feeds();
+    await pricesTick(env, sunday + 1_800_000, [{ ...OIL, since: 2024 }], oil.fetch, { backfill: 3 });
+    await pricesTick(env, sunday + 2_700_000, [{ ...OIL, since: 2024 }], oil.fetch, { backfill: 3 });
+    expect(oil.calls.filter((u) => u.includes("/2024"))).toHaveLength(1); // the 404 year was not retried
+  });
+
+  it("the archive answers from/to, days, years and ohlc", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    for (let k = 0; k < 5; k++) await pricesTick(env, NOW + k * 15 * 60_000, MIX, feed.fetch, { backfill: 3 });
+
+    const one: any = await (await history(env, "history=1&symbol=XAUUSD&from=2025-03-03&to=2025-03-07")).json();
+    expect(one.range).toEqual({ from: "2025-03-03", to: "2025-03-07" });
+    expect(one.instruments[0].closes.map((c: any) => c[0])).toEqual(["2025-03-03", "2025-03-04", "2025-03-05", "2025-03-06", "2025-03-07"]);
+
+    const ohlc: any = await (await history(env, "history=1&symbol=XAUUSD&from=2025-03-03&to=2025-03-03&ohlc=1")).json();
+    expect(ohlc.instruments[0].bars).toHaveLength(1);
+    expect(ohlc.instruments[0].bars[0]).toHaveLength(5);
+    expect(ohlc.instruments[0].closes).toBeUndefined();
+
+    // the archive spans two calendar years here: 2024, 2025 and 2026
+    const all: any = await (await history(env, "history=1&symbol=XAUUSD&from=2000-01-01")).json();
+    const dates = all.instruments[0].closes.map((c: any) => c[0]);
+    expect(dates[0]).toBe("2024-01-01");
+    expect(dates.at(-1)).toBe("2026-10-19");
+    expect([...dates].sort()).toEqual(dates);
+    const days: any = await (await history(env, "history=1&symbol=XAUUSD&days=7")).json();
+    expect(days.instruments[0].closes.length).toBeLessThanOrEqual(5);
+    expect(days.instruments[0].closes.at(-1)[0]).toBe("2026-10-19");
+
+    // without ?symbol= the range is limited to two calendar years
+    const wide = await history(env, "history=1&from=2024-01-01");
+    expect(wide.status).toBe(400);
+    expect(((await wide.json()) as any).error).toContain("?symbol=");
+    expect((await history(env, "history=1&from=2025-01-01&to=2026-01-31")).status).toBe(200);
+    expect((await history(env, "history=1&from=nope")).status).toBe(400);
+    expect((await history(env, "history=1&days=-3&symbol=CORN")).status).toBe(400);
+    expect((await history(env, "history=1&from=2026-02-01&to=2026-01-01&symbol=CORN")).status).toBe(400);
+    // the default history is still the recent window
+    const dflt: any = await (await history(env, "history=1&symbol=CORN")).json();
+    expect(dflt.range).toBeUndefined();
+    expect(dflt.instruments[0].closes.length).toBeGreaterThan(200);
+  });
+
+  it("a run stays inside the free plan's 50 D1 queries and subrequests", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    const stub = vi.fn(async (input: any, init?: any) => {
+      // every real instrument answers with a year of candles; Yahoo's from the shared stub
+      if (String(input).includes("dukascopy")) return new Response(JSON.stringify(encode(weekdays("2026-01-01", "2026-12-31"), (i) => 100 + i)));
+      return feed.fetch(input, init);
+    });
+    const prepare = vi.spyOn(env.DB, "prepare");
+    await pricesTick(env, NOW, INSTRUMENTS, stub as any, { backfill: 3 });
+    expect(prepare.mock.calls.length).toBeLessThanOrEqual(50);
+    expect(stub.mock.calls.length).toBeLessThanOrEqual(50);
   });
 });

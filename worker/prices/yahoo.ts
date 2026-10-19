@@ -8,9 +8,6 @@ const HOSTS = ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo
 const USER_AGENT = "Mozilla/5.0 (compatible; bqe-frontend/1.0; +https://github.com/SchwarzRene/bqe-frontend)";
 const TIMEOUT_MS = 10_000;
 
-/** Bars kept per instrument: a year and a bit, enough for the 200-day average and the 52-week range. */
-export const KEEP_BARS = 260;
-
 export class PriceFetchError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
@@ -48,7 +45,7 @@ export function parseChart(body: any, now = Date.now()): Chart {
     if (date >= today) return;
     byDate.set(date, [date, o, h, l, c]);
   });
-  const bars = [...byDate.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(-KEEP_BARS);
+  const bars = [...byDate.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
 
   const price = result.meta?.regularMarketPrice;
   const at = result.meta?.regularMarketTime;
@@ -59,12 +56,12 @@ export function parseChart(body: any, now = Date.now()): Chart {
   };
 }
 
-/** One ticker's chart: query1, then query2 when that fails. Throws PriceFetchError. */
-export async function fetchChart(ticker: string, fetcher: typeof fetch = fetch, now = Date.now()): Promise<Chart> {
+/** One chart request: query1, then query2 when that fails. Throws PriceFetchError. */
+async function request(ticker: string, query: string, fetcher: typeof fetch, now: number): Promise<Chart> {
   let failure = new PriceFetchError("no host tried");
   for (const host of HOSTS) {
     try {
-      const res = await fetcher(`${host}/v8/finance/chart/${encodeURIComponent(ticker)}?range=1y&interval=1d`, {
+      const res = await fetcher(`${host}/v8/finance/chart/${encodeURIComponent(ticker)}?${query}`, {
         headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
@@ -83,4 +80,21 @@ export async function fetchChart(ticker: string, fetcher: typeof fetch = fetch, 
     }
   }
   throw failure;
+}
+
+/** The last year of daily bars and the live price. */
+export function fetchChart(ticker: string, fetcher: typeof fetch = fetch, now = Date.now()): Promise<Chart> {
+  return request(ticker, "range=1y&interval=1d", fetcher, now);
+}
+
+/** The completed bars of one past calendar year, for the backfill. */
+export async function fetchYahooYear(ticker: string, year: number, fetcher: typeof fetch = fetch, now = Date.now()): Promise<Bar[]> {
+  const query = `period1=${Date.UTC(year, 0, 1) / 1000}&period2=${Date.UTC(year + 1, 0, 1) / 1000}&interval=1d`;
+  try {
+    return (await request(ticker, query, fetcher, now)).bars.filter((b) => b[0].startsWith(`${year}-`));
+  } catch (err) {
+    // A year before the ticker existed: Yahoo answers 404 or an empty chart.
+    if (err instanceof PriceFetchError && (err.status === 404 || err.message === "no completed bars" || err.message === "no chart data")) return [];
+    throw err;
+  }
 }

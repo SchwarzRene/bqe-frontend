@@ -70,7 +70,7 @@ export default {
       if (m) return handleAdminMessages(request, env, m[1] ? Number(m[1]) : null, m[2] ?? "");
       if (path === "/api/admin/audit") return handleAdminAudit(request, env);
 
-      m = path.match(/^\/api\/admin\/run\/(stack|screen|news|calendar|briefing)$/);
+      m = path.match(/^\/api\/admin\/run\/(stack|screen|news|calendar|briefing|prices)$/);
       if (m) {
         if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
         if (!authorised(request, env)) return json({ error: "unauthorised" }, 401);
@@ -146,6 +146,8 @@ async function adminRun(env: Env, job: string): Promise<unknown> {
       return { fetch: await ingest(env), rank: await rankHeadlines(env) };
     case "calendar":
       return { calendar: await refreshCalendar(env) };
+    case "prices":
+      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true }) };
     default:
       return { briefing: await buildBriefing(env, "manual", { force: true }) };
   }
