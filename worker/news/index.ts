@@ -102,18 +102,30 @@ async function news(env: Env): Promise<Response> {
   );
 }
 
-/** Headlines that mention an event (its acronyms or tickers) around its day, grouped under it. */
+/**
+ * Headlines that mention an event (its acronyms or tickers) around its day, grouped under it.
+ * Runs on every GET /api/news, so it is written for the free plan's 10 ms of CPU: each word's
+ * pattern is compiled once and each headline's time parsed once, not once per event.
+ */
 export function withHeadlines(events: CalendarEvent[], items: Item[]): (CalendarEvent & { itemIds: string[] })[] {
+  const times = items.map((i) => Date.parse(i.publishedAt));
+  const patterns = new Map<string, RegExp>();
+  const pattern = (w: string) => {
+    let re = patterns.get(w);
+    if (!re) patterns.set(w, (re = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`)));
+    return re;
+  };
   return events.map((e) => {
     const words = eventWordsFor([e.title], e.tickers);
     const start = Date.parse(e.start);
-    const itemIds = words.length
-      ? items
-          .filter((i) => Math.abs(Date.parse(i.publishedAt) - start) < 18 * 3_600_000)
-          .filter((i) => words.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(i.title) || i.tickers.includes(w)))
-          .slice(0, 5)
-          .map((i) => i.id)
-      : [];
+    const itemIds: string[] = [];
+    if (words.length) {
+      for (let k = 0; k < items.length && itemIds.length < 5; k++) {
+        if (!(Math.abs(times[k] - start) < 18 * 3_600_000)) continue;
+        const item = items[k];
+        if (words.some((w) => pattern(w).test(item.title) || item.tickers.includes(w))) itemIds.push(item.id);
+      }
+    }
     return { ...e, itemIds };
   });
 }
