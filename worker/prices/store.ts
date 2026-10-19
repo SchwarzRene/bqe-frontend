@@ -129,9 +129,16 @@ export async function markFailed(env: Env, symbol: string): Promise<void> {
   await put(env, BARS_PREFIX + symbol, JSON.stringify(doc));
 }
 
+/**
+ * The exclusive upper bound of a key prefix ("prices:bars:" -> "prices:bars;").
+ * `key >= prefix AND key < end` walks the primary-key index; LIKE with a bound
+ * pattern is a full scan of the table, and D1's free plan counts rows read.
+ */
+export const prefixEnd = (prefix: string) => prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1);
+
 export async function readAllBars(env: Env): Promise<Map<string, StoredBars>> {
-  const { results } = await env.DB.prepare("SELECT key, body FROM documents WHERE key LIKE ?")
-    .bind(`${BARS_PREFIX}%`)
+  const { results } = await env.DB.prepare("SELECT key, body FROM documents WHERE key >= ? AND key < ?")
+    .bind(BARS_PREFIX, prefixEnd(BARS_PREFIX))
     .all<{ key: string; body: string }>();
   return new Map(results.map((r) => [r.key.slice(BARS_PREFIX.length), JSON.parse(r.body) as StoredBars]));
 }
@@ -144,6 +151,10 @@ export async function readAllBars(env: Env): Promise<Map<string, StoredBars>> {
 export interface Backfill {
   rr: number;
   next: Record<string, number>;
+}
+
+export async function hasSnapshot(env: Env): Promise<boolean> {
+  return !!(await env.DB.prepare("SELECT 1 AS x FROM documents WHERE key = ?").bind(SNAPSHOT_KEY).first());
 }
 
 export async function readBackfill(env: Env): Promise<Backfill> {

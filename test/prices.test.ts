@@ -652,4 +652,29 @@ describe("the backfill", () => {
     expect(prepare.mock.calls.length).toBeLessThanOrEqual(50);
     expect(stub.mock.calls.length).toBeLessThanOrEqual(50);
   });
+
+  it("steady state stays far below D1's free daily limits (100k rows written, 5M read)", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    const stub = vi.fn(async (input: any, init?: any) =>
+      String(input).includes("dukascopy")
+        ? new Response(JSON.stringify(encode(weekdays("2026-01-01", "2026-12-31"), (i) => 100 + i)))
+        : feed.fetch(input, init));
+    // the archive is complete: only the refresh is left
+    await pricesTick(env, NOW, INSTRUMENTS, stub as any, { backfill: 0 });
+    const prepare = vi.spyOn(env.DB, "prepare");
+    await pricesTick(env, NOW + 15 * 60_000, INSTRUMENTS, stub as any, { backfill: 0 });
+    const writes = prepare.mock.calls.filter(([sql]) => /^\s*INSERT/i.test(String(sql))).length;
+    // 5 instruments x (recent window + current year) + cursor + snapshot; a written row costs two with its index
+    expect(writes).toBeLessThanOrEqual(14);
+    expect(96 * writes * 2).toBeLessThan(100_000 / 10); // a weekday of runs uses under a tenth of the day's writes
+  });
+
+  it("the key-prefix reads use the primary-key range, not LIKE (a LIKE scans the whole table)", async () => {
+    const env: any = { DB: d1() };
+    const prepare = vi.spyOn(env.DB, "prepare");
+    await pricesTick(env, NOW, TEST, yahoo().fetch, OFF);
+    await handlePrices(new Request("https://x.test/api/commodities/prices?history=1"), env, NOW, TEST);
+    expect(prepare.mock.calls.some(([sql]) => /LIKE/i.test(String(sql)))).toBe(false);
+  });
 });

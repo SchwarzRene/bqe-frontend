@@ -170,6 +170,22 @@ build it right away from the prices already stored, run this until
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/screen
 ```
 
+The commodity prices (`GET /api/commodities/prices`, see `worker/prices/index.ts`)
+fill themselves: their own cron fetches the daily history, 4 years of one
+instrument per run, newest first, about 250 files in all. That takes roughly 15
+hours; to finish it in minutes, run this until the response says "0 instruments
+to go" (20 files per call, and it refreshes five prices too):
+
+```bash
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://<site>/api/admin/run/prices
+```
+
+The whole archive is about 70,000 daily bars, ~4 MB of D1 (5 GB free in total).
+What the free plan limits is the daily row reads and writes (5 M and 100 k;
+since 1 September 2026 queries fail past them, for the whole site) and 10 ms of
+CPU per run, so the job reads by key range, never LIKE, and writes about 12
+rows per run once the history is in.
+
 **5. Retire `bqe-backend`.** Once the site serves from D1:
 
 - disable its `market-data` and `market-tape` workflows (Actions → workflow →

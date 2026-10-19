@@ -14,7 +14,7 @@ import { buildBriefing } from "./news/briefing";
 import { refreshCalendar } from "./news/calendar";
 import { rankHeadlines } from "./news/headlines";
 import { ingest } from "./news/store";
-import { handlePrices, pricesTick, PRICES_CRON } from "./prices";
+import { ADMIN_BACKFILL, handlePrices, pricesTick, PRICES_CRON } from "./prices";
 import { backfillScreen } from "./screen";
 import { refreshStack, serveStackFile } from "./stack";
 import { handleState } from "./state";
@@ -147,7 +147,7 @@ async function adminRun(env: Env, job: string): Promise<unknown> {
     case "calendar":
       return { calendar: await refreshCalendar(env) };
     case "prices":
-      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true }) };
+      return { prices: await pricesTick(env, Date.now(), undefined, undefined, { force: true, backfill: ADMIN_BACKFILL }) };
     default:
       return { briefing: await buildBriefing(env, "manual", { force: true }) };
   }

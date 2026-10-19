@@ -16,7 +16,7 @@
 //             days of January), so "later only the last week" is a small request.
 //   backfill  until every instrument's archive reaches its `since` year: a few
 //             year-files per run, newest year first, round-robin over the instruments.
-// A run stays inside the free plan's 50 D1 queries and subrequests.
+// A run stays inside the free plan's 50 external subrequests.
 
 import type { Env } from "../env";
 import { json, jsonText, mapLimit } from "../http";
@@ -24,15 +24,22 @@ import { ET, wallClock } from "../news/time";
 import { fetchRecent, fetchYearBars } from "./dukascopy";
 import { type Bar, isStale, round } from "./indicators";
 import {
-  type Backfill, backfillDone, BARS_PREFIX, INSTRUMENTS, type Instrument, markFailed, nextYear, readBackfill, readCursor, rebuildSnapshot,
+  type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, readBackfill, readCursor, rebuildSnapshot,
   saveChart, saveYear, SNAPSHOT_KEY, type Snapshot, type StoredBars, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
 } from "./store";
 import { fetchChart, fetchYahooYear } from "./yahoo";
 
 /** Instruments refreshed per run; drop to 3 if a run ever exceeds the free plan's CPU budget. */
 export const PER_TICK = 5;
-/** Year-files fetched per run by the backfill. */
-export const BACKFILL_PER_TICK = 3;
+/**
+ * Year-files fetched per run by the backfill: about 250 files in all, so the
+ * archive is complete after ~60 runs (15 hours). Each file is one subrequest
+ * and one or two D1 writes; the CPU budget (10 ms on the free plan) is what
+ * limits this, not the storage.
+ */
+export const BACKFILL_PER_TICK = 4;
+/** What the admin run fetches in one go (50 external subrequests per invocation on the free plan). */
+export const ADMIN_BACKFILL = 20;
 
 export const PRICES_CRON = "5,20,35,50 * * * *";
 
@@ -109,8 +116,8 @@ export async function handlePrices(request: Request, env: Env, now = Date.now(),
       binds.push(yearKey(i.symbol, lo), yearKey(i.symbol, hi));
     }
   } else if (history) {
-    sql += " OR key LIKE ?";
-    binds.push(`${BARS_PREFIX}%`);
+    sql += " OR (key >= ? AND key < ?)";
+    binds.push(BARS_PREFIX, prefixEnd(BARS_PREFIX));
   }
   const { results } = await env.DB.prepare(sql).bind(...binds).all<{ key: string; body: string }>();
   const row = results.find((r) => r.key === SNAPSHOT_KEY);
@@ -170,7 +177,7 @@ export function isPricesRun(ms: number, count = INSTRUMENTS.length): boolean {
 export interface TickOptions {
   /** Refresh even when the schedule says this run is not due (the admin run). */
   force?: boolean;
-  /** Year-files the backfill fetches; defaults to BACKFILL_PER_TICK. */
+  /** Year-files the backfill fetches; defaults to BACKFILL_PER_TICK (the admin run asks for more). */
   backfill?: number;
 }
 
@@ -189,13 +196,15 @@ async function refresh(env: Env, inst: Instrument, fetcher: typeof fetch, ms: nu
 
 /**
  * The next `files` (instrument, year) pairs of the backfill, one per instrument
- * in turn so every instrument gets its recent years first. Returns what it did,
- * or "" when every archive is complete.
+ * in turn so every instrument gets its recent years first. Returns what it did
+ * ("" when every archive is complete) and whether an instrument just finished.
  */
-async function backfill(env: Env, ms: number, instruments: Instrument[], fetcher: typeof fetch, files: number): Promise<string> {
+async function backfill(
+  env: Env, ms: number, instruments: Instrument[], fetcher: typeof fetch, files: number,
+): Promise<{ report: string; finished: boolean }> {
   const state: Backfill = await readBackfill(env);
   const n = instruments.length;
-  let fetched = 0, failed = 0;
+  let fetched = 0, failed = 0, finished = false;
   for (let looked = 0; looked < n && fetched + failed < files; looked++) {
     const inst = instruments[state.rr % n];
     state.rr = (state.rr + 1) % n;
@@ -206,15 +215,16 @@ async function backfill(env: Env, ms: number, instruments: Instrument[], fetcher
       await saveYear(env, inst.symbol, year, bars, ms);
       state.next[inst.symbol] = year - 1;
       fetched++;
+      finished ||= backfillDone(state, inst, ms);
     } catch (err) {
       console.warn(`prices: backfill failed for ${inst.symbol} ${year} (${err instanceof Error ? err.message : err})`);
       failed++;
     }
   }
-  if (!fetched && !failed) return "";
+  if (!fetched && !failed) return { report: "", finished };
   await writeBackfill(env, state);
   const left = instruments.filter((i) => !backfillDone(state, i, ms)).length;
-  return `${fetched} years${failed ? `, ${failed} failed` : ""}, ${left} instruments to go`;
+  return { report: `${fetched} years${failed ? `, ${failed} failed` : ""}, ${left} instruments to go`, finished };
 }
 
 /** Refresh the next PER_TICK instruments, run the backfill, and rebuild the snapshot. A failed instrument keeps its stored data. */
@@ -239,9 +249,13 @@ export async function pricesTick(
     const failed = batch.filter((_, i) => !outcome[i]).map((i) => i.symbol);
     report.push(`${batch.length - failed.length}/${batch.length} refreshed` + (failed.length ? `, failed: ${failed.join(" ")}` : ""));
   }
-  const filled = (options.backfill ?? BACKFILL_PER_TICK) > 0 ? await backfill(env, ms, instruments, fetcher, options.backfill ?? BACKFILL_PER_TICK) : "";
-  if (filled) report.push(`backfill: ${filled}`);
+  const refreshed = report.length > 0;
+  const files = options.backfill ?? BACKFILL_PER_TICK;
+  const filled = files > 0 ? await backfill(env, ms, instruments, fetcher, files) : { report: "", finished: false };
+  if (filled.report) report.push(`backfill: ${filled.report}`);
   if (!report.length) return "skipped";
-  await rebuildSnapshot(env, instruments, ms);
+  // The snapshot only changes when a refresh ran or an archive just completed — or does not exist yet
+  // (a deploy on a weekend), so that a request gets "not ok" entries rather than a 503.
+  if (refreshed || filled.finished || !(await hasSnapshot(env))) await rebuildSnapshot(env, instruments, ms);
   return report.join(" · ");
 }
