@@ -31,12 +31,30 @@ export interface Instrument {
 
 export const INSTRUMENTS: Instrument[] = config;
 
-export const SOURCE =
-  "Dukascopy daily BID candles (CFD-style spot, close to IC Markets) where the feed has the instrument; " +
-  "Yahoo Finance front-month futures (daily) otherwise (see each instrument's `source`). " +
-  "Not IC Markets quotes; expect small basis differences, and roll gaps in the futures series.";
+export type Source = "dukascopy" | "yahoo";
 
-export const sourceOf = (i: Instrument): "dukascopy" | "yahoo" => (i.dukascopy ? "dukascopy" : "yahoo");
+/**
+ * Where an instrument's prices come from. Dukascopy (CFD-style spot, close to IC Markets) only when
+ * PRICES_SOURCE is "dukascopy" and the feed has the instrument; otherwise Yahoo's front-month
+ * futures. It is off by default: the endpoint the dukascopy-node library uses answered the Worker
+ * with an empty text/html page (see worker/prices/dukascopy.ts), and a series must not mix sources,
+ * so the switch is explicit rather than a per-request fallback.
+ */
+export const sourceFor = (i: Instrument, env: Pick<Env, "PRICES_SOURCE">): Source =>
+  i.dukascopy && env.PRICES_SOURCE === "dukascopy" ? "dukascopy" : "yahoo";
+
+/** The first year worth backfilling: Yahoo's futures start around 2000, Dukascopy's feed per instrument. */
+export const firstYear = (i: Instrument, env: Pick<Env, "PRICES_SOURCE">): number =>
+  sourceFor(i, env) === "dukascopy" ? i.since ?? 2000 : 2000;
+
+export function sourceText(instruments: Instrument[], env: Pick<Env, "PRICES_SOURCE">): string {
+  const used = new Set(instruments.map((i) => sourceFor(i, env)));
+  const parts = [
+    used.has("dukascopy") && "Dukascopy daily BID candles (CFD-style spot, close to IC Markets)",
+    used.has("yahoo") && "Yahoo Finance front-month futures (daily)",
+  ].filter(Boolean);
+  return `${parts.join("; ")} (see each instrument's \`source\`). Not IC Markets quotes; expect basis differences${used.has("yahoo") ? " and roll gaps in the futures series" : ""}.`;
+}
 
 /** Completed bars in the recent window: the 200-day average, the 52-week range and the year of ATR values behind the percentile need 272. */
 export const RECENT_BARS = 300;
@@ -96,6 +114,7 @@ export interface Meta {
   lastAt: string | null;
   /** Why the latest fetch failed ("status 403", a timeout, ...); null while it works. */
   error?: string | null;
+  source: Source;
 }
 
 /**
@@ -115,7 +134,7 @@ export async function saveChart(
     bars = mergeBars((await get<Bar[]>(env, yearKey(symbol, y))) ?? [], bars);
   }
   bars = bars.slice(-RECENT_BARS);
-  const meta: Meta = { ok: true, fetchedAt: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"), last: chart.last, lastAt: chart.lastAt };
+  const meta: Meta = { ok: true, fetchedAt: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"), last: chart.last, lastAt: chart.lastAt, source: sourceFor(inst, env) };
   await put(env, BARS_PREFIX + symbol, JSON.stringify({ bars }));
   for (const y of years.replace) await put(env, yearKey(symbol, y), JSON.stringify(inYear(chart.bars, y)));
   for (const y of years.merge ?? []) {
@@ -133,7 +152,7 @@ export function saveYear(env: Env, symbol: string, year: number, bars: Bar[]): P
 /** A failed fetch keeps what is stored and flips `ok` off. */
 export async function markFailed(env: Env, inst: Instrument, now: number, error: string): Promise<void> {
   const stored = await get<BaseEntry>(env, ENTRY_PREFIX + inst.symbol);
-  const doc = stored ?? buildEntry(inst, { ok: false, fetchedAt: null, last: null, lastAt: null }, [], now);
+  const doc = stored ?? buildEntry(inst, { ok: false, fetchedAt: null, last: null, lastAt: null, source: sourceFor(inst, env) }, [], now);
   doc.ok = false;
   doc.error = error.slice(0, 200);
   await put(env, ENTRY_PREFIX + inst.symbol, JSON.stringify(doc));
@@ -181,7 +200,8 @@ export function nextYear(state: Backfill, inst: Instrument, now: number): number
   return state.next[inst.symbol] ?? new Date(now).getUTCFullYear() - 1;
 }
 
-export const backfillDone = (state: Backfill, inst: Instrument, now: number) => nextYear(state, inst, now) < (inst.since ?? 2000);
+export const backfillDone = (state: Backfill, inst: Instrument, now: number, env: Pick<Env, "PRICES_SOURCE">) =>
+  nextYear(state, inst, now) < firstYear(inst, env);
 
 // --------------------------------------------------------------------------
 // the snapshot
@@ -197,7 +217,7 @@ export function buildEntry(inst: Instrument, meta: Meta, bars: Bar[], now: numbe
     group: inst.group,
     yahoo: inst.yahoo,
     unit: inst.unit,
-    source: sourceOf(inst),
+    source: meta.source,
     ok: meta.ok,
     error: meta.error ?? null,
     stale: isStale(a.lastBarDate, meta.fetchedAt, now),
@@ -227,13 +247,12 @@ export interface Snapshot {
 /** Assemble prices:snapshot from the stored entries. */
 export async function rebuildSnapshot(env: Env, instruments = INSTRUMENTS, now = Date.now()): Promise<Snapshot> {
   const [entries, backfill] = await Promise.all([readEntries(env), readBackfill(env)]);
-  const blank: Meta = { ok: false, fetchedAt: null, last: null, lastAt: null };
   const snapshot: Snapshot = {
     generatedAt: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"),
-    source: SOURCE,
+    source: sourceText(instruments, env),
     instruments: instruments.map((i) => {
-      const e = entries.get(i.symbol) ?? buildEntry(i, blank, [], now);
-      return { ...e, stale: isStale(e.lastBarDate, e.fetchedAt, now), historyComplete: backfillDone(backfill, i, now) };
+      const e = entries.get(i.symbol) ?? buildEntry(i, { ok: false, fetchedAt: null, last: null, lastAt: null, source: sourceFor(i, env) }, [], now);
+      return { ...e, stale: isStale(e.lastBarDate, e.fetchedAt, now), historyComplete: backfillDone(backfill, i, now, env) };
     }),
   };
   await put(env, SNAPSHOT_KEY, JSON.stringify(snapshot));

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { d1 } from "./d1";
 import { analyse, atr, atrSeries, swings, trendState, type Bar, breakout, highN, isStale, lowN, sma, weekdaysSince } from "../worker/prices/indicators";
 import { handlePrices, isPricesRun, pricesTick, slotKind } from "../worker/prices";
-import { INSTRUMENTS, type Instrument } from "../worker/prices/store";
+import { firstYear, INSTRUMENTS, type Instrument, sourceFor } from "../worker/prices/store";
 import { parseChart } from "../worker/prices/yahoo";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -554,7 +554,7 @@ function feeds(failing: string[] = []) {
 
 describe("refresh from Dukascopy", () => {
   it("fetches only this year, stores it as the archive's current year, and reports the source", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const feed = feeds();
     await pricesTick(env, NOW, MIX, feed.fetch, OFF);
     expect(feed.calls.filter((u) => u.includes("dukascopy"))).toHaveLength(2);
@@ -569,7 +569,7 @@ describe("refresh from Dukascopy", () => {
   });
 
   it("one failing source flags only that instrument", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     vi.spyOn(console, "warn").mockImplementation(() => {});
     await pricesTick(env, NOW, MIX, feeds(["LIGHT.CMD-USD"]).fetch, OFF);
     const body: any = await (await handlePrices(new Request("https://x.test/api/commodities/prices"), env, NOW, MIX)).json();
@@ -582,10 +582,10 @@ describe("the backfill", () => {
     handlePrices(new Request(`https://x.test/api/commodities/prices?${q}`), env, NOW, instruments);
 
   it("fetches a few year-files per run, newest first, one instrument after the other", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const feed = feeds();
     const out = await pricesTick(env, NOW, MIX, feed.fetch, { kind: "backfill", files: 3 });
-    expect(out).toContain("backfill: 3 years, 1 instruments to go"); // oil and corn start in 2025: only gold has 2024 left
+    expect(out).toContain("backfill: 3 years, 2 instruments to go"); // gold has 2024 left, corn (Yahoo) walks down to 2000
     const done = feed.calls.filter((u) => !u.includes("from=") && !u.includes("range=1y")).map((u) => u.replace(/^https:\/\/[^/]+/, "").slice(0, 60));
     expect(done[0]).toBe("/v1/candles/day/XAU-USD/BID/2025");
     expect(done[1]).toBe("/v1/candles/day/LIGHT.CMD-USD/BID/2025");
@@ -596,20 +596,20 @@ describe("the backfill", () => {
   });
 
   it("runs until every instrument reaches its first year, then stops fetching", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const feed = feeds();
     const sunday = Date.parse("2026-10-25T13:00:00Z"); // no refresh on a Sunday: the backfill alone
-    for (let k = 0; k < 4; k++) await pricesTick(env, sunday + k * 15 * 60_000, MIX, feed.fetch, { kind: "backfill", files: 3 });
+    for (let k = 0; k < 4; k++) await pricesTick(env, sunday + k * 15 * 60_000, [GOLD, OIL], feed.fetch, { kind: "backfill", files: 3 });
     const files = feed.calls.length;
-    expect(files).toBe(4); // gold 2025 2024, oil 2025, corn 2025 (oil, corn start in 2025)
-    expect(await pricesTick(env, sunday + 3_600_000, MIX, feed.fetch, { kind: "backfill", files: 3 })).toBe("skipped");
+    expect(files).toBe(3); // gold 2025 2024, oil 2025 (oil starts in 2025)
+    expect(await pricesTick(env, sunday + 3_600_000, [GOLD, OIL], feed.fetch, { kind: "backfill", files: 3 })).toBe("skipped");
     expect(feed.calls).toHaveLength(files);
     const snap: any = await (await history(env, "")).json();
-    expect(snap.instruments.map((i: any) => i.historyComplete)).toEqual([true, true, true]);
+    expect(snap.instruments.map((i: any) => i.historyComplete)).toEqual([true, true]);
   });
 
   it("a failed year is retried, not skipped; a 404 year counts as empty", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const sunday = Date.parse("2026-10-25T13:00:00Z");
     const out = await pricesTick(env, sunday, [GOLD], feeds(["BID/2025"]).fetch, { kind: "backfill", files: 1 });
@@ -627,9 +627,10 @@ describe("the backfill", () => {
   });
 
   it("the archive answers from/to, days, years and ohlc", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const feed = feeds();
-    for (let k = 0; k < 5; k++) await pricesTick(env, NOW + k * 15 * 60_000, MIX, feed.fetch, { kind: "backfill", files: 3 });
+    await pricesTick(env, NOW, MIX, feed.fetch, OFF); // this year's candles
+    for (let k = 0; k < 5; k++) await pricesTick(env, NOW + (k + 1) * 15 * 60_000, MIX, feed.fetch, { kind: "backfill", files: 3 });
 
     const one: any = await (await history(env, "history=1&symbol=XAUUSD&from=2025-03-03&to=2025-03-07")).json();
     expect(one.range).toEqual({ from: "2025-03-03", to: "2025-03-07" });
@@ -665,7 +666,7 @@ describe("the backfill", () => {
   });
 
   it("a run stays inside the free plan's 50 D1 queries and subrequests", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const feed = feeds();
     const stub = vi.fn(async (input: any, init?: any) => {
       // every real instrument answers with a year of candles; Yahoo's from the shared stub
@@ -679,7 +680,7 @@ describe("the backfill", () => {
   });
 
   it("steady state stays far below D1's free daily limits (100k rows written, 5M read)", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const feed = feeds();
     const stub = vi.fn(async (input: any, init?: any) =>
       String(input).includes("dukascopy")
@@ -696,7 +697,7 @@ describe("the backfill", () => {
   });
 
   it("the key-prefix reads use the primary-key range, not LIKE (a LIKE scans the whole table)", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const prepare = vi.spyOn(env.DB, "prepare");
     await pricesTick(env, NOW, TEST, yahoo().fetch, OFF);
     await handlePrices(new Request("https://x.test/api/commodities/prices?history=1"), env, NOW, TEST);
@@ -704,7 +705,7 @@ describe("the backfill", () => {
   });
 
   it("a history answer bigger than one request can serve is refused with a way forward", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     // 40 years of a single instrument: 40 documents of ~13 KB
     for (let y = 1990; y < 2026; y++) {
       const bars = weekdays(`${y}-01-01`, `${y}-12-31`).map((d, i): Bar => [d, 100.12 + i, 102.55 + i, 98.34 + i, 101.01 + i]);
@@ -719,7 +720,7 @@ describe("the backfill", () => {
   });
 
   it("the cursor moves on even when every fetch fails, so a bad instrument cannot stall the rotation", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const down = yahoo(["T0=F", "T1=F", "T2=F"]);
     await pricesTick(env, NOW, TEST, down.fetch, OFF);
@@ -729,7 +730,7 @@ describe("the backfill", () => {
   });
 
   it("backfill progress is saved file by file", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const sunday = Date.parse("2026-10-25T13:20:00Z");
     // the second file's fetch blows up in a way the job does not catch, as a CPU cut-off would
     let n = 0;
@@ -744,7 +745,7 @@ describe("the backfill", () => {
   });
 
   it("the recent window reaches into the archive until it is full", async () => {
-    const env: any = { DB: d1() };
+    const env: any = { DB: d1(), PRICES_SOURCE: "dukascopy" };
     const feed = feeds();
     await pricesTick(env, Date.parse("2026-01-12T14:20:00Z"), [GOLD], feed.fetch, { kind: "backfill", files: 1 }); // 2025 into the archive
     await pricesTick(env, Date.parse("2026-01-12T14:35:00Z"), [GOLD], feed.fetch, OFF);
@@ -774,3 +775,41 @@ describe("newYorkWall", () => {
     expect(checked).toBeGreaterThan(28_000);
   });
 });
+
+describe("the source switch", () => {
+  it("Yahoo is the default, even for instruments Dukascopy has", async () => {
+    const env: any = { DB: d1() }; // PRICES_SOURCE unset
+    const feed = feeds();
+    await pricesTick(env, NOW, [GOLD, OIL], feed.fetch, OFF);
+    expect(feed.calls.every((u) => u.includes("yahoo"))).toBe(true);
+    const body: any = await (await handlePrices(new Request("https://x.test/api/commodities/prices"), env, NOW, [GOLD, OIL])).json();
+    expect(body.instruments.map((i: any) => [i.source, i.ok])).toEqual([["yahoo", true], ["yahoo", true]]);
+    expect(body.source).toContain("Yahoo");
+    expect(body.source).not.toContain("Dukascopy");
+  });
+
+  it("the backfill then walks Yahoo's years, down to 2000", async () => {
+    const env: any = { DB: d1() };
+    const feed = feeds();
+    const sunday = Date.parse("2026-10-25T13:20:00Z");
+    await pricesTick(env, sunday, [GOLD], feed.fetch, { kind: "backfill" });
+    await pricesTick(env, sunday + 900_000, [GOLD], feed.fetch, { kind: "backfill" });
+    await pricesTick(env, sunday + 1_800_000, [GOLD], feed.fetch, { kind: "backfill" });
+    expect(feed.calls).toHaveLength(3);
+    expect(feed.calls.every((u) => u.includes("yahoo") && u.includes("period1="))).toBe(true);
+    const state = JSON.parse(env.DB.raw.prepare("SELECT body FROM documents WHERE key = 'prices:backfill'").get().body);
+    expect(state.next.XAUUSD).toBe(2022); // 2025, 2024, 2023 done; Dukascopy's `since: 2024` is not what limits it
+    const snap: any = await (await handlePrices(new Request("https://x.test/api/commodities/prices"), env, NOW, [GOLD])).json();
+    expect(snap.instruments[0].historyComplete).toBe(false);
+  });
+
+  it("PRICES_SOURCE=dukascopy turns the Dukascopy path on, for the instruments that have it", () => {
+    expect(sourceFor(GOLD, { PRICES_SOURCE: "dukascopy" })).toBe("dukascopy");
+    expect(sourceFor(CORN, { PRICES_SOURCE: "dukascopy" })).toBe("yahoo"); // not in Dukascopy's feed
+    expect(sourceFor(GOLD, {})).toBe("yahoo");
+    expect(sourceFor(GOLD, { PRICES_SOURCE: "nonsense" })).toBe("yahoo");
+    expect(firstYear(GOLD, { PRICES_SOURCE: "dukascopy" })).toBe(2024);
+    expect(firstYear(GOLD, {})).toBe(2000);
+  });
+});
+

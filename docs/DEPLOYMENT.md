@@ -178,16 +178,24 @@ The commodity prices (`GET /api/commodities/prices`, see `worker/prices/index.ts
 fill themselves, slowly on purpose: the free plan gives a run 10 ms of CPU, so
 the prices cron (minutes :05, :20, :35, :50) does one small job per run —
 refresh three instruments at :05 and :35, fetch three year-files of history at
-:20 and :50, newest year first. The ~250 files take about two days; until a
-instrument's `historyComplete` is true its older history is still arriving, but
-prices and indicators work from the first refresh. To fetch one batch now:
+:20 and :50, newest year first. The ~390 files (15 instruments, back to 2000)
+take about three days; until an instrument's `historyComplete` is true its
+older history is still arriving, but prices and indicators work from the first
+refresh. To fetch one batch now:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/run/prices?mode=backfill"
 curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "https://<site>/api/admin/run/prices?mode=refresh"
 ```
 
-The whole archive is about 70,000 daily bars, ~4 MB of D1 (5 GB free in total).
+The source is `PRICES_SOURCE` in `wrangler.toml`: `"yahoo"` (front-month
+futures, the default) or `"dukascopy"` (CFD-style spot, closer to IC Markets,
+13 of the 15 instruments). Dukascopy is off because the endpoint the
+dukascopy-node library uses answered the Worker with an empty `text/html` page
+(the entries' `error` field says what a failed fetch got). A series must not
+mix sources, so changing it later means clearing `prices:*` and refilling.
+
+The whole archive is about 100,000 daily bars, ~5 MB of D1 (5 GB free in total).
 What the free plan limits is the daily row reads and writes (5 M and 100 k;
 since 1 September 2026 queries fail past them, for the whole site) and the 10 ms
 of CPU per run. The job reads by key range, never LIKE, writes about 11 rows
