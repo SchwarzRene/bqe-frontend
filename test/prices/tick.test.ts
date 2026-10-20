@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { d1 } from "../helpers/d1";
 import { isPricesRun, pricesTick, slotKind } from "../../worker/prices";
 import { INSTRUMENTS } from "../../worker/prices/store";
-import { ET } from "../../worker/news/time";
 import { OFF, TEST, NOW, yahooBody, yahoo, get, weekdays } from "./fixtures";
 
 afterEach(() => vi.unstubAllGlobals());

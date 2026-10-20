@@ -1,8 +1,8 @@
 // The stubbed internet and database setup shared by the Market News flow tests.
 
-import { it, vi } from "vitest";
+import { vi } from "vitest";
 import { d1 } from "../helpers/d1";
-import { Config } from "../../worker/news/feeds";
+import type { Config } from "../../worker/news/feeds";
 import { ingest as ingestPart } from "../../worker/news/store";
 
 // Every source in one run: the rotation over runs is tested on its own.
