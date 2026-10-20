@@ -115,6 +115,8 @@ export interface Meta {
   /** Why the latest fetch failed ("status 403", a timeout, ...); null while it works. */
   error?: string | null;
   source: Source;
+  /** See Chart.live: false = `last` is a completed bar's close, so the changes count back one bar further. */
+  live?: boolean;
 }
 
 /**
@@ -134,7 +136,7 @@ export async function saveChart(
     bars = mergeBars((await get<Bar[]>(env, yearKey(symbol, y))) ?? [], bars);
   }
   bars = bars.slice(-RECENT_BARS);
-  const meta: Meta = { ok: true, fetchedAt: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"), last: chart.last, lastAt: chart.lastAt, source: sourceFor(inst, env) };
+  const meta: Meta = { ok: true, fetchedAt: new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z"), last: chart.last, lastAt: chart.lastAt, source: sourceFor(inst, env), live: chart.live };
   await put(env, BARS_PREFIX + symbol, JSON.stringify({ bars }));
   for (const y of years.replace) await put(env, yearKey(symbol, y), JSON.stringify(inYear(chart.bars, y)));
   for (const y of years.merge ?? []) {
@@ -248,6 +250,30 @@ export async function reconcileSource(env: Env, instruments = INSTRUMENTS): Prom
   return reset ? `source ${stored ?? "yahoo"} -> ${current}: ${reset} instruments cleared` : "";
 }
 
+/**
+ * Instruments taken off Dukascopy for good, with what was stored while they were on it. SUGAR: its feed
+ * (SUGAR.CMD-USD) is white sugar in USD a tonne (about 547), not the #11 contract in US cents a pound
+ * (about 20) that the unit and the council's levels are about, so it follows Yahoo's SB=F now.
+ */
+export const MOVED_TO_YAHOO = ["SUGAR"];
+
+/** Once per moved instrument: clear what the old source wrote, so the series is not mixed. Returns what it did, or "". */
+export async function purgeMoved(env: Env, instruments = INSTRUMENTS): Promise<string> {
+  const cleared: string[] = [];
+  for (const symbol of MOVED_TO_YAHOO) {
+    if (!instruments.some((i) => i.symbol === symbol)) continue;
+    const key = `prices:moved:${symbol}`;
+    if (await get(env, key)) continue;
+    const backfill = await readBackfill(env);
+    await purge(env, symbol);
+    delete backfill.next[symbol];
+    await writeBackfill(env, backfill);
+    await put(env, key, "true");
+    cleared.push(symbol);
+  }
+  return cleared.length ? `moved to yahoo: ${cleared.join(" ")} cleared` : "";
+}
+
 // --------------------------------------------------------------------------
 // the snapshot
 // --------------------------------------------------------------------------
@@ -255,7 +281,7 @@ export async function reconcileSource(env: Env, instruments = INSTRUMENTS): Prom
 /** One instrument as the endpoint reports it, from its recent bars; what is stored per instrument. */
 export function buildEntry(inst: Instrument, meta: Meta, bars: Bar[], now: number) {
   const decimals = inst.decimals ?? 2;
-  const a = analyse(bars, meta.last, decimals);
+  const a = analyse(bars, meta.last, decimals, meta.live === false);
   return {
     symbol: inst.symbol,
     name: inst.name,

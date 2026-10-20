@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { d1 } from "../helpers/d1";
 import { handlePrices, pricesTick } from "../../worker/prices";
-import { firstYear, sourceFor } from "../../worker/prices/store";
+import { firstYear, INSTRUMENTS, sourceFor } from "../../worker/prices/store";
 import { PROBE_KEY, probeOne, VARIANTS } from "../../worker/prices/probe";
 import { OFF, NOW, yahoo, GOLD, OIL, CORN, MIX, feeds } from "./fixtures";
 
@@ -134,5 +134,19 @@ describe("changing the source", () => {
     expect(keys(db, "prices:entry:%")).toEqual(["prices:entry:XAUUSD"]);
     expect(await pricesTick({ DB: db } as any, NOW + 3_600_000, [GOLD], feed.fetch, OFF)).toBe("source dukascopy -> yahoo: 1 instruments cleared");
     expect(keys(db, "prices:entry:%")).toEqual([]);
+  });
+
+  it("sugar is on Yahoo's #11 (cents a pound), and what Dukascopy's white sugar wrote is cleared once", async () => {
+    const sugar = INSTRUMENTS.find((i) => i.symbol === "SUGAR")!;
+    expect(sugar.dukascopy).toBeUndefined();
+    expect(sourceFor(sugar, { PRICES_SOURCE: "dukascopy" })).toBe("yahoo");
+    expect(sugar.unit).toBe("US cents/lb");
+    const db = d1();
+    db.raw.prepare("INSERT INTO documents (key, body, updated) VALUES ('prices:source', '\"dukascopy\"', 'x'), ('prices:entry:SUGAR', '{\"last\":546.75}', 'x'), ('prices:years:SUGAR:2024', '[]', 'x'), ('prices:entry:CORN', '{}', 'x')").run();
+    const env: any = { DB: db, PRICES_SOURCE: "dukascopy" };
+    expect(await pricesTick(env, NOW, [sugar, CORN], feeds().fetch, OFF)).toBe("moved to yahoo: SUGAR cleared");
+    expect(keys(db, "prices:entry:%")).toEqual(["prices:entry:CORN"]);
+    expect(keys(db, "prices:years:SUGAR:%")).toEqual([]);
+    expect(await pricesTick(env, NOW + 3_600_000, [sugar, CORN], feeds().fetch, OFF)).toContain("refreshed"); // only once
   });
 });

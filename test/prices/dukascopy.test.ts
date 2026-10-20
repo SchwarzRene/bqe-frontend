@@ -26,6 +26,7 @@ describe("dukascopy", () => {
     const days = weekdays("2026-10-14", "2026-10-20"); // Wed..Tue
     const candles = parseCandles(encode(days, (i) => 100 + i));
     const chart = chartOf(candles, NOW); // Tue 13:05Z: Tuesday's candle (opened Mon 21:00Z) is still forming
+    expect(chart.live).toBe(true);
     expect(chart.bars.map((b) => b[0])).toEqual(["2026-10-14", "2026-10-15", "2026-10-16", "2026-10-19"]);
     expect(chart.last).toBe(104); // Tuesday's close so far (the fifth weekday)
     expect(chart.lastAt).toBe("2026-10-20T13:05:12Z");
@@ -47,8 +48,14 @@ describe("dukascopy", () => {
     await fetchYear("XAU-USD", 2026, f, NOW);
     expect(urls).toEqual([
       "https://jetta.dukascopy.com/v1/candles/day/XAU-USD/BID/2024",
-      `https://jetta.dukascopy.com/v1/candles/day/XAU-USD/BID?from=${Date.UTC(2026, 0, 1)}`,
+      `https://jetta.dukascopy.com/v1/candles/day/XAU-USD/BID?from=${Date.UTC(2026, 0, 1) - (Math.floor(NOW / 900_000) % 1000)}`,
     ]);
+    // the CDN keeps an answer for a week and keys on the URL: another quarter hour, another URL (same candles)
+    urls.length = 0;
+    await fetchYear("XAU-USD", 2026, f, NOW);
+    await fetchYear("XAU-USD", 2026, f, NOW + 900_000);
+    expect(new Set(urls).size).toBe(2);
+    expect(urls.every((u) => Date.UTC(2026, 0, 1) - Number(u.split("from=")[1]) < 1000)).toBe(true);
     // the first days of January reach back into last year
     urls.length = 0;
     await fetchRecent("XAU-USD", f, Date.parse("2027-01-04T10:00:00Z")).catch(() => {});

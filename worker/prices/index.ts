@@ -25,7 +25,7 @@ import { json, jsonText, mapLimit } from "../http";
 import { fetchRecent, fetchYearBars } from "./dukascopy";
 import { type Bar, isStale, newYorkWall, round } from "./indicators";
 import {
-  type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, readBackfill, readCursor, reconcileSource, rebuildSnapshot,
+  type Backfill, backfillDone, BARS_PREFIX, hasSnapshot, INSTRUMENTS, type Instrument, markFailed, nextYear, prefixEnd, purgeMoved, readBackfill, readCursor, reconcileSource, rebuildSnapshot,
   saveChart, sourceFor, saveYear, SNAPSHOT_KEY, type Snapshot, writeBackfill, writeCursor, YEARS_PREFIX, yearKey,
 } from "./store";
 import { hasProbe, runProbe } from "./probe";
@@ -288,6 +288,13 @@ export async function pricesTick(
   if (switched) {
     await rebuildSnapshot(env, instruments, ms);
     return switched;
+  }
+
+  // An instrument that left Dukascopy for good starts again on Yahoo (see purgeMoved): also a run of its own.
+  const moved = options.probe ? "" : await purgeMoved(env, instruments);
+  if (moved) {
+    await rebuildSnapshot(env, instruments, ms);
+    return moved;
   }
 
   // The one-off diagnostic (see probe.ts): alone in its run, on demand or once after a deploy that asks for it.
