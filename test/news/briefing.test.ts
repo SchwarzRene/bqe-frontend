@@ -1,10 +1,8 @@
 // Market News: briefing validation.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { validateBriefing, pickInput } from "../../worker/news/briefing";
 import { cfg } from "./fixtures";
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("news briefing", () => {
   const ids = new Set(["a1", "b2", "c3"]);

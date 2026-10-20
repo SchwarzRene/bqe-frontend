@@ -1,10 +1,8 @@
 // Commodity prices: reading Yahoo's chart answer.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { parseChart } from "../../worker/prices/yahoo";
 import { date } from "./fixtures";
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("parseChart", () => {
   const day = 86_400;

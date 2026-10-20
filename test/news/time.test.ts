@@ -1,9 +1,7 @@
 // Market News: schedule slots and time zones.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { briefingSlot, calendarRun, isCalendarRun, isRankRun, isResultsRun, wallClock, zonedToUtc } from "../../worker/news/time";
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("news time", () => {
   it("converts wall-clock times in any zone, DST included", () => {

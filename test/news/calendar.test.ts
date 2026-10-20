@@ -1,10 +1,8 @@
 // Market News: the economic calendar.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { type CalendarConfig, fixedEvents, mergeMeetingResults, nasdaqEvent, parseEconomic, parseIcs, pickNasdaq } from "../../worker/news/calendar";
 import { withHeadlines } from "../../worker/news/index";
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("news calendar", () => {
   const cal: CalendarConfig = {

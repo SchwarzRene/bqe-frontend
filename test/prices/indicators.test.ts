@@ -1,11 +1,9 @@
 // Commodity prices: the indicators against a hand-computed fixture, and the New York wall clock.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { analyse, atr, atrSeries, swings, trendState, type Bar, breakout, highN, isStale, lowN, sma, weekdaysSince, newYorkWall } from "../../worker/prices/indicators";
 import { wallClock, ET } from "../../worker/news/time";
 import { date } from "./fixtures";
-
-afterEach(() => vi.unstubAllGlobals());
 
 // 30 bars: close = 100 + i, high = close + 2, low = close - 2, open = close.
 // Every true range is max(4, 3, 1) = 4, so ATR is exactly 4 whatever the seed.

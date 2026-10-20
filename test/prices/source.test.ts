@@ -1,13 +1,11 @@
 // Commodity prices: choosing and switching the source (Yahoo or Dukascopy), and the Dukascopy probe.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { d1 } from "../helpers/d1";
 import { handlePrices, pricesTick } from "../../worker/prices";
 import { firstYear, sourceFor } from "../../worker/prices/store";
 import { PROBE_KEY, probeOne, VARIANTS } from "../../worker/prices/probe";
 import { OFF, NOW, yahoo, GOLD, OIL, CORN, MIX, feeds } from "./fixtures";
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("the source switch", () => {
   it("Yahoo is the default, even for instruments Dukascopy has", async () => {

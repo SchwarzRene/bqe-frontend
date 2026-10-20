@@ -1,11 +1,9 @@
 // Market News: dedupe, scoring and the headline store.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { type RawItem } from "../../worker/news/feeds";
 import { dedupe, eventWordsFor, isBlocked, isPromo, sameStory, scoreItem, staleSources, titleWords } from "../../worker/news/store";
 import { cfg } from "./fixtures";
-
-afterEach(() => vi.unstubAllGlobals());
 
 describe("news store", () => {
   const raw = (id: string, title: string, source: string, at = "2026-09-24T10:00:00Z"): RawItem => ({
