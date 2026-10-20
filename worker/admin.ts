@@ -81,7 +81,8 @@ export async function listUsers(env: Env): Promise<AccountRow[]> {
   const rows = await env.DB.prepare(
     `SELECT u.id, u.username, u.email, u.role, u.ai_access, u.disabled, u.created_at, u.last_login_at,
             (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > ?1) AS sessions,
-            COALESCE((SELECT count FROM news_chat_usage c WHERE c.user_id = u.id AND c.day = ?2), 0) AS ai_today
+            COALESCE((SELECT count FROM news_chat_usage c WHERE c.user_id = u.id AND c.day = ?2), 0)
+            + COALESCE((SELECT count FROM diary_ai_usage d WHERE d.user_id = u.id AND d.day = ?2), 0) AS ai_today
        FROM users u ORDER BY u.created_at DESC, u.id DESC`,
   )
     .bind(isoNow(), utcDay())

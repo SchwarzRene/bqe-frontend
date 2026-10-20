@@ -119,7 +119,8 @@ npx wrangler secret put IP_HASH_SECRET   # any long random string: openssl rand 
 it the hash is unkeyed, and anyone holding a copy of the database could turn it
 back into IP addresses by trying them all (the log warns once per instance).
 
-`GEMINI_API_KEY` is what the Market News briefing and chat use; the Worker
+`GEMINI_API_KEY` is what the Market News briefing and chat and the Meal Diary's
+meal ideas use; the Worker
 reads it as `env.GEMINI_API_KEY`. `ADMIN_TOKEN` guards
 `POST /api/admin/run/{stack,screen,news,calendar,briefing}`, which runs a job on demand. For
 `npm run dev` locally, put the same names in a `.dev.vars` file

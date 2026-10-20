@@ -20,6 +20,7 @@ export interface Env {
   PRICES_PROBE?: string; // "on" = run the one-off Dukascopy probe (worker/prices/probe.ts) once
   NEWS_CHAT_SEARCH?: string; // "on" = Google Search grounding for the chat
   NEWS_CHAT_DAILY_LIMIT?: string; // questions per user per day
+  DIARY_AI_DAILY_LIMIT?: string; // Meal Diary: AI requests (photo descriptions, summaries, ideas) per user per day
   SIGNUP_HOURLY_LIMIT?: string; // new accounts per hour, site-wide
   PBKDF2_ITERATIONS?: string; // for passwords set from now on; older ones are rehashed at sign-in
   PASSWORD_BREACH_CHECK?: string; // "off" skips the Have I Been Pwned lookup for new passwords
@@ -27,7 +28,7 @@ export interface Env {
   TURNSTILE_HOSTNAMES?: string; // comma-separated hostnames a token may be solved on; unset = the request's own host
 
   // Secrets — `npx wrangler secret put NAME`, never in wrangler.toml.
-  GEMINI_API_KEY?: string; // Market News briefing and chat; free key from aistudio.google.com
+  GEMINI_API_KEY?: string; // Market News briefing and chat, Meal Diary ideas; free key from aistudio.google.com
   ADMIN_TOKEN?: string; // guards /api/admin/run/*
   IP_HASH_SECRET?: string; // keys the daily visitor hash, so a copy of the database cannot be reversed to IPs
   TURNSTILE_SECRET?: string; // Cloudflare Turnstile, for sign-up

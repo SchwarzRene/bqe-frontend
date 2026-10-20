@@ -109,6 +109,9 @@ GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash"
 NEWS_CHAT_SEARCH = "off"
 NEWS_CHAT_DAILY_LIMIT = "50"
+# Meal Diary (worker/diary/): AI requests per user per day (photo descriptions, summaries and ideas). It uses the same
+# GEMINI_API_KEY secret and GEMINI_MODEL as Market News.
+DIARY_AI_DAILY_LIMIT = "20"
 # New accounts per hour, site-wide (on top of 5 per visitor per day).
 SIGNUP_HOURLY_LIMIT = "30"
 # New passwords are checked against Have I Been Pwned (only a 5-character

@@ -1,7 +1,8 @@
 // One place that talks to the Gemini API. Market News makes these kinds of
 // model call: the scheduled briefing (strict JSON, headlines only), the
 // calendar ranking, the headline ranking after each fetch, and the chat
-// and AI analyst (signed-in users only). The key is the GEMINI_API_KEY secret
+// and AI analyst (signed-in users only). The Meal Diary's meal ideas
+// (worker/diary/suggest.ts) use it too. The key is the GEMINI_API_KEY secret
 // and never leaves the Worker.
 
 import type { Env } from "../env";
@@ -88,14 +89,14 @@ export function textOf(body: any): string {
 }
 
 /** A call whose answer must match `schema` (Gemini's structured output). Null if it is not JSON. */
-export async function askJson(env: Env, opts: { system: string; prompt: string; schema: unknown; label: string }): Promise<unknown> {
+export async function askJson(env: Env, opts: { system: string; prompt: string; schema: unknown; label: string; temperature?: number }): Promise<unknown> {
   const body = await generate(env, model(env), {
     systemInstruction: { parts: [{ text: opts.system }] },
     contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: opts.schema,
-      temperature: 0.3,
+      temperature: opts.temperature ?? 0.3,
       // Generous: on thinking models the thinking counts against it too,
       // and a cut-off answer is invalid JSON.
       maxOutputTokens: 16384,

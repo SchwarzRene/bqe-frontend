@@ -28,7 +28,7 @@ const MAX_BYTES = 1_800_000;
 export const MAX_USER_BYTES = 4_000_000;
 
 // Sections of the prefs document, one per app that has settings.
-export const PREF_SECTIONS = new Set(["news", "journal", "historymap"]);
+export const PREF_SECTIONS = new Set(["news", "journal", "historymap", "mealdiary"]);
 const MAX_PREF_BYTES = 4096; // per section
 
 export async function handleState(request: Request, env: Env, app: string): Promise<Response> {
