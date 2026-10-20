@@ -4,7 +4,7 @@
 "use strict";
 
 /* ============================================================
-   2. Price series (simulated — see the note in the reply)
+   2. Price series (simulated: the fallback when no real bars are available)
    One deterministic daily series per symbol; weekly, monthly and
    hourly bars are aggregated from it, so a level drawn on one
    timeframe lands in exactly the same place on the others.

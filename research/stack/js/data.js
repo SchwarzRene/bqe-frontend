@@ -5,7 +5,7 @@
 
 /* ------------------------------------------------------------
    Real bars, when this page is hosted next to a data/ folder
-   (built by automation/scripts/fetch_market_data.py via yfinance).
+   (the Worker's nightly job, worker/stack.ts, keeps it fresh in D1).
    Missing or unreachable -> the simulated series above is used.
    ------------------------------------------------------------ */
 const DATA_BASE = "data/";
