@@ -113,9 +113,11 @@ function renderGuest() {
 
 function renderShell() {
   $("#view").innerHTML = `
-    <div class="tabs" role="group" aria-label="View">
-      <button class="tab" id="tab-day" aria-pressed="true">Day</button>
-      <button class="tab" id="tab-feed" aria-pressed="false">Feed</button>
+    <div class="viewbar">
+      <div class="tabs" role="group" aria-label="View">
+        <button class="tab" id="tab-day" aria-pressed="true">Day</button>
+        <button class="tab" id="tab-feed" aria-pressed="false">Feed</button>
+      </div>
     </div>
     <div id="day-view">
     <div class="daynav">
