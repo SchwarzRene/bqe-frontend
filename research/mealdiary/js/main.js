@@ -113,11 +113,11 @@ function renderGuest() {
 
 function renderShell() {
   $("#view").innerHTML = `
-    <div class="tabs" role="tablist" aria-label="View">
-      <button class="tab" id="tab-day" role="tab" aria-controls="day-view">Day</button>
-      <button class="tab" id="tab-feed" role="tab" aria-controls="feed-view">Feed</button>
+    <div class="tabs" role="group" aria-label="View">
+      <button class="tab" id="tab-day" aria-pressed="true">Day</button>
+      <button class="tab" id="tab-feed" aria-pressed="false">Feed</button>
     </div>
-    <div id="day-view" role="tabpanel" aria-labelledby="tab-day">
+    <div id="day-view">
     <div class="daynav">
       <button class="btn" id="prev" aria-label="Previous day">←</button>
       <input type="date" id="date" aria-label="Day">
@@ -173,7 +173,7 @@ function renderShell() {
       </div>
     </div>
     </div>
-    <div id="feed-view" role="tabpanel" aria-labelledby="tab-feed" hidden>
+    <div id="feed-view" hidden>
       <p class="hint feed-hint">Everything you wrote down, newest first. Keep scrolling for older days.</p>
       <div id="feed"></div>
       <div id="feed-more" class="loading" aria-live="polite"></div>
@@ -634,7 +634,12 @@ async function loadFeed() {
   more.textContent = "Loading…";
   const res = await attempt(() => diary.history(feed.next));
   feed.loading = false;
-  if (!res) { more.textContent = ""; feed.fresh = !feed.days.length; return; }
+  if (!res) {
+    feed.fresh = !feed.days.length;
+    more.innerHTML = `<button class="btn small" id="feed-retry">Couldn't load — try again</button>`;
+    $("#feed-retry").addEventListener("click", loadFeed);
+    return;
+  }
   feed.days.push(...res.days);
   feed.next = res.next;
   feed.done = !res.next;
@@ -662,7 +667,7 @@ function setView(view) {
   $("#feed-view").hidden = view !== "feed";
   for (const [id, v] of [["#tab-day", "day"], ["#tab-feed", "feed"]]) {
     $(id).classList.toggle("active", view === v);
-    $(id).setAttribute("aria-selected", String(view === v));
+    $(id).setAttribute("aria-pressed", String(view === v));
   }
   document.documentElement.classList.toggle("feed-mode", view === "feed");
 }
