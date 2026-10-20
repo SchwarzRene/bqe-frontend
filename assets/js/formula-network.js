@@ -40,9 +40,12 @@
   var NET_MAX_NEIGHBORS = 3;
 
   function resize() {
-    W = section.clientWidth;
-    H = section.clientHeight;
-    if (!W || !H) return;
+    var w = section.clientWidth, h = section.clientHeight;
+    // See hero-network.js: no rebuild for a resize that changed nothing.
+    if (!w || !h || (w === W && h === H)) return;
+    W = w;
+    H = h;
+    gridGradient = null;
     canvas.width = Math.floor(W * DPR);
     canvas.height = Math.floor(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -172,6 +175,7 @@
     if (kind === 'hex') {
       f.text = genHex();
       f.size = rand(11, 13) * TYPE_SCALE;
+      f.font = f.size + "px 'SFMono-Regular', Consolas, Menlo, monospace";
       f.maxAlpha = rand(0.30, 0.5);
     } else if (kind === 'fraction') {
       var numStyle = randInt(0, 2);
@@ -181,10 +185,12 @@
       f.den = Math.random() < 0.5 ? (v() + sub(n()) + (Math.random() < 0.5 ? ' - ' + n() : '')) : (n() + v() + ' + ' + n());
       f.prefix = Math.random() < 0.4 ? (v() + '(x) = ') : '';
       f.size = rand(14, 19) * TYPE_SCALE;
+      f.font = 'italic ' + f.size + "px Georgia, 'Times New Roman', serif";
       f.maxAlpha = rand(0.45, 0.8);
     } else {
       f.text = genLine();
       f.size = pick(LINE_SIZES);
+      f.font = 'italic ' + f.size + "px Georgia, 'Times New Roman', serif";
       f.maxAlpha = rand(0.5, 0.88);
     }
     floaters.push(f);
@@ -221,12 +227,16 @@
   }
 
   function drawFraction(f, a) {
-    ctx.font = 'italic ' + f.size + "px Georgia, 'Times New Roman', serif";
+    ctx.font = f.font;
     var numText = f.prefix + f.num;
     var denText = f.den;
-    var numW = ctx.measureText(numText).width;
-    var denW = ctx.measureText(denText).width;
-    var barW = Math.max(numW, denW) + 6;
+    // The text never changes once spawned, so it is measured once, not every frame.
+    if (f.barW === undefined) {
+      f.numW = ctx.measureText(numText).width;
+      f.denW = ctx.measureText(denText).width;
+      f.barW = Math.max(f.numW, f.denW) + 6;
+    }
+    var numW = f.numW, denW = f.denW, barW = f.barW;
     ctx.fillStyle = 'rgba(198,209,232,' + a.toFixed(3) + ')';
     ctx.fillText(numText, f.x + (barW - numW) / 2, f.y - 3);
     ctx.fillText(denText, f.x + (barW - denW) / 2, f.y + f.size + 5);
@@ -245,13 +255,13 @@
       var a = alphaFor(f);
       if (a <= 0.003) continue;
       if (f.kind === 'hex') {
-        ctx.font = f.size + "px 'SFMono-Regular', Consolas, Menlo, monospace";
+        ctx.font = f.font;
         ctx.fillStyle = 'rgba(150,163,190,' + a.toFixed(3) + ')';
         ctx.fillText(f.text, f.x, f.y);
       } else if (f.kind === 'fraction') {
         drawFraction(f, a);
       } else {
-        ctx.font = 'italic ' + f.size + "px Georgia, 'Times New Roman', serif";
+        ctx.font = f.font;
         ctx.fillStyle = 'rgba(198,209,232,' + a.toFixed(3) + ')';
         ctx.fillText(f.text, f.x, f.y);
       }
@@ -475,8 +485,24 @@
     }
   }
 
+  // Pre-rendered node glow (see hero-network.js): one drawImage per node
+  // instead of a fresh radial gradient per node per frame.
+  var GLOW_PX = 128;
+  var glowSprite = (function () {
+    var c = document.createElement('canvas');
+    c.width = c.height = GLOW_PX;
+    var g = c.getContext('2d');
+    var grad = g.createRadialGradient(GLOW_PX / 2, GLOW_PX / 2, 0, GLOW_PX / 2, GLOW_PX / 2, GLOW_PX / 2);
+    grad.addColorStop(0, 'rgba(240,180,60,1)');
+    grad.addColorStop(1, 'rgba(240,180,60,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, GLOW_PX, GLOW_PX);
+    return c;
+  })();
+
   function netDrawNodes(t) {
     ctx.textBaseline = 'middle';
+    ctx.font = "11px 'SF Mono','Roboto Mono',monospace";
     for (var i = 0; i < netNodes.length; i++) {
       var node = netNodes[i];
       var pulse = 0.55 + 0.45 * Math.sin(t * node.pulseSpeed + node.phase);
@@ -484,17 +510,14 @@
       var r = (1.6 + node.z * 2.6 + pulse * 1.1) * lifeScale;
       if (r <= 0.05) continue;
 
-      var glow = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * 6);
-      glow.addColorStop(0, 'rgba(240,180,60,' + (0.32 * node.z).toFixed(3) + ')');
-      glow.addColorStop(1, 'rgba(240,180,60,0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath(); ctx.arc(node.x, node.y, r * 6, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.32 * node.z;
+      ctx.drawImage(glowSprite, node.x - r * 6, node.y - r * 6, r * 12, r * 12);
+      ctx.globalAlpha = 1;
 
       ctx.fillStyle = 'rgba(255,243,214,' + (0.85 * node.z + 0.15).toFixed(3) + ')';
       ctx.beginPath(); ctx.arc(node.x, node.y, r, 0, Math.PI * 2); ctx.fill();
 
       if (node.z > 0.46 && lifeScale > 0.5) {
-        ctx.font = "11px 'SF Mono','Roboto Mono',monospace";
         ctx.fillStyle = 'rgba(180,205,255,' + (0.5 * node.z * lifeScale).toFixed(3) + ')';
         ctx.fillText(node.value.toFixed(2), node.x + r + 7, node.y - 2);
       }
@@ -634,16 +657,20 @@
     ctx.clearRect(0, 0, W, H);
   }
 
+  var gridGradient = null; // depends only on H; dropped by resize()
+
   function drawGrid(t) {
     // Absent at the top of the band and strongest at the bottom. One canvas
     // gradient does both line families in a single stroke: a vertical line
     // fades along its own length, and a horizontal one picks up the alpha at
     // its own y.
-    var grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, 'rgba(255,255,255,0)');
-    grad.addColorStop(0.28, 'rgba(255,255,255,0)');
-    grad.addColorStop(1, 'rgba(255,255,255,0.055)');
-    ctx.strokeStyle = grad;
+    if (!gridGradient) {
+      gridGradient = ctx.createLinearGradient(0, 0, 0, H);
+      gridGradient.addColorStop(0, 'rgba(255,255,255,0)');
+      gridGradient.addColorStop(0.28, 'rgba(255,255,255,0)');
+      gridGradient.addColorStop(1, 'rgba(255,255,255,0.055)');
+    }
+    ctx.strokeStyle = gridGradient;
     ctx.lineWidth = 1;
     var spacing = 58;
     var offset = (t * 5) % spacing;
@@ -687,8 +714,13 @@
   var lastT = null;
   var rafId = null;
   var onScreen = true;
+  var MIN_FRAME_MS = 14; // see hero-network.js
 
   function frame(now) {
+    if (lastT !== null && now - lastT * 1000 < MIN_FRAME_MS) {
+      rafId = requestAnimationFrame(frame);
+      return;
+    }
     var t = now / 1000;
     if (lastT === null) lastT = t;
     var dt = Math.min(0.05, t - lastT);

@@ -82,14 +82,32 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
  * all. IPv6 visitors are counted per /64, the block one connection gets.
  */
 export async function hashIp(ip: string, secret?: string, day = utcDay()): Promise<string> {
-  const data = new TextEncoder().encode(`${day}|bqe|${ipBlock(ip)}`);
+  const text = `${day}|bqe|${ipBlock(ip)}`;
   if (!secret) {
     warnOnce("IP_HASH_SECRET is not set: visitor hashes are unkeyed");
-    return hex(await crypto.subtle.digest("SHA-256", data)).slice(0, 32);
+    return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).slice(0, 32);
   }
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return hex(await crypto.subtle.sign("HMAC", key, data)).slice(0, 32);
+  // Every rate-limited request hashes its visitor, and a visitor makes many:
+  // the imported key and the hash of an address already seen are reused for as
+  // long as this isolate lives instead of redone per request.
+  const memo = `${secret}\0${text}`;
+  const known = hashes.get(memo);
+  if (known) return known;
+  let key = hmacKeys.get(secret);
+  if (!key) {
+    key = crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    hmacKeys.set(secret, key);
+    key.catch(() => hmacKeys.delete(secret));
+  }
+  const hash = hex(await crypto.subtle.sign("HMAC", await key, new TextEncoder().encode(text))).slice(0, 32);
+  if (hashes.size >= MAX_MEMOISED_HASHES) hashes.clear();
+  hashes.set(memo, hash);
+  return hash;
 }
+
+const MAX_MEMOISED_HASHES = 500;
+const hashes = new Map<string, string>();
+const hmacKeys = new Map<string, Promise<CryptoKey>>();
 
 /** The visitor's hash for this request (see hashIp). */
 export function visitor(request: Request, env: { IP_HASH_SECRET?: string }): Promise<string> {
