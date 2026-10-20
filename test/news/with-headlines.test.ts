@@ -2,8 +2,8 @@
 // version must answer exactly what the straightforward one did.
 
 import { describe, expect, it } from "vitest";
-import { withHeadlines } from "../worker/news/index";
-import { eventWordsFor } from "../worker/news/store";
+import { withHeadlines } from "../../worker/news/index";
+import { eventWordsFor } from "../../worker/news/store";
 
 /** The original: a RegExp built for every event x headline x word. */
 function reference(events: any[], items: any[]) {

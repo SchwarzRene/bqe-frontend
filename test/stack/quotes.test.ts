@@ -1,9 +1,9 @@
+// Stack: Yahoo quote parsing and the incremental price refresh.
+
 import { describe, expect, it } from "vitest";
-import { validateContact } from "../worker/contact";
-import { parseConstituents } from "../worker/stack";
 import {
   type Columns, isValidSymbol, mergeDaily, mergeHourly, refreshQuote, toColumns, yahooSymbol,
-} from "../worker/yahoo";
+} from "../../worker/yahoo";
 
 /** Bars at t = from, from+step, … with close = price(t). */
 function bars(from: number, n: number, price: (t: number) => number, tu = 86_400_000, step = 1): Columns {
@@ -55,43 +55,6 @@ describe("yahoo", () => {
     expect(isValidSymbol("BRK-B")).toBe(true);
     expect(isValidSymbol("../etc")).toBe(false);
     expect(yahooSymbol(" brk.b ")).toBe("BRK-B");
-  });
-});
-
-describe("parseConstituents", () => {
-  const html = `<p>x</p>
-<table class="wikitable sortable" id="constituents"><tbody>
-<tr><th>Symbol</th><th>Security</th><th>GICS Sector</th><th>GICS Sub-Industry</th></tr>
-<tr><td><a rel="nofollow" class="external text" href="https://www.nyse.com/quote/XNYS:MMM">MMM</a></td>
-<td><a href="/wiki/3M" title="3M">3M</a></td><td>Industrials</td><td>Industrial Conglomerates</td></tr>
-<tr><td><a href="#">BRK.B</a></td><td><a href="/wiki/B">Berkshire Hathaway</a></td><td>Financials</td><td>x</td></tr>
-<tr><td>AT&amp;T? no</td><td>bad</td><td>bad</td></tr>
-</tbody></table><table id="changes"><tr><td>ZZZ</td></tr></table>`;
-
-  it("reads the constituents table by its headers", () => {
-    expect(parseConstituents(html)).toEqual([
-      { s: "BRK.B", f: "BRK-B", n: "Berkshire Hathaway", sec: "Financials" },
-      { s: "MMM", f: "MMM", n: "3M", sec: "Industrials" },
-    ]);
-  });
-
-  it("gives up on a table whose headers changed", () => {
-    expect(parseConstituents(html.replace("GICS Sector", "Sector"))).toEqual([]);
-    expect(parseConstituents("<table id='other'></table>")).toEqual([]);
-  });
-});
-
-describe("validateContact", () => {
-  const good = { name: "Ada", email: "ada@example.com", subject: "general", message: "Hello there, a question." };
-
-  it("accepts a valid submission", () => {
-    expect(validateContact(good)).toEqual({ ok: true, value: { ...good, phone: "" } });
-  });
-
-  it("rejects bad fields", () => {
-    const r = validateContact({ ...good, email: "nope", subject: "spam", message: "short" });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(Object.keys(r.errors).sort()).toEqual(["email", "message", "subject"]);
   });
 });
 

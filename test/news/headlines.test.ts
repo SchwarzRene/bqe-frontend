@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { pickInput } from "../worker/news/briefing";
-import { chatHeadlines } from "../worker/news/chat";
-import { checkRanks, rankPrompt, rankSystem } from "../worker/news/headlines";
-import { effectiveScore, type Item } from "../worker/news/store";
+import { pickInput } from "../../worker/news/briefing";
+import { chatHeadlines } from "../../worker/news/chat";
+import { checkRanks, rankPrompt, rankSystem } from "../../worker/news/headlines";
+import { effectiveScore, type Item } from "../../worker/news/store";
 
 const known = new Set(["NVDA", "BRK-B", "SAP.DE", "GC=F"]);
 

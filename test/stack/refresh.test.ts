@@ -3,9 +3,9 @@
 // batches are small, and what a run was about to do is recorded before it does it.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { d1 } from "./d1";
-import { cached } from "../worker/http";
-import { refreshStack } from "../worker/stack";
+import { d1 } from "../helpers/d1";
+import { cached } from "../../worker/http";
+import { refreshStack } from "../../worker/stack";
 
 afterEach(() => vi.unstubAllGlobals());
 
