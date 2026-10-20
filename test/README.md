@@ -6,7 +6,7 @@ The folders mirror the code they cover:
 
 | Folder | Covers |
 |---|---|
-| `account/` | `worker/auth.ts`, `admin.ts`, `contact.ts`: sign-in, the AI-access gate, the admin API, and `security.test.ts` (one block per finding in `SECURITY_AUDIT.md`) |
+| `account/` | `worker/auth.ts`, `admin.ts`, `contact.ts`: sign-in, the AI-access gate, the admin API, and `security.test.ts` (one block per finding in `docs/SECURITY_AUDIT.md`) |
 | `news/` | `worker/news/*`, `worker/screen.ts`: unit tests per module, and `flow-*.test.ts` that run the jobs end to end |
 | `prices/` | `worker/prices/*`: indicators, the cron job, the API, Dukascopy, the backfill, source switching |
 | `stack/` | `worker/stack.ts`, `worker/yahoo.ts`: the nightly S&P 500 refresh and quote merging |

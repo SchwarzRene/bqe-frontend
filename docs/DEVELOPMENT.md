@@ -1,6 +1,6 @@
 # Development
 
-Checks for the Worker: `npm test` (unit tests), `npm run typecheck`. CI (`.github/workflows/ci.yml`) also runs the internal-link checker (`python3 .github/check-links.py`) and a dry-run bundle of the Worker.
+Checks for the Worker: `npm test` (unit tests; layout and the frozen test clock are explained in [`test/README.md`](../test/README.md)), `npm run typecheck`. CI (`.github/workflows/ci.yml`) also runs the internal-link checker (`python3 .github/check-links.py`) and a dry-run bundle of the Worker.
 
 ## Local preview
 
