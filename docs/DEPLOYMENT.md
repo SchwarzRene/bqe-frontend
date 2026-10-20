@@ -311,7 +311,7 @@ domain**.
 If the domain's DNS is already on Cloudflare this is two clicks and the
 certificate is issued automatically.
 
-After the domain is live, update the `Live:` line in `README.md`. Nothing
+After the domain is live, update the `Live:` line in the root `README.md`. Nothing
 else needs to know the domain: the page and its API share an origin.
 
 ## Limits

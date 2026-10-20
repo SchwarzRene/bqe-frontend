@@ -1,4 +1,4 @@
-// Regression tests for the fixes in SECURITY_AUDIT.md, one block per finding.
+// Regression tests for the fixes in docs/SECURITY_AUDIT.md, one block per finding.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../../worker/index";
