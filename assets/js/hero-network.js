@@ -49,9 +49,13 @@
   }
 
   function resize() {
-    W = hero.clientWidth;
-    H = hero.clientHeight;
-    if (!W || !H) return;
+    var w = hero.clientWidth, h = hero.clientHeight;
+    // The observer also fires once on start and for changes that leave the box
+    // as it was; rebuilding the canvas and the whole mesh for those is a
+    // visible hitch for nothing.
+    if (!w || !h || (w === W && h === H)) return;
+    W = w;
+    H = h;
     canvas.width = Math.floor(W * DPR);
     canvas.height = Math.floor(H * DPR);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -327,6 +331,22 @@
     return 1 - Math.pow(1 - x, 3);
   }
 
+  // The node glow is the same soft disc every frame, scaled and faded. Painting
+  // it from a pre-rendered sprite is one drawImage instead of building a radial
+  // gradient object per node per frame.
+  var GLOW_PX = 128;
+  var glowSprite = (function () {
+    var c = document.createElement('canvas');
+    c.width = c.height = GLOW_PX;
+    var g = c.getContext('2d');
+    var grad = g.createRadialGradient(GLOW_PX / 2, GLOW_PX / 2, 0, GLOW_PX / 2, GLOW_PX / 2, GLOW_PX / 2);
+    grad.addColorStop(0, 'rgba(240,180,60,1)');
+    grad.addColorStop(1, 'rgba(240,180,60,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, GLOW_PX, GLOW_PX);
+    return c;
+  })();
+
   function drawNodes(t) {
     ctx.textBaseline = 'middle';
     ctx.font = '11px "SF Mono", "Roboto Mono", monospace';
@@ -340,13 +360,9 @@
 
       if (r <= 0.05) continue;
 
-      var glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 6);
-      glow.addColorStop(0, 'rgba(240,180,60,' + (0.32 * n.z).toFixed(3) + ')');
-      glow.addColorStop(1, 'rgba(240,180,60,0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, r * 6, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.globalAlpha = 0.32 * n.z;
+      ctx.drawImage(glowSprite, n.x - r * 6, n.y - r * 6, r * 12, r * 12);
+      ctx.globalAlpha = 1;
 
       ctx.fillStyle = 'rgba(255,243,214,' + (0.85 * n.z + 0.15).toFixed(3) + ')';
       ctx.beginPath();
@@ -588,8 +604,16 @@
   var lastT = null;
   var rafId = null;
   var onScreen = true;
+  // 120 and 144 Hz screens would run the whole simulation twice as often as a
+  // 60 Hz one for the same picture; a frame that comes sooner than this is
+  // skipped (dt keeps the motion the same either way).
+  var MIN_FRAME_MS = 14;
 
   function frame(now) {
+    if (lastT !== null && now - lastT * 1000 < MIN_FRAME_MS) {
+      rafId = requestAnimationFrame(frame);
+      return;
+    }
     var t = now / 1000;
     if (lastT === null) lastT = t;
     var dt = Math.min(0.05, t - lastT);

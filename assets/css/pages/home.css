@@ -66,7 +66,8 @@
   z-index: 1;
   pointer-events: none;
   opacity: 0.035;
-  mix-blend-mode: overlay;
+  /* Plain blending: an overlay blend would re-composite the animating canvas
+     under it on every frame, and at 3.5% the two look the same. */
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
@@ -330,8 +331,9 @@
   border-radius: var(--radius-lg);
   background: rgba(var(--rgb-black), 0.82);
   border: 1px solid rgba(var(--rgb-navy), 0.85);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* No backdrop-filter: the canvas behind this panel repaints every frame, and
+     blurring it again each time is a full GPU pass for a panel that is 82%
+     opaque already. */
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
 }
 
