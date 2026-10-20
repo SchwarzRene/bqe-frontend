@@ -92,7 +92,7 @@ export function feeds(failing: string[] = []) {
     if (failing.some((k) => url.includes(k))) return new Response("", { status: 503 });
     if (url.includes("dukascopy")) {
       const [, code, year] = url.match(/day\/([^/]+)\/BID(?:\/(\d{4})|\?from=(\d+))?/)!.slice(0, 3).concat([]) as string[];
-      const y = Number(year ?? new Date(Number(url.split("from=")[1])).getUTCFullYear());
+      const y = Number(year ?? new Date(Number(url.split("from=")[1]) + 1000).getUTCFullYear());
       if (y < 2025 && code === "LIGHT.CMD-USD") return new Response("", { status: 404 });
       return new Response(JSON.stringify(encode(weekdays(`${y}-01-01`, `${y}-12-31`), (i) => (base[code] ?? 100) + i)));
     }

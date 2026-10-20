@@ -18,6 +18,8 @@ export interface Chart {
   bars: Bar[];
   last: number | null;
   lastAt: string | null;
+  /** False when `last` is just the close of the latest completed bar (no price from the session in progress); absent = live. */
+  live?: boolean;
 }
 
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);

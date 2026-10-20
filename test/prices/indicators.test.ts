@@ -96,6 +96,16 @@ describe("indicators", () => {
     return out;
   };
 
+  it("change: a price that is the latest completed close is compared with the bars before it", () => {
+    const bars = zigzag([[0, 100], [6, 110], [12, 104], [18, 114], [24, 107], [30, 118]]);
+    const close = (k: number) => bars[bars.length - k][4];
+    const live = analyse(bars, 120).change, bar = analyse(bars, close(1), 2, true).change;
+    expect(live.d1Pct).toBe(Math.round(((120 - close(1)) / close(1)) * 1e4) / 100);
+    expect(bar.d1Pct).toBe(Math.round(((close(1) - close(2)) / close(2)) * 1e4) / 100);
+    expect(bar.d1Pct).not.toBe(0);
+    expect(analyse(bars, close(1)).change.d1Pct).toBe(0);
+  });
+
   it("structure: swing points and trendState for an up-trend, a down-trend and a range", () => {
     // peaks at 6 and 18, troughs at 12 and 24; 30 is too close to the end to be a swing
     const up = analyse(zigzag([[0, 100], [6, 110], [12, 104], [18, 114], [24, 107], [30, 118]]), 118).structure;
@@ -114,6 +124,12 @@ describe("indicators", () => {
     // strict: a flat top is no swing
     expect(swings(zigzag([[0, 100], [3, 100], [4, 100], [10, 90]]), "high")).toEqual([]);
     expect(trendState([], [])).toBeNull();
+    // a down-trend whose last swing high the price has since exceeded (and an up-trend whose last swing low is lost) is a range
+    const sw = (...p: number[]) => p.map((price, k) => ({ date: date(k), price }));
+    expect(trendState(sw(106.7, 96.76), sw(88.69, 86.84), 98.21)).toBe("range");
+    expect(trendState(sw(106.7, 96.76), sw(88.69, 86.84), 92)).toBe("down");
+    expect(trendState(sw(100, 110), sw(90, 95), 94)).toBe("range");
+    expect(trendState(sw(100, 110), sw(90, 95), 100)).toBe("up");
   });
 
   it("structure: distance to the 50-day average, in ATRs", () => {

@@ -11,7 +11,9 @@
 //               first 20 TRs (bars 1..20) seed it as a plain mean, then
 //               ATR = (ATR_prev * 19 + TR) / 20 over every later bar. Needs 21 bars.
 //   change      `last` against the close k bars back: 1 = the latest completed
-//               close, 5 = the one four sessions before it, 21 likewise.
+//               close, 5 = the one four sessions before it, 21 likewise. When
+//               `last` is itself the latest completed close (no live price),
+//               each count is one more, so d1Pct is not 0 against itself.
 //   breakout    "up" when last > highN, "down" when last < lowN, else "none":
 //               today's price outside the range of the N completed days.
 //   stale       see isStale.
@@ -105,11 +107,16 @@ export function swings(bars: Bar[], kind: "high" | "low", k = SWING_K): Swing[] 
   return out;
 }
 
-export function trendState(highs: Swing[], lows: Swing[]): "up" | "down" | "range" | null {
+/**
+ * From the last two swing highs and lows. A swing is confirmed only SWING_K bars late, so `last` can
+ * already have taken the structure back: a down-trend whose last swing high is exceeded (or an
+ * up-trend whose last swing low is lost) is a "range" until the next swings confirm.
+ */
+export function trendState(highs: Swing[], lows: Swing[], last: number | null = null): "up" | "down" | "range" | null {
   if (highs.length < 2 || lows.length < 2) return null;
   const [ph, lh] = highs.slice(-2), [pl, ll] = lows.slice(-2);
-  if (lh.price > ph.price && ll.price > pl.price) return "up";
-  if (lh.price < ph.price && ll.price < pl.price) return "down";
+  if (lh.price > ph.price && ll.price > pl.price) return last != null && last < ll.price ? "range" : "up";
+  if (lh.price < ph.price && ll.price < pl.price) return last != null && last > lh.price ? "range" : "down";
   return "range";
 }
 
@@ -186,7 +193,9 @@ export interface Analysis {
 }
 
 /** Everything the endpoint reports for one instrument, from its completed bars and the live price. */
-export function analyse(bars: Bar[], last: number | null, decimals = 2): Analysis {
+export function analyse(bars: Bar[], last: number | null, decimals = 2, lastIsBar = false): Analysis {
+  // `last` is the latest completed bar's close (see Chart.live): the changes compare it with the bars before that.
+  const skip = lastIsBar ? 1 : 0;
   const p = (v: number | null) => round(v, decimals);
   const h20 = full(bars, 20, highN), l20 = full(bars, 20, lowN);
   const h55 = full(bars, 55, highN), l55 = full(bars, 55, lowN);
@@ -203,9 +212,9 @@ export function analyse(bars: Bar[], last: number | null, decimals = 2): Analysi
   return {
     lastBarDate: bars.length ? bars[bars.length - 1][DATE] : null,
     change: {
-      d1Pct: round(pct(last, closeBack(bars, 1))),
-      w1Pct: round(pct(last, closeBack(bars, 5))),
-      m1Pct: round(pct(last, closeBack(bars, 21))),
+      d1Pct: round(pct(last, closeBack(bars, 1 + skip))),
+      w1Pct: round(pct(last, closeBack(bars, 5 + skip))),
+      m1Pct: round(pct(last, closeBack(bars, 21 + skip))),
     },
     levels: {
       high10: p(full(bars, 10, highN)), low10: p(full(bars, 10, lowN)),
@@ -226,7 +235,7 @@ export function analyse(bars: Bar[], last: number | null, decimals = 2): Analysi
       distToLow20InAtr: last == null || l20 == null || !a ? null : round((last - l20) / a),
     },
     structure: {
-      trendState: trendState(sh, sl),
+      trendState: trendState(sh, sl, last),
       lastSwingHigh: sw(sh.at(-1)),
       lastSwingLow: sw(sl.at(-1)),
       prevSwingHigh: sw(sh.at(-2)),

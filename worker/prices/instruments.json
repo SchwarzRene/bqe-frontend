@@ -134,9 +134,7 @@
     "group": "softs",
     "yahoo": "SB=F",
     "unit": "US cents/lb",
-    "decimals": 2,
-    "dukascopy": "SUGAR.CMD-USD",
-    "since": 2017
+    "decimals": 2
   },
   {
     "symbol": "WHEAT",

@@ -83,12 +83,20 @@ export function parseCandles(data: any): Candle[] {
   return out;
 }
 
+/**
+ * The current-year URL is the same every time and the CDN keeps a response for a week (cache-control:
+ * public, max-age=604800): a refresh got the answer of the first request, so `last` stood still all day.
+ * The CDN keys on the full URL, so `from` is lowered by 0-999 ms, a different value every quarter hour
+ * (the candles are the same: none opens within a second before Jan 1).
+ */
+const freshness = (now: number) => Math.floor(now / 900_000) % 1000;
+
 /** One year of daily candles; [] when the feed has none for it (404 / empty). */
 export async function fetchYear(code: string, year: number, fetcher: typeof fetch = fetch, now = Date.now()): Promise<Candle[]> {
   const url =
     year < new Date(now).getUTCFullYear()
       ? `${ROOT}/candles/day/${code}/BID/${year}`
-      : `${ROOT}/candles/day/${code}/BID?from=${Date.UTC(year, 0, 1)}`;
+      : `${ROOT}/candles/day/${code}/BID?from=${Date.UTC(year, 0, 1) - freshness(now)}`;
   let res: Response;
   try {
     res = await fetcher(url, { headers: BROWSER_HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -127,6 +135,8 @@ export function chartOf(candles: Candle[], now = Date.now()): Chart {
     bars: [...byDate.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1)),
     last: latest ? latest.bar[4] : null,
     lastAt: latest ? new Date(Math.min(now, latest.open + DAY_MS)).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
+    // The feed's newest candle is already complete: there is no session in progress to price from.
+    live: latest ? latest.open + DAY_MS > now : false,
   };
 }
 
