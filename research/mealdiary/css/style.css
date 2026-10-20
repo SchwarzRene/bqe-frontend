@@ -15,6 +15,8 @@
   --snack: #a64ca6;
   --shadow: 0 1px 2px rgba(20, 20, 30, .06), 0 4px 16px rgba(20, 20, 30, .05);
   --radius: 10px;
+  --topbar: 56px; /* the top bar's height; the feed's sticky switch and snap offset are measured from it */
+  --switch: 56px; /* the Day/Feed switch bar */
   --font: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: light;
@@ -55,7 +57,7 @@ p { margin: 0 0 8px; }
 .topbar {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; gap: 16px;
-  padding: 0 24px; height: 56px;
+  padding: 0 24px; height: var(--topbar);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
@@ -198,7 +200,7 @@ dialog.photo-dialog { width: min(760px, calc(100vw - 32px)); padding: 12px; text
 /* ---------- Tabs, date strip, feed ---------- */
 /* The switch is its own bar so that in the feed it can stay under the top bar while the days scroll past. */
 .viewbar { margin: 0 0 6px; padding: 0 0 8px; }
-html.feed-mode .viewbar { position: sticky; top: 56px; z-index: 5; margin: -8px -4px 8px; padding: 8px 4px; background: var(--bg); }
+html.feed-mode .viewbar { position: sticky; top: var(--topbar); z-index: 5; margin: -8px -4px 8px; padding: 8px 4px; background: var(--bg); }
 .tabs { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 2px; }
 .tab { font: 500 13px var(--font); border: 0; background: transparent; color: var(--muted); padding: 6px 16px; border-radius: 8px; cursor: pointer; }
 .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
@@ -223,7 +225,7 @@ html.feed-mode .viewbar { position: sticky; top: 56px; z-index: 5; margin: -8px 
 html.feed-mode { scroll-snap-type: y proximity; }
 .feed-hint { margin-bottom: 10px; }
 #feed { display: grid; gap: 16px; max-width: 640px; margin: 0 auto; }
-.feed-day { scroll-snap-align: start; scroll-margin-top: 112px; /* top bar + the sticky switch */ min-height: 40dvh; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.feed-day { scroll-snap-align: start; scroll-margin-top: calc(var(--topbar) + var(--switch)); /* below the top bar and the sticky switch */ min-height: 40dvh; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
 .feed-day > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .feed-meal { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--border); }
 .feed-meal:first-of-type { border-top: 0; padding-top: 0; }
