@@ -15,6 +15,8 @@
   --snack: #a64ca6;
   --shadow: 0 1px 2px rgba(20, 20, 30, .06), 0 4px 16px rgba(20, 20, 30, .05);
   --radius: 10px;
+  --topbar: 56px; /* the top bar's height; the feed's sticky switch and snap offset are measured from it */
+  --switch: 56px; /* the Day/Feed switch bar */
   --font: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   color-scheme: light;
@@ -55,7 +57,7 @@ p { margin: 0 0 8px; }
 .topbar {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; gap: 16px;
-  padding: 0 24px; height: 56px;
+  padding: 0 24px; height: var(--topbar);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
@@ -196,10 +198,13 @@ dialog.photo-dialog { width: min(760px, calc(100vw - 32px)); padding: 12px; text
 @media (prefers-reduced-motion: reduce) { .toast-item, .brand-mark { animation: none; transition: none; } }
 
 /* ---------- Tabs, date strip, feed ---------- */
-.tabs { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 2px; margin-bottom: 14px; }
+/* The switch is its own bar so that in the feed it can stay under the top bar while the days scroll past. */
+.viewbar { margin: 0 0 6px; padding: 0 0 8px; }
+html.feed-mode .viewbar { position: sticky; top: var(--topbar); z-index: 5; margin: -8px -4px 8px; padding: 8px 4px; background: var(--bg); }
+.tabs { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 2px; }
 .tab { font: 500 13px var(--font); border: 0; background: transparent; color: var(--muted); padding: 6px 16px; border-radius: 8px; cursor: pointer; }
 .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-@media (pointer: coarse) { .tab { padding: 9px 20px; } }
+@media (pointer: coarse) { .tab { padding: 9px 20px; min-height: 40px; } }
 
 .strip { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 4px 2px 10px; margin: 0 0 12px; scrollbar-width: thin; }
 .strip-day { position: relative; flex: 0 0 auto; scroll-snap-align: center; width: 52px; padding: 16px 0 8px; display: grid; justify-items: center; gap: 1px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font-family: var(--font); cursor: pointer; }
@@ -220,7 +225,7 @@ dialog.photo-dialog { width: min(760px, calc(100vw - 32px)); padding: 12px; text
 html.feed-mode { scroll-snap-type: y proximity; }
 .feed-hint { margin-bottom: 10px; }
 #feed { display: grid; gap: 16px; max-width: 640px; margin: 0 auto; }
-.feed-day { scroll-snap-align: start; scroll-margin-top: 72px; min-height: 40dvh; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.feed-day { scroll-snap-align: start; scroll-margin-top: calc(var(--topbar) + var(--switch)); /* below the top bar and the sticky switch */ min-height: 40dvh; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
 .feed-day > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .feed-meal { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--border); }
 .feed-meal:first-of-type { border-top: 0; padding-top: 0; }
@@ -229,3 +234,16 @@ html.feed-mode { scroll-snap-type: y proximity; }
 .feed-text p { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 #feed-more { min-height: 40px; }
 @media (prefers-reduced-motion: reduce) { html.feed-mode { scroll-snap-type: none; } }
+
+/* ---------- Phones ---------- */
+@media (max-width: 480px) {
+  /* The date strip is the day-by-day navigation here; the arrows would only push "Today" onto a second line. */
+  #prev, #next { display: none; }
+  .daynav { gap: 8px; }
+  .daynav input[type="date"] { flex: 1 1 0; width: auto; }
+  .daynav h2 { flex: 1 0 100%; margin: 4px 0 0; font-size: 16px; }
+}
+/* Two fields side by side need ~150 px each; narrower than that they stack instead of being clipped. */
+@media (max-width: 360px) {
+  .form .row { grid-template-columns: minmax(0, 1fr); }
+}
