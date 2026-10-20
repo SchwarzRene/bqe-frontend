@@ -22,7 +22,7 @@ export interface Meal {
   photo: string | null;
 }
 
-const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+export const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 export const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 export const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 

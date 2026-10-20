@@ -2,7 +2,8 @@
 // the AI's meal ideas for each day. Everything is per user and per day.
 //
 //   GET    /api/diary/day/:day            the day's meals, its saved ideas, the user's notes
-//   GET    /api/diary/days?month=YYYY-MM  meals per day in a month (the calendar)
+//   GET    /api/diary/days?month=YYYY-MM  meals per day in a month (the calendar), or ?from=&to= (the date strip)
+//   GET    /api/diary/history?before=&limit=  past days with their meals, newest first (the feed)
 //   POST   /api/diary/meals               {day, time, slot, description}
 //   PATCH  /api/diary/meals/:id           any of day, time, slot, description
 //   DELETE /api/diary/meals/:id           the meal and its photo
@@ -27,7 +28,7 @@ import type { Env } from "../env";
 import { crossSite, isoNow, json, readJson } from "../http";
 import { handleDescribe } from "./describe";
 import { handlePhoto } from "./photos";
-import { DAY_MS, MAX_DESCRIPTION, MAX_MEALS_PER_DAY, MAX_MEALS_PER_USER, MAX_NOTES, MONTH_RE, type Meal, mealsOn, readSettings, SLOTS, TIME_RE, toMeal, validDay } from "./store";
+import { DAY_MS, DAY_RE, MAX_DESCRIPTION, MAX_MEALS_PER_DAY, MAX_MEALS_PER_USER, MAX_NOTES, MONTH_RE, type Meal, mealsOn, readSettings, SLOTS, TIME_RE, toMeal, validDay } from "./store";
 import { handleSuggest } from "./suggest";
 
 export async function handleDiary(request: Request, env: Env, rest: string): Promise<Response> {
@@ -45,7 +46,11 @@ export async function handleDiary(request: Request, env: Env, rest: string): Pro
   }
   if (parts[0] === "days" && parts.length === 1) {
     if (method !== "GET") return json({ error: "method not allowed" }, 405, { Allow: "GET" });
-    return readMonth(env, user.id, url.searchParams.get("month") ?? "");
+    return readDays(env, user.id, url.searchParams);
+  }
+  if (parts[0] === "history" && parts.length === 1) {
+    if (method !== "GET") return json({ error: "method not allowed" }, 405, { Allow: "GET" });
+    return readHistory(env, user.id, url.searchParams);
   }
   if (parts[0] === "settings" && parts.length === 1) {
     if (method === "GET") return json(await readSettings(env, user.id));
@@ -103,14 +108,57 @@ async function readDay(env: Env, user: { id: number; ai: boolean }, day: string)
   return json({ day, meals, suggestion, notes: settings.notes, ai: user.ai });
 }
 
-async function readMonth(env: Env, userId: number, month: string): Promise<Response> {
-  if (!MONTH_RE.test(month)) return json({ error: "Ask for a month as YYYY-MM." }, 400);
+const MAX_RANGE_DAYS = 400;
+const HISTORY_PAGE = 14;
+
+/** Meals per day for a month (?month=YYYY-MM) or for a range of days (?from=&to=, at most 400 days). */
+async function readDays(env: Env, userId: number, q: URLSearchParams): Promise<Response> {
+  const month = q.get("month");
+  let from: string;
+  let to: string;
+  if (month !== null) {
+    if (!MONTH_RE.test(month)) return json({ error: "Ask for a month as YYYY-MM." }, 400);
+    [from, to] = [`${month}-01`, `${month}-31`];
+  } else {
+    from = q.get("from") ?? "";
+    to = q.get("to") ?? "";
+    // Looser than validDay: old entries stay readable after they leave the window new ones may be written in.
+    if (!DAY_RE.test(from) || !DAY_RE.test(to) || from > to || Date.parse(to) - Date.parse(from) > MAX_RANGE_DAYS * DAY_MS) {
+      return json({ error: `Ask for a range as ?from=YYYY-MM-DD&to=YYYY-MM-DD, at most ${MAX_RANGE_DAYS} days.` }, 400);
+    }
+  }
   const rows = await env.DB.prepare(
     "SELECT day, COUNT(*) AS n FROM diary_meals WHERE user_id = ? AND day >= ? AND day <= ? GROUP BY day ORDER BY day",
   )
-    .bind(userId, `${month}-01`, `${month}-31`)
+    .bind(userId, from, to)
     .all<{ day: string; n: number }>();
-  return json({ month, days: (rows.results ?? []).map((r) => ({ day: r.day, meals: Number(r.n) })) });
+  return json({ ...(month !== null ? { month } : { from, to }), days: (rows.results ?? []).map((r) => ({ day: r.day, meals: Number(r.n) })) });
+}
+
+/**
+ * The days that have entries before `before` (exclusive; none given = from the newest), newest
+ * first, each with its meals — a page for the feed. `next` is the cursor for the following
+ * page, null at the end.
+ */
+async function readHistory(env: Env, userId: number, q: URLSearchParams): Promise<Response> {
+  const before = q.get("before") ?? "9999-12-31";
+  if (!DAY_RE.test(before)) return json({ error: "before is a date, YYYY-MM-DD." }, 400);
+  const limit = Math.min(30, Math.max(1, Math.round(Number(q.get("limit"))) || HISTORY_PAGE));
+  const days = await env.DB.prepare("SELECT DISTINCT day FROM diary_meals WHERE user_id = ? AND day < ? ORDER BY day DESC LIMIT ?")
+    .bind(userId, before, limit)
+    .all<{ day: string }>();
+  const list = (days.results ?? []).map((d) => d.day);
+  if (!list.length) return json({ days: [], next: null });
+  const rows = await env.DB.prepare(
+    `SELECT m.id, m.day, m.time, m.slot, m.description, p.updated_at AS photo
+       FROM diary_meals m LEFT JOIN diary_photos p ON p.meal_id = m.id
+      WHERE m.user_id = ? AND m.day >= ? AND m.day <= ? ORDER BY m.day DESC, m.time, m.id`,
+  )
+    .bind(userId, list[list.length - 1], list[0])
+    .all<any>();
+  const byDay = new Map<string, Meal[]>(list.map((d) => [d, []]));
+  for (const r of rows.results ?? []) byDay.get(r.day)?.push(toMeal(r));
+  return json({ days: list.map((day) => ({ day, meals: byDay.get(day)! })), next: list.length === limit ? list[list.length - 1] : null });
 }
 
 // --------------------------------------------------------------------------

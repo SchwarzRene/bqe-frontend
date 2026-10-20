@@ -41,7 +41,16 @@ const state = {
   file: null, // the picture chosen in the add form, already shrunk
   thinking: false,
   ideaError: "",
+  view: "day",
+  loaded: false,
+  counts: new Map(), // day -> number of entries, for the date strip
+  stripFrom: "",
+  stripTo: "",
+  stripBusy: false,
+  feed: { days: [], next: null, loading: false, done: false, fresh: true },
 };
+const STRIP_STEP = 30; // days the strip grows by when it is scrolled to an end
+const STRIP_LIMIT = 1096; // and how far back it may go, in days
 let loadId = 0;
 
 // ── Theme: a display preference, kept in this browser and, signed in, on the account ──
@@ -104,6 +113,11 @@ function renderGuest() {
 
 function renderShell() {
   $("#view").innerHTML = `
+    <div class="tabs" role="group" aria-label="View">
+      <button class="tab" id="tab-day" aria-pressed="true">Day</button>
+      <button class="tab" id="tab-feed" aria-pressed="false">Feed</button>
+    </div>
+    <div id="day-view">
     <div class="daynav">
       <button class="btn" id="prev" aria-label="Previous day">←</button>
       <input type="date" id="date" aria-label="Day">
@@ -111,6 +125,7 @@ function renderShell() {
       <button class="btn" id="to-today">Today</button>
       <h2 id="day-title"></h2>
     </div>
+    <div class="strip" id="strip" role="group" aria-label="Pick a day — scroll sideways for older days"></div>
     <div class="layout">
       <div class="col">
         <section class="card" aria-labelledby="add-title">
@@ -156,11 +171,29 @@ function renderShell() {
           <div class="form-foot"><span class="hint" id="notes-status" role="status"></span><button class="btn" id="notes-save">Save</button></div>
         </section>
       </div>
+    </div>
+    </div>
+    <div id="feed-view" hidden>
+      <p class="hint feed-hint">Everything you wrote down, newest first. Keep scrolling for older days.</p>
+      <div id="feed"></div>
+      <div id="feed-more" class="loading" aria-live="polite"></div>
     </div>`;
   wire();
 }
 
 function wire() {
+  $("#tab-day").addEventListener("click", () => { location.hash = state.day; });
+  $("#tab-feed").addEventListener("click", () => { location.hash = "feed"; });
+  $("#strip").addEventListener("click", (e) => { const b = e.target.closest("[data-day]"); if (b) setDay(b.dataset.day); });
+  $("#strip").addEventListener("scroll", onStripScroll, { passive: true });
+  // A mouse wheel scrolls the strip sideways, the way it is meant to be used on a desktop.
+  $("#strip").addEventListener("wheel", (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.currentTarget.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+  $("#feed").addEventListener("click", onFeedClick);
+  new IntersectionObserver((entries) => { if (entries.some((x) => x.isIntersecting)) loadFeed(); }, { rootMargin: "600px" }).observe($("#feed-more"));
   $("#prev").addEventListener("click", () => setDay(shiftDay(state.day, -1)));
   $("#next").addEventListener("click", () => setDay(shiftDay(state.day, 1)));
   $("#to-today").addEventListener("click", () => setDay(today()));
@@ -280,9 +313,12 @@ function renderDay() {
   $("#day-title").textContent = date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })
     + (state.day === today() ? " · today" : "");
   $("#notes").value = state.notes;
+  state.counts.set(state.day, state.meals.length);
+  state.loaded = true;
   renderMeals();
   renderIdeas();
   renderCalendar();
+  renderStrip();
 }
 
 function mealHtml(m) {
@@ -323,6 +359,7 @@ async function onMealClick(e) {
 
 /** Reload the day and the month's dots without losing what is typed in the add form. */
 async function refresh() {
+  state.feed.fresh = true; // the feed is read again the next time it is opened
   state.monthDays = new Map();
   await load();
 }
@@ -512,6 +549,146 @@ async function saveNotes() {
   if (res) { state.notes = res.notes; $("#notes").value = res.notes; status.textContent = "Saved"; setTimeout(() => { status.textContent = ""; }, 2000); }
 }
 
+// ── Date strip: a row of days to scroll through, oldest on the left ─────────
+
+const dayCell = (day) => {
+  const d = parseDay(day);
+  const n = state.counts.get(day) || 0;
+  const month = d.getDate() === 1 || day === state.stripFrom ? `<span class="mo">${esc(d.toLocaleDateString(undefined, { month: "short" }))}</span>` : "";
+  return `<button class="strip-day${day === state.day ? " selected" : ""}${day === today() ? " today" : ""}${n ? " has" : ""}" data-day="${day}" aria-label="${esc(d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }))}${n ? `, ${n} ${n === 1 ? "entry" : "entries"}` : ""}"${day === state.day ? ' aria-current="date"' : ""}>${month}<span class="wd">${esc(d.toLocaleDateString(undefined, { weekday: "short" }))}</span><span class="dn">${d.getDate()}</span><i aria-hidden="true"></i></button>`;
+};
+
+/** The meal counts of a range of days, kept for the dots under the dates. */
+async function loadCounts(from, to) {
+  const res = await attempt(() => diary.range(from, to));
+  if (res) for (const d of res.days) state.counts.set(d.day, d.meals);
+}
+
+/** Draw the strip; when `center`, scroll the chosen day to its middle. */
+function renderStrip(center = true) {
+  const strip = $("#strip");
+  const last = shiftDay(today(), 1);
+  const outside = !state.stripFrom || state.day < state.stripFrom || state.day > state.stripTo;
+  if (outside) {
+    state.stripFrom = shiftDay(state.day, -STRIP_STEP);
+    state.stripTo = shiftDay(state.day, STRIP_STEP) > last ? last : shiftDay(state.day, STRIP_STEP);
+    if (state.stripTo < state.day) state.stripTo = state.day;
+    loadCounts(state.stripFrom, state.stripTo).then(() => renderStrip(false));
+  }
+  const cells = [];
+  for (let d = state.stripFrom; d <= state.stripTo; d = shiftDay(d, 1)) cells.push(dayCell(d));
+  strip.innerHTML = cells.join("");
+  if (center) $(".selected", strip)?.scrollIntoView({ inline: "center", block: "nearest" });
+}
+
+/** Scrolled to either end: more days appear, so the strip never runs out. */
+async function onStripScroll(e) {
+  const strip = e.currentTarget;
+  if (state.stripBusy) return;
+  const nearStart = strip.scrollLeft < 160;
+  const nearEnd = strip.scrollWidth - strip.clientWidth - strip.scrollLeft < 160;
+  const last = shiftDay(today(), 1);
+  const floor = shiftDay(today(), -STRIP_LIMIT);
+  if (nearStart && state.stripFrom > floor) {
+    state.stripBusy = true;
+    const from = shiftDay(state.stripFrom, -STRIP_STEP) < floor ? floor : shiftDay(state.stripFrom, -STRIP_STEP);
+    await loadCounts(from, shiftDay(state.stripFrom, -1));
+    const before = strip.scrollWidth;
+    state.stripFrom = from;
+    renderStrip(false);
+    strip.scrollLeft += strip.scrollWidth - before; // the days that were in view stay where they were
+    state.stripBusy = false;
+  } else if (nearEnd && state.stripTo < last) {
+    state.stripBusy = true;
+    const to = shiftDay(state.stripTo, STRIP_STEP) > last ? last : shiftDay(state.stripTo, STRIP_STEP);
+    await loadCounts(shiftDay(state.stripTo, 1), to);
+    state.stripTo = to;
+    renderStrip(false);
+    state.stripBusy = false;
+  }
+}
+
+// ── Feed: every past day in one list, newest first ──────────────────────────
+
+const longDate = (day) => parseDay(day).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", ...(day.slice(0, 4) === today().slice(0, 4) ? {} : { year: "numeric" }) });
+
+function feedDayHtml({ day, meals }) {
+  return `
+    <section class="feed-day" data-day="${day}" aria-label="${esc(longDate(day))}">
+      <header><h2>${esc(longDate(day))}${day === today() ? " · today" : ""}</h2><button class="btn small" data-open="${day}">Open day</button></header>
+      ${meals.map((m) => `
+        <article class="feed-meal">
+          ${m.photo ? `<button class="feed-photo" data-fphoto="${m.id}" aria-label="Show the photo larger"><img src="${esc(photoUrl(m.id, m.photo))}" alt="Photo: ${esc(m.description)}" loading="lazy" decoding="async"></button>` : ""}
+          <div class="feed-text"><span class="num muted">${esc(m.time)}</span> <span class="badge slot-${esc(m.slot)}">${esc(SLOT_NAME[m.slot])}</span><p>${esc(m.description)}</p></div>
+        </article>`).join("")}
+    </section>`;
+}
+
+/** The next page of the feed, or the first when it is stale. Called when the end of the list comes near. */
+async function loadFeed() {
+  const feed = state.feed;
+  if (state.view !== "feed" || feed.loading || (feed.done && !feed.fresh)) return;
+  if (feed.fresh) Object.assign(feed, { days: [], next: null, done: false, fresh: false }), ($("#feed").innerHTML = "");
+  feed.loading = true;
+  const more = $("#feed-more");
+  more.textContent = "Loading…";
+  const res = await attempt(() => diary.history(feed.next));
+  feed.loading = false;
+  if (!res) {
+    feed.fresh = !feed.days.length;
+    more.innerHTML = `<button class="btn small" id="feed-retry">Couldn't load — try again</button>`;
+    $("#feed-retry").addEventListener("click", loadFeed);
+    return;
+  }
+  feed.days.push(...res.days);
+  feed.next = res.next;
+  feed.done = !res.next;
+  $("#feed").insertAdjacentHTML("beforeend", res.days.map(feedDayHtml).join(""));
+  more.textContent = feed.done ? (feed.days.length ? "That is everything." : "") : "";
+  if (!feed.days.length) more.innerHTML = `<p class="empty">Nothing written down yet. Add your first meal under Day.</p>`;
+  // A short first page can leave the end of the list in view: ask for the next one straight away.
+  if (!feed.done) requestAnimationFrame(() => { const r = more.getBoundingClientRect(); if (r.top < innerHeight + 600) loadFeed(); });
+}
+
+function onFeedClick(e) {
+  const open = e.target.closest("[data-open]");
+  if (open) { location.hash = open.dataset.open; return; }
+  const photo = e.target.closest("[data-fphoto]");
+  if (!photo) return;
+  const meal = state.feed.days.flatMap((d) => d.meals).find((m) => m.id === Number(photo.dataset.fphoto));
+  if (meal) viewPhoto(meal);
+}
+
+// ── Which view the address asks for: #feed, or #YYYY-MM-DD ──────────────────
+
+function setView(view) {
+  state.view = view;
+  $("#day-view").hidden = view !== "day";
+  $("#feed-view").hidden = view !== "feed";
+  for (const [id, v] of [["#tab-day", "day"], ["#tab-feed", "feed"]]) {
+    $(id).classList.toggle("active", view === v);
+    $(id).setAttribute("aria-pressed", String(view === v));
+  }
+  document.documentElement.classList.toggle("feed-mode", view === "feed");
+}
+
+function route() {
+  const hash = location.hash.slice(1);
+  if (hash === "feed") {
+    setView("feed");
+    window.scrollTo(0, 0);
+    loadFeed();
+    return;
+  }
+  const day = DAY_RE.test(hash) ? hash : state.day;
+  const changed = day !== state.day || state.view !== "day" || !state.loaded;
+  setView("day");
+  if (!changed) return;
+  state.day = day;
+  clearFileForNewDay();
+  load();
+}
+
 // ── Start ───────────────────────────────────────────────────────────────────
 
 async function start() {
@@ -524,11 +701,8 @@ async function start() {
   if (DAY_RE.test(fromHash)) state.day = fromHash;
   state.month = state.day.slice(0, 7);
   renderShell();
-  window.addEventListener("hashchange", () => {
-    const day = location.hash.slice(1);
-    if (DAY_RE.test(day) && day !== state.day) { state.day = day; clearFileForNewDay(); load(); }
-  });
-  load();
+  window.addEventListener("hashchange", route);
+  route();
 }
 
 /** A different day keeps what is typed, but the time of day default follows the day. */

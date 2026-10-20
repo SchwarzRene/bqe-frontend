@@ -24,6 +24,10 @@ async function request(method, path, { json, body, type } = {}) {
 export const diary = {
   day: (day) => request("GET", `/api/diary/day/${day}`),
   month: (month) => request("GET", `/api/diary/days?month=${month}`),
+  /** Meals per day for the date strip. */
+  range: (from, to) => request("GET", `/api/diary/days?from=${from}&to=${to}`),
+  /** A page of past days with their meals, newest first, for the feed; `before` is the cursor the last page returned. */
+  history: (before) => request("GET", `/api/diary/history${before ? `?before=${before}` : ""}`),
   addMeal: (meal) => request("POST", "/api/diary/meals", { json: meal }),
   updateMeal: (id, changes) => request("PATCH", `/api/diary/meals/${id}`, { json: changes }),
   deleteMeal: (id) => request("DELETE", `/api/diary/meals/${id}`),

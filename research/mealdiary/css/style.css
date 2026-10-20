@@ -194,3 +194,38 @@ dialog.photo-dialog { width: min(760px, calc(100vw - 32px)); padding: 12px; text
 .toast-item.error { background: var(--warn); color: #fff; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 @media (prefers-reduced-motion: reduce) { .toast-item, .brand-mark { animation: none; transition: none; } }
+
+/* ---------- Tabs, date strip, feed ---------- */
+.tabs { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 2px; margin-bottom: 14px; }
+.tab { font: 500 13px var(--font); border: 0; background: transparent; color: var(--muted); padding: 6px 16px; border-radius: 8px; cursor: pointer; }
+.tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+@media (pointer: coarse) { .tab { padding: 9px 20px; } }
+
+.strip { display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 4px 2px 10px; margin: 0 0 12px; scrollbar-width: thin; }
+.strip-day { position: relative; flex: 0 0 auto; scroll-snap-align: center; width: 52px; padding: 16px 0 8px; display: grid; justify-items: center; gap: 1px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font-family: var(--font); cursor: pointer; }
+.strip-day:hover { background: var(--surface-2); }
+.strip-day .wd { font-size: 11px; color: var(--muted); }
+.strip-day .dn { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.strip-day .mo { position: absolute; top: 3px; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.strip-day i { width: 6px; height: 6px; border-radius: 50%; background: transparent; margin-top: 2px; }
+.strip-day.has i { background: var(--accent); }
+.strip-day.today { border-color: var(--accent); }
+.strip-day.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+.strip-day.selected .wd, .strip-day.selected .mo { color: inherit; opacity: .85; }
+.strip-day.selected.has i { background: currentColor; }
+:root[data-theme="dark"] .strip-day.selected { color: #0b1a12; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .strip-day.selected { color: #0b1a12; } }
+
+/* The feed snaps day by day, like swiping through a reel; "proximity" lets a quick flick still run on. */
+html.feed-mode { scroll-snap-type: y proximity; }
+.feed-hint { margin-bottom: 10px; }
+#feed { display: grid; gap: 16px; max-width: 640px; margin: 0 auto; }
+.feed-day { scroll-snap-align: start; scroll-margin-top: 72px; min-height: 40dvh; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+.feed-day > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.feed-meal { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--border); }
+.feed-meal:first-of-type { border-top: 0; padding-top: 0; }
+.feed-photo { border: 0; padding: 0; background: none; cursor: zoom-in; border-radius: 10px; }
+.feed-photo img { display: block; width: 100%; max-height: 60dvh; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.feed-text p { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+#feed-more { min-height: 40px; }
+@media (prefers-reduced-motion: reduce) { html.feed-mode { scroll-snap-type: none; } }

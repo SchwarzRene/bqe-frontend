@@ -18,6 +18,14 @@ A guest never reaches the model: every diary route answers 401 without an accoun
   breakfast / lunch / dinner / snack, a description). `day` and `time` are the user's own calendar and
   clock as the browser saw them, so a dinner at 23:30 stays on its day. Up to 20 entries a day and
   5,000 per account.
+- **Getting around the old days.** Above the day there is a **date strip**: swipe or scroll it sideways
+  (the mouse wheel works too) and it keeps adding older days, up to three years back; days with
+  entries have a dot, tapping a date opens it. The **Feed** tab is one vertical, snap-scrolling list
+  of every day that has entries, newest first, with its meals and photos, loading older days as you
+  scroll; **Open day** jumps to that day for editing. The address says which view is open
+  (`#feed`, or `#2026-10-20` for a day), so reload and the back button work. The month **calendar**
+  stays too. Server side: `GET /api/diary/days?from=&to=` (counts for the strip) and
+  `GET /api/diary/history?before=` (a page of days with meals, the feed).
 - **Photos** (`diary_photos`, one per meal). The browser shrinks a picture to a JPEG of at most
   1280 px and ~600 kB before sending it (`js/photo.js`) — which also leaves the camera's location
   behind. The Worker accepts JPEG, PNG and WebP by their first bytes (never SVG), up to 700 kB each and

@@ -171,6 +171,70 @@ describe("Meal Diary: entries", () => {
   });
 });
 
+describe("Meal Diary: history and ranges", () => {
+  /** Meals straight into the table, so days outside the window new entries may use can be had too. */
+  function seed(env: any, who: string, days: string[]) {
+    const uid = env.DB.raw.prepare("SELECT id FROM users WHERE username = ?").get(who).id;
+    for (const day of days) env.DB.raw.exec(`INSERT INTO diary_meals (user_id, day, time, slot, description, created_at, updated_at) VALUES (${uid}, '${day}', '12:00', 'lunch', 'Meal on ${day}', 'x', 'x'), (${uid}, '${day}', '08:00', 'breakfast', 'Early on ${day}', 'x', 'x')`);
+    return uid;
+  }
+
+  it("pages through the days that have entries, newest first, with their meals and photos", async () => {
+    const env = envWith();
+    const me = await user(env, "alice");
+    seed(env, "alice", ["2026-10-20", "2026-10-18", "2026-10-17", "2026-10-01"]);
+    const photoMeal = env.DB.raw.prepare("SELECT id FROM diary_meals WHERE day = '2026-10-18' AND slot = 'lunch'").get().id;
+    await raw(env, "PUT", `/api/diary/meals/${photoMeal}/photo`, JPEG, me, "image/jpeg");
+
+    const first = await call(env, "GET", "/api/diary/history?limit=2", undefined, me);
+    expect(first.data.days.map((d: any) => d.day)).toEqual(["2026-10-20", "2026-10-18"]);
+    expect(first.data.days[1].meals.map((m: any) => m.time)).toEqual(["08:00", "12:00"]);
+    expect(first.data.days[1].meals[1].photo).toBe("2026-10-20T12:00:00Z");
+    expect(first.data.days[0].meals[0].photo).toBeNull();
+    expect(first.data.next).toBe("2026-10-18");
+
+    const second = await call(env, "GET", `/api/diary/history?limit=2&before=${first.data.next}`, undefined, me);
+    expect(second.data.days.map((d: any) => d.day)).toEqual(["2026-10-17", "2026-10-01"]);
+    const last = await call(env, "GET", `/api/diary/history?limit=2&before=${second.data.next}`, undefined, me);
+    expect(last.data).toEqual({ days: [], next: null });
+    const all = await call(env, "GET", "/api/diary/history", undefined, me);
+    expect(all.data.days).toHaveLength(4);
+    expect(all.data.next).toBeNull();
+  });
+
+  it("reaches entries older than the window new ones may be written in", async () => {
+    const env = envWith();
+    const me = await user(env, "alice");
+    seed(env, "alice", ["2023-03-05"]);
+    expect((await call(env, "GET", "/api/diary/history", undefined, me)).data.days[0].day).toBe("2023-03-05");
+    expect((await call(env, "GET", "/api/diary/days?from=2023-03-01&to=2023-03-31", undefined, me)).data.days).toEqual([{ day: "2023-03-05", meals: 2 }]);
+  });
+
+  it("shows nobody else's days", async () => {
+    const env = envWith();
+    const alice = await user(env, "alice");
+    const bob = await user(env, "bob");
+    seed(env, "alice", ["2026-10-19"]);
+    seed(env, "bob", ["2026-10-18"]);
+    expect((await call(env, "GET", "/api/diary/history", undefined, alice)).data.days.map((d: any) => d.day)).toEqual(["2026-10-19"]);
+    expect((await call(env, "GET", "/api/diary/history", undefined, bob)).data.days.map((d: any) => d.day)).toEqual(["2026-10-18"]);
+    expect((await call(env, "GET", "/api/diary/days?from=2026-10-01&to=2026-10-31", undefined, bob)).data.days).toEqual([{ day: "2026-10-18", meals: 2 }]);
+    expect((await call(env, "GET", "/api/diary/history")).status).toBe(401);
+  });
+
+  it("counts a range for the date strip and refuses nonsense", async () => {
+    const env = envWith();
+    const me = await user(env, "alice");
+    seed(env, "alice", ["2026-10-10", "2026-10-12", "2026-11-02"]);
+    const range = await call(env, "GET", "/api/diary/days?from=2026-10-01&to=2026-10-31", undefined, me);
+    expect(range.data).toEqual({ from: "2026-10-01", to: "2026-10-31", days: [{ day: "2026-10-10", meals: 2 }, { day: "2026-10-12", meals: 2 }] });
+    for (const q of ["from=2026-10-01", "from=x&to=y", "from=2026-10-31&to=2026-10-01", "from=2024-01-01&to=2026-01-01", "month=2026-13"]) {
+      expect((await call(env, "GET", `/api/diary/days?${q}`, undefined, me)).status).toBe(400);
+    }
+    expect((await call(env, "GET", "/api/diary/history?before=soon", undefined, me)).status).toBe(400);
+  });
+});
+
 describe("Meal Diary: photos", () => {
   it("stores, serves, replaces and removes a picture", async () => {
     const env = envWith();
