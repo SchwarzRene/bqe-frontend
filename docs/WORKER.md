@@ -23,7 +23,8 @@ All server-side code is in `worker/`; its data lives in a Cloudflare D1 database
 | `GET/DELETE /api/chats[/:id]` | `worker/news/conversations.ts` | A signed-in user's saved Market News chats. |
 | `GET /api/diary/day/:day`, `GET /api/diary/days?month=` | `worker/diary/index.ts` | Meal Diary: a day's meals, saved meal ideas and the user's notes; meals per day of a month. Signed in. |
 | `POST/PATCH/DELETE /api/diary/meals[/:id]`, `GET/PUT/DELETE /api/diary/meals/:id/photo`, `GET/PUT /api/diary/settings` | `worker/diary/index.ts`, `photos.ts` | Meal Diary: add, change and delete an entry, its photo (JPEG/PNG/WebP, ≤ 700 kB, 25 MB per account), and the notes the AI keeps to. |
-| `POST /api/diary/suggest` | `worker/diary/suggest.ts` | Meal Diary: Gemini suggests a breakfast, lunch, dinner and snack for a day from the last two weeks of the diary. AI access; `DIARY_AI_DAILY_LIMIT` a day per user. |
+| `POST /api/diary/describe`, `POST /api/diary/meals/:id/describe` | `worker/diary/describe.ts` | Meal Diary: Gemini describes a meal photo in one sentence (image sent inline). Only on request; AI access. |
+| `POST /api/diary/suggest` | `worker/diary/suggest.ts` | Meal Diary: Gemini summarises a day and suggests a breakfast, lunch, dinner and snack to cook next, from the last two weeks of the diary. Only on request; AI access; `DIARY_AI_DAILY_LIMIT` requests a day per user, shared with the descriptions. |
 | `GET/PUT /api/state/{stack,journal,news}` | `worker/state.ts` | A signed-in user's saved work, one JSON document per app. |
 | `GET /api/market/{quote,candles}` | `worker/market.ts` | Yahoo quotes and candles for the Trading Journal, cached at the edge. |
 

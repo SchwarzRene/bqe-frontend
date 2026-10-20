@@ -127,6 +127,7 @@ function renderShell() {
               <label for="add-photo">Photo (optional)</label>
               <input type="file" id="add-photo" accept="image/*">
               <div id="add-preview" class="preview" hidden></div>
+              <button type="button" class="btn small" id="add-describe" hidden>Describe the photo with AI</button>
             </div>
             <div class="form-foot"><span class="form-error" id="add-error" role="alert"></span><button class="btn primary" type="submit">Add to diary</button></div>
           </form>
@@ -138,7 +139,7 @@ function renderShell() {
       </div>
       <div class="col">
         <section class="card" aria-labelledby="ideas-title">
-          <div class="card-head"><h2 id="ideas-title">Meal ideas</h2><button class="btn" id="suggest"></button></div>
+          <div class="card-head"><h2 id="ideas-title">Summary &amp; ideas</h2><button class="btn" id="suggest"></button></div>
           <div id="ideas"></div>
         </section>
         <section class="card" aria-labelledby="cal-title">
@@ -167,6 +168,7 @@ function wire() {
   $("#add").addEventListener("submit", addMeal);
   $("#add-time").addEventListener("change", (e) => { if (!$("#add-text").value) $("#add-slot").value = slotAt(e.target.value || "12:00"); });
   $("#add-photo").addEventListener("change", chooseFile);
+  $("#add-describe").addEventListener("click", describeNew);
   $("#suggest").addEventListener("click", suggest);
   $("#meals").addEventListener("click", onMealClick);
   $("#ideas").addEventListener("click", onIdeaClick);
@@ -193,6 +195,7 @@ function clearFile() {
   if (img) URL.revokeObjectURL(img.src);
   box.hidden = true;
   box.textContent = "";
+  $("#add-describe").hidden = true;
 }
 
 async function chooseFile(e) {
@@ -214,7 +217,39 @@ async function chooseFile(e) {
   remove.addEventListener("click", clearFile);
   box.append(img, remove);
   box.hidden = false;
+  $("#add-describe").hidden = false;
+  setAiButton($("#add-describe"));
 }
+
+/** An AI button is for accounts with AI access; the others see why it is off. */
+function setAiButton(button) {
+  button.disabled = !state.ai;
+  button.title = state.ai ? "" : "AI access is switched on by an administrator, per account.";
+}
+
+/**
+ * Ask the AI what is in a picture and put the sentence in `field` for the user to
+ * correct and save. Runs only on this click, and never replaces text without asking.
+ */
+async function describeInto(button, field, error, ask) {
+  if (field.value.trim() && !confirm("Replace what you wrote with the AI's description?")) return;
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = "Looking at the photo…";
+  error.textContent = "";
+  try {
+    field.value = (await ask()).description;
+    field.focus();
+  } catch (err) {
+    if (err.status === 401) return location.reload();
+    error.textContent = err.message;
+  } finally {
+    button.textContent = label;
+    setAiButton(button);
+  }
+}
+
+const describeNew = (e) => describeInto(e.currentTarget, $("#add-text"), $("#add-error"), () => diary.describeFile(state.file));
 
 // ── Loading and showing a day ───────────────────────────────────────────────
 
@@ -343,12 +378,20 @@ function editMeal(meal) {
         <label for="ed-photo">${meal.photo ? "Replace the photo" : "Add a photo"}</label>
         <input type="file" id="ed-photo" accept="image/*">
         ${meal.photo ? `<label class="check"><input type="checkbox" id="ed-remove"> Remove the current photo</label>` : ""}
+        <button type="button" class="btn small" id="ed-describe"${meal.photo ? "" : " hidden"}>Describe the photo with AI</button>
       </div>
       <div class="form-foot"><span class="form-error" id="ed-error" role="alert"></span>
         <button type="button" class="btn" id="ed-cancel">Cancel</button><button type="submit" class="btn primary">Save</button></div>
     </form>`;
   $("#ed-text").value = meal.description;
   $("#ed-cancel").addEventListener("click", closeDialog);
+  const describe = $("#ed-describe");
+  setAiButton(describe);
+  $("#ed-photo").addEventListener("change", (e) => { describe.hidden = !meal.photo && !e.target.files[0]; });
+  describe.addEventListener("click", () => describeInto(describe, $("#ed-text"), $("#ed-error"), async () => {
+    const file = $("#ed-photo").files[0];
+    return file ? diary.describeFile(await shrink(file)) : diary.describeMeal(meal.id);
+  }));
   $("form", dialog).addEventListener("submit", async (e) => {
     e.preventDefault();
     const error = $("#ed-error");
@@ -379,18 +422,19 @@ function renderIdeas() {
   const button = $("#suggest");
   const near = Math.abs(daysFromToday(state.day)) <= 1;
   const s = state.suggestion;
-  button.textContent = state.thinking ? "Thinking…" : s ? "New ideas" : "Suggest meals";
+  button.textContent = state.thinking ? "Thinking…" : s ? "Update" : "Summarise & suggest";
   button.disabled = state.thinking || !state.ai || !near;
   button.classList.toggle("primary", !s && state.ai && near);
 
   let html = "";
   if (!state.ai) {
-    html += `<p class="hint">Meal ideas use the site's AI, which an administrator switches on for each account. The diary itself works without it.</p>`;
+    html += `<p class="hint">The AI features (photo descriptions, summary, ideas) need AI access, which an administrator switches on for each account. The diary itself works without it.</p>`;
   } else if (!near) {
     html += `<p class="hint">Ideas are made for today and the days next to it.</p>`;
   }
   if (state.ideaError) html += `<p class="form-error" role="alert">${esc(state.ideaError)}</p>`;
   if (s) {
+    if (s.summary) html += `<p class="summary">${esc(s.summary)}</p><h3 class="next">What to cook next</h3>`;
     html += s.meals.map((m, i) => `
       <article class="idea">
         <div class="idea-head"><span class="badge slot-${esc(m.slot)}">${esc(SLOT_NAME[m.slot])}</span>
@@ -403,7 +447,7 @@ function renderIdeas() {
     if (s.tip) html += `<p class="tip">${esc(s.tip)}</p>`;
     if (s.generatedAt) html += `<p class="hint">Made ${esc(new Date(s.generatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}.</p>`;
   } else if (state.ai && near && !state.thinking && !state.ideaError) {
-    html += `<p class="empty">The AI reads what you ate in the last two weeks and suggests four meals that are different.</p>`;
+    html += `<p class="empty">Nothing here runs by itself. Press the button for a short summary of what you ate today and four ideas, different from the last two weeks, for what to cook next.</p>`;
   }
   $("#ideas").innerHTML = html;
 }

@@ -30,6 +30,9 @@ export const diary = {
   putPhoto: (id, blob) => request("PUT", `/api/diary/meals/${id}/photo`, { body: blob, type: blob.type }),
   deletePhoto: (id) => request("DELETE", `/api/diary/meals/${id}/photo`),
   saveNotes: (notes) => request("PUT", "/api/diary/settings", { json: { notes } }),
+  /** AI: a sentence for a picture that is not saved yet, or for the photo saved with a meal. Only ever on a click. */
+  describeFile: (blob) => request("POST", "/api/diary/describe", { body: blob, type: blob.type }),
+  describeMeal: (id) => request("POST", `/api/diary/meals/${id}/describe`),
   suggest: (day) => request("POST", "/api/diary/suggest", { json: { day } }),
 };
 

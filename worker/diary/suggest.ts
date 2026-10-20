@@ -1,4 +1,4 @@
-// POST /api/diary/suggest {day} — meal ideas for one day, from Gemini.
+// POST /api/diary/suggest {day} — a summary of the day and what to cook next, from Gemini.
 //
 // The same machinery as Market News (worker/news/gemini.ts): the key is the
 // GEMINI_API_KEY Worker secret and never reaches the browser, a model that is
@@ -8,15 +8,17 @@
 // user's diary and their notes and is told to keep the days different from
 // each other. Its answer is strict JSON, checked here, saved for the day
 // (diary_suggestions) and shown again on every visit until "New ideas".
-// The photos are not sent: the descriptions are what the model works from.
+// The photos are not sent: the descriptions are what the model works from
+// (describe.ts turns a photo into one, when the user asks). Nothing here runs
+// on its own — only a click on the page makes this call.
 
 import { aiDenied, type User } from "../auth";
 import type { Env } from "../env";
 import { isoNow, json, readJson, utcDay } from "../http";
+import { spend } from "./limit";
 import { askJson, GeminiError } from "../news/gemini";
 import { DAY_MS, type Meal, mealsOn, readSettings, SLOTS, type Slot, validDay } from "./store";
 
-const DEFAULT_DAILY_LIMIT = 10;
 const HISTORY_DAYS = 14;
 const MAX_HISTORY_MEALS = 120;
 
@@ -28,6 +30,7 @@ export interface Idea {
   minutes: number | null;
 }
 export interface Suggestion {
+  summary: string;
   meals: Idea[];
   tip: string;
 }
@@ -37,6 +40,7 @@ const STR = { type: "STRING" };
 export const SUGGESTION_SCHEMA = {
   type: "OBJECT",
   properties: {
+    summary: { type: "STRING", description: "two or three sentences on what has been eaten that day and how balanced it is; empty if nothing has been eaten yet" },
     meals: {
       type: "ARRAY",
       items: {
@@ -54,14 +58,15 @@ export const SUGGESTION_SCHEMA = {
     },
     tip: { type: "STRING", description: "one short sentence about the pattern in the recent days, or empty" },
   },
-  required: ["meals", "tip"],
-  propertyOrdering: ["meals", "tip"],
+  required: ["summary", "meals", "tip"],
+  propertyOrdering: ["summary", "meals", "tip"],
 };
 
 export const SYSTEM = `You suggest meals for a personal eating diary. The user writes down what they eat; your job is variety and balance from one day to the next.
 
 Rules:
-- Suggest exactly one meal for each of breakfast, lunch, dinner and snack for the day you are asked about.
+- First write a short summary of the day so far from "Already eaten on that day": what it was and what is missing or too much (vegetables, protein, variety). Plain and friendly, no numbers, no judgement. Empty if nothing has been eaten yet.
+- Then suggest what could be cooked next: exactly one meal for each of breakfast, lunch, dinner and snack for the day you are asked about.
 - Variety is the point. Do not suggest a dish, or anything built around the same main ingredient (chicken, pasta, oats, eggs, rice, ...), that the diary shows in the last 7 days, and make the four suggestions of the day different from each other. Older entries tell you what the user likes; they are not a reason to repeat.
 - What the user has already eaten on the day counts: do not repeat it, and balance it (a heavy lunch, then a lighter dinner; no protein so far, then add some).
 - The user's notes (diet, allergies, dislikes, goals) are strict. Never suggest anything they rule out.
@@ -112,7 +117,7 @@ export function cleanSuggestion(raw: unknown): Suggestion | null {
     bySlot.set(slot, { slot, name, why: clip(m?.why, 300), ingredients, minutes });
   }
   if (!bySlot.size) return null;
-  return { meals: SLOTS.flatMap((s) => bySlot.get(s) ?? []), tip: clip((raw as any)?.tip, 300) };
+  return { summary: clip((raw as any)?.summary, 600), meals: SLOTS.flatMap((s) => bySlot.get(s) ?? []), tip: clip((raw as any)?.tip, 300) };
 }
 
 /** What the page shows when there are no ideas: Gemini's own message is what it takes to fix it, and carries no secrets. */
@@ -137,15 +142,8 @@ export async function handleSuggest(request: Request, env: Env, user: User): Pro
   }
   if (!env.GEMINI_API_KEY) return json({ error: "The meal ideas are not set up yet (GEMINI_API_KEY is missing)." }, 503);
 
-  const limit = Number(env.DIARY_AI_DAILY_LIMIT) || DEFAULT_DAILY_LIMIT;
-  const used = await env.DB.prepare(
-    `INSERT INTO diary_ai_usage (user_id, day, count) VALUES (?, ?, 1)
-     ON CONFLICT (user_id, day) DO UPDATE SET count = count + 1 RETURNING count`,
-  )
-    .bind(user.id, utcDay(new Date(now)))
-    .first<{ count: number }>();
-  const count = used?.count ?? 1;
-  if (count > limit) return json({ error: `That's today's ${limit} sets of ideas — the limit resets at midnight UTC.`, remaining: 0 }, 429);
+  const spent = await spend(env, user.id, now);
+  if (!spent.ok) return spent.response;
 
   try {
     const [settings, today, history] = await Promise.all([readSettings(env, user.id), mealsOn(env, user.id, day), recentDays(env, user.id, day)]);
@@ -160,14 +158,11 @@ export async function handleSuggest(request: Request, env: Env, user: User): Pro
     )
       .bind(user.id, day, JSON.stringify(suggestion), generatedAt)
       .run();
-    return json({ suggestion: { ...suggestion, generatedAt }, remaining: Math.max(0, limit - count) });
+    return json({ suggestion: { ...suggestion, generatedAt }, remaining: spent.remaining });
   } catch (err) {
     console.warn("meal ideas failed", err instanceof Error ? err.stack || err.message : String(err));
     // Ideas that did not arrive do not count against the daily limit.
-    await env.DB.prepare("UPDATE diary_ai_usage SET count = count - 1 WHERE user_id = ? AND day = ? AND count > 0")
-      .bind(user.id, utcDay(new Date(now)))
-      .run()
-      .catch(() => {});
+    await spent.refund();
     return json({ error: suggestError(err) }, err instanceof GeminiError && (err.status === 429 || err.status === 503) ? err.status : 502);
   }
 }

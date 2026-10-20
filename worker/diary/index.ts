@@ -10,10 +10,13 @@
 //   GET    /api/diary/meals/:id/photo     the picture
 //   DELETE /api/diary/meals/:id/photo
 //   GET/PUT /api/diary/settings           {notes}: diet, allergies, dislikes, goals
-//   POST   /api/diary/suggest             {day}: new meal ideas from Gemini (suggest.ts)
+//   POST   /api/diary/describe            a picture as the body -> {description} from Gemini (describe.ts)
+//   POST   /api/diary/meals/:id/describe  the same for the meal's saved photo
+//   POST   /api/diary/suggest             {day}: summary of the day and what to cook next (suggest.ts)
 //
-// Guests get 401: the diary is the account's. Only the AI part needs AI access
-// (aiDenied, as in Market News); keeping the diary does not.
+// Guests get 401: the diary is the account's, and so is every model call here —
+// a guest never reaches one. The AI part needs AI access on top (aiDenied, as
+// in Market News); keeping the diary does not. The AI runs only on request.
 //
 // `day` is the user's own calendar date as their browser saw it (YYYY-MM-DD)
 // and `time` their local clock (HH:MM), so a late dinner stays on its day
@@ -22,6 +25,7 @@
 import { currentUser } from "../auth";
 import type { Env } from "../env";
 import { crossSite, isoNow, json, readJson } from "../http";
+import { handleDescribe } from "./describe";
 import { handlePhoto } from "./photos";
 import { DAY_MS, MAX_DESCRIPTION, MAX_MEALS_PER_DAY, MAX_MEALS_PER_USER, MAX_NOTES, MONTH_RE, type Meal, mealsOn, readSettings, SLOTS, TIME_RE, toMeal, validDay } from "./store";
 import { handleSuggest } from "./suggest";
@@ -48,6 +52,10 @@ export async function handleDiary(request: Request, env: Env, rest: string): Pro
     if (method === "PUT") return saveSettings(request, env, user.id);
     return json({ error: "method not allowed" }, 405, { Allow: "GET, PUT" });
   }
+  if (parts[0] === "describe" && parts.length === 1) {
+    if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
+    return handleDescribe(request, env, user, null);
+  }
   if (parts[0] === "suggest" && parts.length === 1) {
     if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
     return handleSuggest(request, env, user);
@@ -65,6 +73,10 @@ export async function handleDiary(request: Request, env: Env, rest: string): Pro
       return json({ error: "method not allowed" }, 405, { Allow: "PATCH, DELETE" });
     }
     if (parts.length === 3 && parts[2] === "photo") return handlePhoto(request, env, user.id, id);
+    if (parts.length === 3 && parts[2] === "describe") {
+      if (method !== "POST") return json({ error: "method not allowed" }, 405, { Allow: "POST" });
+      return handleDescribe(request, env, user, id);
+    }
   }
   return json({ error: "not found" }, 404);
 }
