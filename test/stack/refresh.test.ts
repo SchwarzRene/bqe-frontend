@@ -2,17 +2,18 @@
 // The free plan gives a run 10 ms of CPU: the constituent list and the tickers never share a run,
 // batches are small, and what a run was about to do is recorded before it does it.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { d1 } from "../helpers/d1";
 import { cached } from "../../worker/http";
 import { refreshStack } from "../../worker/stack";
 
+beforeEach(() => vi.setSystemTime(NIGHT));
 afterEach(() => vi.unstubAllGlobals());
 
 // The job refuses a Wikipedia table with fewer than 400 rows (a changed page, not a smaller index).
 const SYMBOLS = Array.from({ length: 410 }, (_, i) => `S${String(i).padStart(3, "0")}`);
-// The job stamps rows with the real clock, so the test's "night" is now (a run a minute later is a minute later).
-const NIGHT = new Date();
+// The job stamps rows with the clock, so the test freezes it at its "night" (see beforeEach below).
+const NIGHT = new Date("2026-10-20T22:00:00Z");
 const minute = (k: number) => new Date(NIGHT.getTime() + k * 60_000);
 
 function wikipedia() {
