@@ -40,7 +40,7 @@ Push to `main` and Cloudflare builds and deploys. Details in [docs/DEVELOPMENT.m
 |---|---|
 | `index.html`, `pages/`, `components/` | The start page, every other page, and the shared header and footer |
 | `assets/` | `css/shared.css` and one stylesheet per page, `js/` site scripts, images, vendored libraries |
-| `research/` | One folder per project: write-ups and apps (Market News, Stack, Trading Journal, History Map, Backtest Lab) |
+| `research/` | One folder per project: write-ups and apps (Market News, Stack, Trading Journal, Meal Diary, History Map, Backtest Lab) |
 | `worker/`, `migrations/`, `test/` | The Cloudflare Worker, its D1 schema, its tests |
 | `docs/` | All documentation — start at [docs/README.md](docs/README.md) |
 | `build.sh`, `_headers`, `wrangler.toml` | What gets published, how it is cached and secured, how the Worker is configured |

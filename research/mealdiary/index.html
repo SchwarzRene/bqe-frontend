@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- maximum-scale=1 stops iOS zooming into a focused field; iOS still allows pinch-zoom.
+       viewport-fit=cover lets the layout pad itself clear of the notch and home bar. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="description" content="Meal Diary — write down what you eat and when, add a photo, and let AI suggest new meals for each day. Black Quant Empire research.">
+  <title>Meal Diary - Black Quant Empire</title>
+  <link rel="icon" href="/assets/images/logo.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/research/" title="Back to Research"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 10 10" width="10" height="10"><path d="M7.5 1.2v7.6L1.8 5z" fill="currentColor"/></svg></span><span class="brand-text">mealdiary</span></a>
+    <h1 class="title">Meal Diary</h1>
+    <span id="account"></span>
+    <button class="btn ghost" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle light/dark">◐</button>
+  </header>
+  <main id="view" aria-live="polite"><div class="loading">Loading…</div></main>
+  <dialog id="modal"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/assets/js/session.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

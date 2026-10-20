@@ -15,6 +15,7 @@ Per-project documentation sits beside the code:
 [Market News](../research/markettape/README.md) ·
 [Stack](../research/stack/README.md) ·
 [Trading Journal](../research/tradingjournal/README.md) ·
+[Meal Diary](../research/mealdiary/README.md) ·
 [History Map](../research/historymap/README.md) ·
 [Backtest Lab](../research/backtest-lab/README.md) ·
 [Research paper style guide](../research/RESEARCH_PAPER_STYLE_GUIDE.md) ·

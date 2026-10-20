@@ -18,6 +18,7 @@ visitor ─▶ Cloudflare ─┬─ static file ──────────�
                        ├─ /api/contact ─────────────▶ Worker ─▶ D1
                        ├─ /api/auth/*, /api/state/* ─▶ Worker ─▶ D1 (accounts, saved work)
                        ├─ /api/market/* ────────────▶ Worker ─▶ Yahoo (Trading Journal)
+                       ├─ /api/diary/* ─────────────▶ Worker ─▶ D1 (Meal Diary), Gemini for the meal ideas
                        ├─ /api/commodities/prices ──▶ Worker ─▶ D1 (filled by cron from Yahoo/Dukascopy)
                        └─ /research/*/data/*.json ──▶ Worker ─▶ D1, else the committed file
 cron ──────────────────────────────────────────────▶ Worker ─▶ Yahoo · Wikipedia · Gemini ─▶ D1
@@ -86,6 +87,7 @@ The repository root **is** the site root, but only the folders `build.sh` lists 
 │   ├── markettape/         The Market News app            (own README)
 │   ├── stack/              S&P 500 chart feed             (own README; scripts in js/)
 │   ├── tradingjournal/     Trade log and chart markup     (own README)
+│   ├── mealdiary/          Eating diary with AI meal ideas (own README)
 │   ├── historymap/         Interactive history atlas      (own README)
 │   └── backtest-lab/       mt5bt backtester as WebAssembly (own README)
 │
@@ -94,6 +96,7 @@ The repository root **is** the site root, but only the folders `build.sh` lists 
 │   ├── auth.ts admin.ts state.ts profile.ts contact.ts   Accounts, admin terminal, saved work
 │   ├── stack.ts screen.ts market.ts yahoo.ts              S&P 500 prices, screener, Yahoo access
 │   ├── news/               Market News: feeds, ranking, briefing, calendar, chat, analyst
+│   ├── diary/              Meal Diary: entries, photos, Gemini meal ideas
 │   └── prices/             Commodity prices (Yahoo / Dukascopy), indicators, archive
 ├── migrations/             D1 schema, applied by wrangler
 ├── test/                   Worker and Backtest Lab tests (vitest)
@@ -125,4 +128,4 @@ A few files are long and deliberately not split:
 
 Scripts that *are* split follow the same pattern: classic scripts, one global scope, load order
 set by the `<script>` tags in the page (no bundler, and the CSP forbids inline script). See
-`research/stack/js/`, `research/markettape/js/`, `research/tradingjournal/js/`.
+`research/stack/js/`, `research/markettape/js/`, `research/tradingjournal/js/`, `research/mealdiary/js/`.

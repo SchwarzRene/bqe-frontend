@@ -27,6 +27,11 @@ export function jsonText(text: string, status = 200, headers: Record<string, str
   });
 }
 
+/** A stored picture. Only ever the type the Worker sniffed when it was uploaded, and never sniffed again by the browser. */
+export function image(body: Uint8Array, type: string, headers: Record<string, string> = {}): Response {
+  return new Response(body, { headers: { ...SECURITY_HEADERS, "Content-Type": type, "Cache-Control": "private, max-age=3600", ...headers } });
+}
+
 /**
  * A public GET answered from the edge cache for as long as its own Cache-Control
  * says, instead of from D1 on every visit. Worker responses are not cached
@@ -121,14 +126,14 @@ export function crossSite(request: Request): boolean {
 }
 
 /**
- * The request body as text, or null when it is larger than `maxBytes`. A
+ * The request body as bytes, or null when it is larger than `maxBytes`. A
  * declared Content-Length over the limit is refused before anything is read,
  * and the stream is cut off at the limit, so a huge body is never buffered.
  */
-export async function readText(request: Request, maxBytes: number): Promise<string | null> {
+export async function readBytes(request: Request, maxBytes: number): Promise<Uint8Array | null> {
   const declared = Number(request.headers.get("Content-Length"));
   if (Number.isFinite(declared) && declared > maxBytes) return null;
-  if (!request.body) return "";
+  if (!request.body) return new Uint8Array(0);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -148,7 +153,13 @@ export async function readText(request: Request, maxBytes: number): Promise<stri
     all.set(c, at);
     at += c.byteLength;
   }
-  return new TextDecoder().decode(all);
+  return all;
+}
+
+/** The request body as text, or null when it is larger than `maxBytes` (see readBytes). */
+export async function readText(request: Request, maxBytes: number): Promise<string | null> {
+  const body = await readBytes(request, maxBytes);
+  return body && new TextDecoder().decode(body);
 }
 
 /** Read a JSON object body, or null when it is missing, too large or malformed. */

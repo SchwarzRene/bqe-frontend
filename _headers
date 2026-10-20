@@ -38,6 +38,10 @@
 /research/tradingjournal/*
   Cache-Control: no-cache
 
+# The Meal Diary's scripts and styles are plain files imported by name, like the Trading Journal's.
+/research/mealdiary/*
+  Cache-Control: no-cache
+
 # The same for the Stack page's scripts, which index.html loads by name.
 /research/stack/js/*
   Cache-Control: no-cache

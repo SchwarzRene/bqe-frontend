@@ -5,6 +5,7 @@
 import { handleAdminAudit, handleAdminMessages, handleAdminUsers } from "./admin";
 import { handleAuth } from "./auth";
 import { handleContact } from "./contact";
+import { handleDiary } from "./diary";
 import type { Env } from "./env";
 import { allowed, cached, json, visitor } from "./http";
 import { handleMarket } from "./market";
@@ -49,6 +50,9 @@ export default {
 
       m = path.match(/^\/api\/state\/([a-z]+)$/);
       if (m) return handleState(request, env, m[1]);
+
+      m = path.match(/^\/api\/diary(?:\/(.*))?$/);
+      if (m) return handleDiary(request, env, m[1] ?? "");
 
       m = path.match(/^\/api\/market\/([a-z]+)$/);
       if (m) return handleMarket(request, ctx, m[1]);

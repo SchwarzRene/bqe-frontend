@@ -396,6 +396,11 @@ export function deleteUserStatements(env: Env, userId: number): D1PreparedStatem
     env.DB.prepare("DELETE FROM user_state WHERE user_id = ?").bind(userId),
     env.DB.prepare("DELETE FROM news_chat_usage WHERE user_id = ?").bind(userId),
     env.DB.prepare("DELETE FROM chat_conversations WHERE user_id = ?").bind(userId),
+    env.DB.prepare("DELETE FROM diary_photos WHERE user_id = ?").bind(userId),
+    env.DB.prepare("DELETE FROM diary_meals WHERE user_id = ?").bind(userId),
+    env.DB.prepare("DELETE FROM diary_suggestions WHERE user_id = ?").bind(userId),
+    env.DB.prepare("DELETE FROM diary_settings WHERE user_id = ?").bind(userId),
+    env.DB.prepare("DELETE FROM diary_ai_usage WHERE user_id = ?").bind(userId),
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId),
   ];
 }
@@ -423,11 +428,17 @@ async function deleteAccount(request: Request, env: Env, ip: string): Promise<Re
 async function exportAccount(request: Request, env: Env): Promise<Response> {
   const user = await currentUser(request, env);
   if (!user) return json({ error: "Sign in first." }, 401);
-  const [account, state, chats, usage] = await Promise.all([
+  const [account, state, chats, usage, meals, ideas, diarySettings] = await Promise.all([
     env.DB.prepare("SELECT username, email, role, ai_access, created_at, last_login_at FROM users WHERE id = ?").bind(user.id).first<any>(),
     env.DB.prepare("SELECT app, body, version, updated_at FROM user_state WHERE user_id = ?").bind(user.id).all<any>(),
     env.DB.prepare("SELECT id, title, messages, created_at, updated_at FROM chat_conversations WHERE user_id = ?").bind(user.id).all<any>(),
     env.DB.prepare("SELECT day, count FROM news_chat_usage WHERE user_id = ?").bind(user.id).all<any>(),
+    env.DB.prepare(
+      `SELECT m.id, m.day, m.time, m.slot, m.description, p.bytes AS photo_bytes, p.mime AS photo_type FROM diary_meals m
+         LEFT JOIN diary_photos p ON p.meal_id = m.id WHERE m.user_id = ? ORDER BY m.day, m.time, m.id`,
+    ).bind(user.id).all<any>(),
+    env.DB.prepare("SELECT day, body, generated_at FROM diary_suggestions WHERE user_id = ? ORDER BY day").bind(user.id).all<any>(),
+    env.DB.prepare("SELECT notes FROM diary_settings WHERE user_id = ?").bind(user.id).first<any>(),
   ]);
   const parse = (s: string) => {
     try {
@@ -442,6 +453,16 @@ async function exportAccount(request: Request, env: Env): Promise<Response> {
     savedWork: (state.results ?? []).map((r) => ({ app: r.app, version: r.version, updatedAt: r.updated_at, data: parse(r.body) })),
     chats: (chats.results ?? []).map((c) => ({ id: c.id, title: c.title, createdAt: c.created_at, updatedAt: c.updated_at, messages: parse(c.messages) })),
     aiUsage: usage.results ?? [],
+    // The pictures are not in this file (they would make it enormous); each meal says whether it has one,
+    // and while signed in it can be saved from /api/diary/meals/<id>/photo.
+    mealDiary: {
+      notes: diarySettings?.notes ?? "",
+      meals: (meals.results ?? []).map((m) => ({
+        id: m.id, day: m.day, time: m.time, meal: m.slot, description: m.description,
+        photo: m.photo_bytes == null ? null : { type: m.photo_type, bytes: m.photo_bytes, url: `/api/diary/meals/${m.id}/photo` },
+      })),
+      ideas: (ideas.results ?? []).map((i) => ({ day: i.day, generatedAt: i.generated_at, ...parse(i.body) })),
+    },
   };
   return json(doc, 200, { "Content-Disposition": `attachment; filename="bqe-${user.username}.json"` });
 }

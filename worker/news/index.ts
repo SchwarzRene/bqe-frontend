@@ -18,6 +18,7 @@
 import { aiDenied, currentUser, pruneAuth } from "../auth";
 import { pruneAudit } from "../admin";
 import { pruneContact } from "../contact";
+import { pruneDiary } from "../diary";
 import type { Env } from "../env";
 import { crossSite, isoNow, json } from "../http";
 import { buildBriefing, latestBriefing } from "./briefing";
@@ -202,7 +203,7 @@ export async function newsTick(env: Env, ms = Date.now(), cfg = CONFIG, plan?: F
     // 05:00 New York: the economic calendar, meetings and fallbacks, and the daily clean-up.
     await record("calendar", () => refreshCalendar(env, ms, { cfg, only: CALENDAR_FIRST_HALF }));
     await record("prune", async () => {
-      await Promise.all([pruneNews(env, ms), pruneContact(env), pruneAuth(env), pruneAudit(env)]);
+      await Promise.all([pruneNews(env, ms), pruneContact(env), pruneAuth(env), pruneAudit(env), pruneDiary(env)]);
       return "done";
     });
     return report.join(" · ");
