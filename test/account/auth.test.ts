@@ -2,9 +2,9 @@
 // end against a real SQLite database with the repository's migrations.
 
 import { describe, expect, it } from "vitest";
-import worker from "../worker/index";
-import { MAX_CONVERSATIONS, saveTurn } from "../worker/news/conversations";
-import { d1 } from "./d1";
+import worker from "../../worker/index";
+import { MAX_CONVERSATIONS, saveTurn } from "../../worker/news/conversations";
+import { d1 } from "../helpers/d1";
 
 const ORIGIN = "https://site";
 

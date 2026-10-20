@@ -44,7 +44,7 @@ it, save the config and `.set` files), so the example goes through exactly the p
 ## Updating
 
 In the Rust repo: `wasm/build.sh ../bqe-frontend` rebuilds `mt5bt.wasm` and copies it, together with the web UI
-files, into this folder. Commit the result. `test/backtest-lab.test.ts` (run by `npm test`) loads that exact module,
+files, into this folder. Commit the result. `test/research/backtest-lab.test.ts` (run by `npm test`) loads that exact module,
 drives the API the way the app does, and compares run results with the native binary, so a stale or broken build
 fails CI.
 
@@ -54,7 +54,7 @@ documented at the top of `wasm/src/lib.rs` in the Rust repo.
 ## Notes
 
 * **CSP**: instantiating WebAssembly needs `'wasm-unsafe-eval'` in `script-src` (set in `_headers`, allowed by name in
-  `test/security.test.ts`). It does not permit `eval()` or `new Function()`. Workers and `fetch` stay on `'self'`.
+  `test/account/security.test.ts`). It does not permit `eval()` or `new Function()`. Workers and `fetch` stay on `'self'`.
 * All files here are `no-cache` in `_headers`, so a deploy is never shadowed by a stale copy.
 * To add a strategy: implement it in Rust (`src/strategies/`), add its parameters to `web/schema.json` in the Rust repo,
   rebuild, and add a `.set` file to `sets/` and to `seedExample()` if you want it pre-loaded.

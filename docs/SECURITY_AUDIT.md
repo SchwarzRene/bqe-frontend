@@ -20,7 +20,7 @@ At its current size the site works. It is **not ready for "100M users"**: it run
 5. **PRV-01**: Bring the privacy policy in line with what the site actually does: Cloudflare hosting, Google Gemini, no 2FA, account data retention.
 
 ## Remediation status (2026-09-25)
-Every finding below has a fix in the code, with a regression test in `test/security.test.ts`. The table says which ones still need action from the site owner.
+Every finding below has a fix in the code, with a regression test in `test/account/security.test.ts`. The table says which ones still need action from the site owner.
 
 | ID | Fix | Still needed from the owner |
 |---|---|---|
@@ -123,7 +123,7 @@ flowchart LR
   1. Check production now: `SELECT password_hash FROM users WHERE username='ceo'` must differ from the committed value.
   2. Add `migrations/0006_*.sql` that disables sign-in with the seeded hash: `UPDATE users SET password_hash = 'invalid' WHERE username='ceo' AND password_hash='7141…9ab7';`. Then set the real password through a one-off `wrangler d1 execute` using a hash generated locally.
   3. For future bootstrap, create the first admin with a CLI step that reads the password from stdin, never from a committed hash.
-- **Verification**: A new unit test in `test/auth.test.ts` asserts that no migration contains a `password_hash` literal. Also, signing in to prod with the seeded password must fail.
+- **Verification**: A new unit test in `test/account/auth.test.ts` asserts that no migration contains a `password_hash` literal. Also, signing in to prod with the seeded password must fail.
 
 ### SEC-02 — Login lockout can be reset by the attacker; no per-account limit
 - **Severity / Confidence / Effort**: High / Confirmed / S

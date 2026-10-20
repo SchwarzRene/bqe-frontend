@@ -1,13 +1,13 @@
 // Regression tests for the fixes in docs/SECURITY_AUDIT.md, one block per finding.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import worker from "../worker/index";
-import { breached } from "../worker/auth";
-import { pruneContact, UNANSWERED_DAYS } from "../worker/contact";
-import { hashIp, ipBlock, readText } from "../worker/http";
-import { candleRange } from "../worker/market";
-import { saveTurn } from "../worker/news/conversations";
-import { d1 } from "./d1";
+import worker from "../../worker/index";
+import { breached } from "../../worker/auth";
+import { pruneContact, UNANSWERED_DAYS } from "../../worker/contact";
+import { hashIp, ipBlock, readText } from "../../worker/http";
+import { candleRange } from "../../worker/market";
+import { saveTurn } from "../../worker/news/conversations";
+import { d1 } from "../helpers/d1";
 
 const ORIGIN = "https://site";
 const PASSWORD = "correct horse battery";

@@ -36,7 +36,7 @@ js/drawing.js       chart drawing tools
 js/views/*.js       dashboard, trades, trade detail, journal, symbols
 ```
 
-Tests for `js/store.js` are in `test/journal.test.ts` at the repository root
+Tests for `js/store.js` are in `test/research/journal.test.ts`
 (`npm test`).
 
 ## Using it

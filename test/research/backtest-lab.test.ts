@@ -5,7 +5,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 // @ts-ignore - plain browser ES modules
-import { openServer, seedExample } from "../research/backtest-lab/server-core.js";
+import { openServer, seedExample } from "../../research/backtest-lab/server-core.js";
 
 const DIR = "research/backtest-lab/";
 let s: any;

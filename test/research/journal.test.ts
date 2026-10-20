@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // Plain browser JS, tested as-is; typed loosely here.
-import * as Store from "../research/tradingjournal/js/store.js";
+import * as Store from "../../research/tradingjournal/js/store.js";
 
 const S: any = Store;
 

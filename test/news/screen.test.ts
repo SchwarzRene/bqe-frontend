@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { screenStocks } from "../worker/news/chat";
+import { screenStocks } from "../../worker/news/chat";
 import {
   backfillScreen, currentRows, findRow, mergeScreen, readScreen, rsi, type ScreenRow, screenRow, screenSummary, shortName,
-} from "../worker/screen";
-import type { Columns } from "../worker/yahoo";
-import { d1 } from "./d1";
+} from "../../worker/screen";
+import type { Columns } from "../../worker/yahoo";
+import { d1 } from "../helpers/d1";
 
 const DAY = 86_400_000;
 

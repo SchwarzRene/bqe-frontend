@@ -14,7 +14,7 @@
   # plus Cloudflare Turnstile on sign-up; 'wasm-unsafe-eval' only lets the Backtest Lab
   # compile its WebAssembly engine (it does NOT allow eval() or new Function()); no inline scripts or handlers. Styles
   # may be inline (style="" attributes throughout). History Map reads
-  # Wikipedia summaries. Change this together with test/security.test.ts.
+  # Wikipedia summaries. Change this together with test/account/security.test.ts.
   Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://en.wikipedia.org https://de.wikipedia.org; media-src 'self'; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # Fingerprinted these are not, so a long cache would strand visitors on an
