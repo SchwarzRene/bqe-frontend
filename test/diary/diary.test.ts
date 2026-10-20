@@ -135,6 +135,20 @@ describe("Meal Diary: entries", () => {
     expect((await add(env, me, { ...lunch, day: "2026-10-19" })).status).toBe(201);
   });
 
+  it("counts a moved entry against the day it moves to", async () => {
+    const env = envWith();
+    const me = await user(env, "alice");
+    for (let i = 0; i < 20; i++) await add(env, me);
+    const other = (await add(env, me, { ...lunch, day: "2026-10-19" })).data.meal;
+    expect((await call(env, "PATCH", `/api/diary/meals/${other.id}`, { day: TODAY }, me)).status).toBe(429);
+    // Not moved, and the other fields still change.
+    expect((await call(env, "PATCH", `/api/diary/meals/${other.id}`, { description: "Still yesterday" }, me)).data.meal).toMatchObject({ day: "2026-10-19", description: "Still yesterday" });
+    // A full day can still be edited, and an entry can move onto a day with room.
+    const onFullDay = env.DB.raw.prepare("SELECT id FROM diary_meals WHERE day = ? LIMIT 1").get(TODAY).id;
+    expect((await call(env, "PATCH", `/api/diary/meals/${onFullDay}`, { day: TODAY, time: "13:00" }, me)).status).toBe(200);
+    expect((await call(env, "PATCH", `/api/diary/meals/${onFullDay}`, { day: "2026-10-18" }, me)).data.meal.day).toBe("2026-10-18");
+  });
+
   it("keeps every user's diary to themselves", async () => {
     const env = envWith();
     const alice = await user(env, "alice");
@@ -464,7 +478,9 @@ describe("Meal Diary: photo descriptions", () => {
     expect(calls).toHaveLength(0);
     const res = await raw(env, "POST", `/api/diary/meals/${meal.id}/describe`, undefined, me);
     expect(((await res.json()) as any).description).toBe("Lentil soup");
-    expect(calls[0].body.contents[0].parts[1].inlineData.mimeType).toBe("image/jpeg");
+    // The stored text and type go to Gemini as they are.
+    expect(calls[0].body.contents[0].parts[1].inlineData).toEqual({ mimeType: "image/jpeg", data: btoa(String.fromCharCode(...JPEG)) });
+    expect(calls[0].body.contents[0].parts[1].inlineData.data).toBe(env.DB.raw.prepare("SELECT data FROM diary_photos WHERE meal_id = ?").get(meal.id).data);
   });
 
   it("checks the picture before it spends a call", async () => {

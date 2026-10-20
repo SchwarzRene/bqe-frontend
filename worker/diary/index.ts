@@ -190,6 +190,8 @@ function cleanFields(body: any, partial: boolean): { fields: Partial<Omit<Meal, 
   return { fields };
 }
 
+const dayFull = () => json({ error: `That is ${MAX_MEALS_PER_DAY} entries for one day — enough.` }, 429);
+
 async function createMeal(request: Request, env: Env, userId: number): Promise<Response> {
   const body = await readJson(request, 8 * 1024);
   if (!body) return json({ error: "Send the meal as JSON." }, 400);
@@ -203,7 +205,7 @@ async function createMeal(request: Request, env: Env, userId: number): Promise<R
   )
     .bind(userId, f.day)
     .first<{ today: number; total: number }>();
-  if ((counts?.today ?? 0) >= MAX_MEALS_PER_DAY) return json({ error: `That is ${MAX_MEALS_PER_DAY} entries for one day — enough.` }, 429);
+  if ((counts?.today ?? 0) >= MAX_MEALS_PER_DAY) return dayFull();
   if ((counts?.total ?? 0) >= MAX_MEALS_PER_USER) return json({ error: "Your diary is full. Delete old entries to add more." }, 413);
 
   const now = isoNow();
@@ -222,6 +224,12 @@ async function updateMeal(request: Request, env: Env, userId: number, id: number
   if ("error" in clean) return json({ error: clean.error }, 400);
   const entries = Object.entries(clean.fields);
   if (!entries.length) return json({ error: "Nothing to change." }, 400);
+
+  // Moving an entry to another day counts against that day's cap like adding one does.
+  if (clean.fields.day) {
+    const there = await env.DB.prepare("SELECT COUNT(*) AS n FROM diary_meals WHERE user_id = ? AND day = ? AND id != ?").bind(userId, clean.fields.day, id).first<{ n: number }>();
+    if ((there?.n ?? 0) >= MAX_MEALS_PER_DAY) return dayFull();
+  }
 
   const result = await env.DB.prepare(
     `UPDATE diary_meals SET ${entries.map(([k]) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = ? AND user_id = ?`,

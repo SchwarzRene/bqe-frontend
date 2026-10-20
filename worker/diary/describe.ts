@@ -16,7 +16,7 @@ import { json, readBytes } from "../http";
 import { generate, GeminiError, model, textOf } from "../news/gemini";
 import { MAX_DESCRIPTION } from "./store";
 import { spend } from "./limit";
-import { fromBase64, MAX_PHOTO_BYTES, sniffImage, toBase64 } from "./photos";
+import { MAX_PHOTO_BYTES, sniffImage, toBase64 } from "./photos";
 import { suggestError } from "./suggest";
 
 export const DESCRIBE_SYSTEM = `You write the entries of a personal eating diary. You are shown a photo of one meal. Reply with a single short sentence that says what the meal is: the dishes and their main ingredients, in plain words, like a person would write it down ("Spaghetti with tomato sauce and basil, a glass of water").
@@ -31,25 +31,28 @@ export async function handleDescribe(request: Request, env: Env, user: User, mea
   if (denied) return denied;
   if (!env.GEMINI_API_KEY) return json({ error: "The photo descriptions are not set up yet (GEMINI_API_KEY is missing)." }, 503);
 
-  let bytes: Uint8Array;
+  let mime: string;
+  let data: string; // base64, as Gemini wants it
   if (mealId === null) {
     const body = await readBytes(request, MAX_PHOTO_BYTES);
     if (!body) return json({ error: `The photo is too large (over ${Math.round(MAX_PHOTO_BYTES / 1000)} kB).` }, 413);
-    bytes = body;
+    const sniffed = sniffImage(body);
+    if (!sniffed) return json({ error: "Send a JPEG, PNG or WebP picture." }, 415);
+    mime = sniffed;
+    data = toBase64(body);
   } else {
-    const row = await env.DB.prepare("SELECT data FROM diary_photos WHERE meal_id = ? AND user_id = ?").bind(mealId, user.id).first<{ data: string }>();
+    // Stored as base64 with the type sniffed at upload (photos.ts): sent on as it is.
+    const row = await env.DB.prepare("SELECT mime, data FROM diary_photos WHERE meal_id = ? AND user_id = ?").bind(mealId, user.id).first<{ mime: string; data: string }>();
     if (!row) return json({ error: "That entry has no photo." }, 404);
-    bytes = fromBase64(row.data);
+    ({ mime, data } = row);
   }
-  const mime = sniffImage(bytes);
-  if (!mime) return json({ error: "Send a JPEG, PNG or WebP picture." }, 415);
 
   const spent = await spend(env, user.id);
   if (!spent.ok) return spent.response;
   try {
     const body = await generate(env, model(env), {
       systemInstruction: { parts: [{ text: DESCRIBE_SYSTEM }] },
-      contents: [{ role: "user", parts: [{ text: "What is in this meal?" }, { inlineData: { mimeType: mime, data: toBase64(bytes) } }] }],
+      contents: [{ role: "user", parts: [{ text: "What is in this meal?" }, { inlineData: { mimeType: mime, data } }] }],
       generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
     }, "meal photo");
     const text = textOf(body).replace(/\s+/g, " ").trim();
