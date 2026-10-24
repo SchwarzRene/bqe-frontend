@@ -74,4 +74,12 @@ describe("Backtest Lab (the mt5bt web app as WebAssembly)", () => {
     expect(() => s.json("POST", "/api/studio/x/compile", {})).toThrow(/local server/);
     expect(() => s.json("POST", "/api/runs", { dataset: "missing", strategy: "sma_crossover" })).toThrow();
   });
+
+  it("keeps the phone layout in its own stylesheet, scoped to small screens", () => {
+    const html = readFileSync(DIR + "index.html", "utf8");
+    expect(html).toContain('href="/research/backtest-lab/mobile.css"');
+    const css = readFileSync(DIR + "mobile.css", "utf8");
+    // every rule sits inside the max-width media query, so the desktop hub layout cannot change
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, "").trim().startsWith("@media (max-width: 900px)")).toBe(true);
+  });
 });

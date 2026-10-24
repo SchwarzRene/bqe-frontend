@@ -7,6 +7,7 @@
 <title>Backtest Lab — mt5bt backtesting workbench</title>
 <link rel="icon" href="/assets/images/logo.png" type="image/png">
 <link rel="stylesheet" href="/research/backtest-lab/style.css">
+<link rel="stylesheet" href="/research/backtest-lab/mobile.css">
 <style>
   .lab-back{font-size:.85rem;color:var(--muted,#7c8da6);text-decoration:none;white-space:nowrap}
   .lab-back:hover{text-decoration:underline}
@@ -14,17 +15,6 @@
   .lab-note{position:relative;margin-left:auto;font-size:.8rem;color:var(--muted,#7c8da6)}
   .lab-note summary{cursor:pointer;padding:2px 0;white-space:nowrap}
   .lab-note p{position:absolute;right:0;top:calc(100% + 6px);z-index:20;width:min(420px,86vw);margin:0;padding:10px 12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);line-height:1.45}
-  /* the hub layout is built for a desktop screen; on a phone the dock becomes a scrolling strip above the stage */
-  @media (max-width:900px){
-    html,body{height:auto;overflow:auto}
-    .hub{height:auto;min-width:0;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;grid-template-areas:"top" "left" "stage";padding:0 8px 8px}
-    .hub header.top{margin:0 -8px}
-    .hub nav.dock{flex-direction:row;overflow-x:auto;overflow-y:hidden}
-    .hub nav.dock>a{min-height:56px;min-width:150px}
-    .hub nav.dock .sub{display:none}
-    .hub main#view{overflow:visible;padding:12px}
-    .lab-back span{display:none}.lab-back{font-size:1rem}
-  }
 </style>
 </head>
 <body>
