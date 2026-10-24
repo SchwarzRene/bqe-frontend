@@ -22,6 +22,7 @@ mt5bt.wasm                                Rust: datasets, runs, sweeps, optimize
 | File | Role |
 |---|---|
 | `index.html` | The app's page shell (loading splash, hub layout: pages in the left dock, stage on the right) plus a back link to /research/ and an "About this demo" note; phones get the dock as a scrolling strip |
+| `mobile.css` | The phone layout (≤ 900 px): one column, the four pages as a compact bar, Research tiles stacked, wide tables scroll inside their card. Kept apart from `style.css` so that file stays an unmodified copy |
 | `splash.js` | The loading splash (inline in the engine repo's `web/index.html`; extracted here because the site's CSP forbids inline scripts) |
 | `app.js`, `charts.js`, `optimizer.js`, `style.css`, `schema.json` | The web app, **copied unmodified** from the engine repo's `web/` |
 | `mt5bt.wasm` | The server + engine (~1 MB), built from the Rust repo with `wasm/build.sh` |

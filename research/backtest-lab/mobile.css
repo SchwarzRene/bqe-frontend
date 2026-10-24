@@ -1,0 +1,35 @@
+/* Phone layout of the Backtest Lab. The engine's web/style.css (copied unmodified) is built for a desktop screen: a hub with the
+   pages in a left dock. Below 900 px the hub becomes one column and the dock a compact 4-item bar on top. */
+@media (max-width: 900px) {
+  html, body { height: auto; overflow: auto; }
+  .hub { height: auto; min-width: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto;
+    grid-template-areas: "top" "left" "stage"; padding: 0 8px 8px; gap: 8px; }
+  .hub header.top { margin: 0 -8px; }
+  .hub main#view { overflow: visible; padding: 12px; }
+
+  /* the four pages: one row, icon above a short label, nothing scrolls sideways */
+  .hub nav.dock { flex-direction: row; gap: 6px; overflow: visible; }
+  .hub nav.dock > a { flex: 1 1 0; min-width: 0; min-height: 0; flex-direction: column; justify-content: center; gap: 4px; padding: 8px 4px; text-align: center; }
+  .hub nav.dock > a .lbl { align-items: center; text-align: center; font-size: 11.5px; line-height: 1.15; }
+  .hub nav.dock > a .lbl .sub { display: none; }
+  .hub nav.dock > a .lbl .pct { font-size: 10px; }
+  .hub nav.dock .dot { width: 34px; height: 34px; }
+
+  /* Research: the three configuration tiles stack, the parameter table scrolls inside its own box */
+  .bigtabs { flex-direction: column; gap: 8px; }
+  .bigtabs button { flex: 0 0 auto; padding: 10px 14px; }
+  .tabbody { min-width: 0; }
+  .tabbody:has(.ptable), .card:has(> .ptable) { overflow-x: auto; }
+  .ptable { min-width: 560px; }
+
+  /* dataset page: stacked cards at their natural height (the desktop grid forces equal rows) */
+  .datafit { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; height: auto !important; }
+  .datafit .dcol { display: block; }
+  .datafit .dcol > .card { overflow: visible; }
+
+  /* anything wide scrolls inside its own container instead of widening the page */
+  .card table, .tablewrap { max-width: 100%; }
+  .card:has(table), details:has(table) { overflow-x: auto; }
+  .datafit .dcol > .card:has(table) { overflow-x: auto; }
+  .lab-back span { display: none; }
+}
