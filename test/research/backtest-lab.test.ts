@@ -24,6 +24,7 @@ describe("Backtest Lab (the mt5bt web app as WebAssembly)", () => {
     const ds = s.json("GET", "/api/datasets");
     expect(ds.map((d: any) => d.name)).toEqual(["example_eurusd"]);
     expect(ds[0].digits).toBe(5);
+    expect(ds[0].config).toBe("example_eurusd.cfg"); // Research applies the dataset's broker config on its own
     expect(s.json("GET", "/api/files").set).toContain("sma_crossover_opt.set");
     expect(s.json("GET", "/api/schema").strategies.map((x: any) => x.name)).toContain("rsi_reversion");
   });

@@ -5,8 +5,10 @@
 // 3. viewOptimization(id): live progress, results table, charts, forward test, actions
 // Uses the globals of app.js (h, api, form, strategyDef, ...) at call time only.
 
-const defaultOpt = () => ({ algo: "auto", max_passes: "5000", population: "64", generations: "200", patience: "15", seed: "1", criterion: "custom", min_trades: "30", threads: "", forward_from: "", forward_to: "", forward_top: "10" });
+const defaultOpt = () => ({ algo: "auto", max_passes: "20000", population: "64", generations: "200", patience: "15", seed: "1", criterion: "custom", min_trades: "30", threads: "", forward_from: "", forward_to: "", forward_top: "10" });
 const isNumStr = x => x !== "" && x != null && isFinite(+x);
+const isBoolStr = x => x === "true" || x === "false"; // a true/false parameter is searched as the list [true, false]
+const rangeSize = (k, r) => isBoolStr(form.params[k]) ? 2 : rangeCount(r);
 function rangeCount(r) {
   const s = +r.start, st = +r.step, e = +r.stop;
   if (!isNumStr(r.start) || !isNumStr(r.step) || !isNumStr(r.stop) || !(st > 0) || !(e > s)) return 0;
@@ -46,78 +48,153 @@ function applySetRanges(ranges) {
   return n;
 }
 
+// "Parallel passes": one tile per CPU core. Click a tile (or drag across them) to use that many cores; presets below for the usual cases.
+// `running` makes the active tiles pulse. onChange(n) is called when the USER changes the number; setValue(n) updates it silently.
+function threadPicker(max, value, onChange, opts) {
+  opts = opts || {};
+  let cur = Math.max(1, Math.min(value || max, max)), down = false;
+  const num = h("b", { class: "cpubig" }), free = h("span", { class: "cpufree" });
+  const tiles = Array.from({ length: max }, (_, i) => {
+    const b = h("button", { type: "button", class: "core", title: (i + 1) + " cores", style: "--i:" + i }, String(i + 1));
+    b.addEventListener("pointerdown", e => { e.preventDefault(); down = true; user(i + 1); });
+    b.addEventListener("pointerenter", () => { if (down) user(i + 1); });
+    b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); user(i + 1); } });
+    return b;
+  });
+  window.addEventListener("pointerup", () => { down = false; });
+  const presetDefs = [["All", max], ["Leave 2 free", max - 2], ["Leave 4 free", max - 4], ["Half", Math.round(max / 2)], ["1", 1]].filter(([, v], k, a) => v >= 1 && a.findIndex(x => x[1] === v) === k);
+  const presets = presetDefs.map(([label, v]) => { const b = h("button", { type: "button", class: "cpupreset", onclick: () => user(v) }, label); b._v = v; return b; });
+  function paint() {
+    tiles.forEach((b, i) => b.classList.toggle("on", i < cur));
+    presets.forEach(b => b.classList.toggle("active", b._v === cur));
+    num.textContent = cur + " / " + max;
+    free.textContent = cur >= max ? (max >= (window.CORES || max) ? "all cores are used" : "the most this optimization was started with") : (max - cur) + (max - cur === 1 ? " core stays" : " cores stay") + " free for other programs";
+  }
+  function user(v) { v = Math.max(1, Math.min(v, max)); if (v === cur) return; cur = v; paint(); onChange(v); }
+  const el = h("div", { class: "cpupick" + (opts.running ? " running" : "") },
+    h("div", { class: "cpuhead" }, num, free),
+    h("div", { class: "cores" }, ...tiles),
+    h("div", { class: "cpupresets" }, ...presets));
+  paint();
+  return { el, setValue(v) { v = Math.max(1, Math.min(v, max)); if (v !== cur) { cur = v; paint(); } }, get active() { return down; } };
+}
 function buildOptimizePanel(getBase, hooks) {
   form.opt = Object.assign(defaultOpt(), form.opt || {});
+  if (form.opt.max_passes === "5000") form.opt.max_passes = "20000"; // the old default
   form.ranges = form.ranges || {};
-  const root = h("div"), tableBox = h("div"), summary = h("div", { class: "card", style: "margin:10px 0" });
+  const root = h("div", { class: "searchpanel" }), tableBox = h("div"), summary = h("div", { class: "card", style: "margin:10px 0" }), settingsBox = h("div");
   const enabled = () => Object.entries(form.ranges).filter(([k, r]) => r.on && form.params[k] !== undefined);
   function update() {
     const en = enabled(); let size = 1; const bad = [];
-    for (const [k, r] of en) { const n = rangeCount(r); if (!n) bad.push(k); size *= Math.max(n, 1); }
-    const max = +form.opt.max_passes || 5000;
+    for (const [k, r] of en) { const n = rangeSize(k, r); if (!n) bad.push(k); size *= Math.max(n, 1); }
+    const max = +form.opt.max_passes || 20000;
     summary.innerHTML = "";
-    if (!en.length) { summary.append(h("div", { class: "muted" }, "Tick the parameters to search (and give each a start / step / stop). All other parameters stay at the value shown on the Strategy tab.")); return; }
+    if (hooks && hooks.onUpdate) hooks.onUpdate(en.length); // the run button switches between "forward pass" and "optimization"
+    if (!en.length) { summary.append(h("div", { class: "muted" }, "Nothing ticked: Run does one forward pass with the values above. Tick parameters to search instead (each needs a start / step / stop); all other parameters stay at their value above.")); return; }
     const algo = form.opt.algo === "auto" ? (size <= max ? "grid" : "genetic") : form.opt.algo;
     summary.append(h("div", {}, h("b", {}, en.length + " parameters, " + bigNum(size) + " combinations"), "  ->  ", h("b", {}, algo), algo === "grid" ? " (every combination is run)" : " (searches up to " + bigNum(max) + " passes)",
-      algo === "grid" && size > max ? h("span", { class: "bad" }, "  - more than 'Max passes'; raise it or use genetic") : null,
+      algo === "grid" && size > max ? h("span", { class: "bad" }, "  - more than 'Max passes'; raise it or use genetic / forest / bayes") : null,
       bad.length ? h("div", { class: "bad small" }, "Invalid range (need numbers, step > 0, stop > start): " + bad.join(", ")) : null));
+  }
+  // every parameter is one row: edit the value, tick "Search" and give it a start / step / stop to optimize it
+  function paramRow(k, d) {
+    const def = d && d.params.find(p => p.key === k), dflt = def ? String(def.default) : "";
+    const r = form.ranges[k] || (form.ranges[k] = { on: false, start: "", step: "", stop: "" });
+    if (form.params[k] === undefined) form.params[k] = dflt;
+    const tr = h("tr", { class: "prow", "data-key": k });
+    const cnt = h("td", { class: "num" }, rangeCount(r) || "");
+    const cb = h("input", { type: "checkbox", checked: r.on, title: "optimize this parameter" });
+    const inp = f => { const x = h("input", { class: "numin", value: r[f] || "" }); x.addEventListener("input", () => { r[f] = x.value; cnt.textContent = rangeCount(r) || ""; saveForm(); update(); }); return x; };
+    const ins = { start: inp("start"), step: inp("step"), stop: inp("stop") };
+    const boolish = dflt === "true" || dflt === "false";
+    const val = boolish ? h("select", { class: "pval" }, ...["true", "false"].map(o => h("option", { value: o, selected: o === String(form.params[k]) }, o)))
+      : h("input", { class: "pval", value: form.params[k], title: dflt !== "" ? "default: " + dflt : "" });
+    const sync = () => {
+      const num = isNumStr(form.params[k]), bool = isBoolStr(form.params[k]);
+      cb.disabled = !(num || bool);
+      for (const f of ["start", "step", "stop"]) ins[f].disabled = !num; // a true/false parameter searches both values: no range to type
+      ins.start.placeholder = bool ? "true" : ""; ins.stop.placeholder = bool ? "false" : "";
+      if (!num && !bool && r.on) { r.on = false; cb.checked = false; }
+      cnt.textContent = bool ? (r.on ? 2 : "") : (rangeCount(r) || "");
+      tr.classList.toggle("changed", String(form.params[k]) !== dflt);
+      tr.classList.toggle("searching", !!r.on); // rows that are searched stand out
+      if (tr.lastChild && tr.lastChild.firstChild) tr.lastChild.firstChild.style.visibility = num ? "" : "hidden"; // the +-50% helper only makes sense for numbers
+    };
+    const fill = () => { Object.assign(r, autoRange(form.params[k])); for (const f of ["start", "step", "stop"]) ins[f].value = r[f]; cnt.textContent = rangeCount(r) || ""; };
+    val.addEventListener("input", () => { form.params[k] = val.value; sync(); saveForm(); update(); hooks && hooks.onParamChange && hooks.onParamChange(); });
+    val.addEventListener("change", () => { form.params[k] = val.value; sync(); saveForm(); update(); hooks && hooks.onParamChange && hooks.onParamChange(); });
+    cb.onchange = () => { r.on = cb.checked; if (r.on && isNumStr(form.params[k]) && !rangeCount(r)) fill(); sync(); saveForm(); update(); };
+    tr.append(h("td", {}, cb), h("td", {}, h("b", {}, k)), h("td", {}, val), h("td", {}, ins.start), h("td", {}, ins.step), h("td", {}, ins.stop), cnt,
+      h("td", {}, h("button", { title: "fill start / step / stop with +-50% around the current value", onclick: () => { if (!isNumStr(form.params[k])) return; fill(); saveForm(); update(); } }, "+-50%")));
+    sync();
+    return tr;
   }
   function render() {
     tableBox.innerHTML = "";
     const d = strategyDef(form.strategy);
-    const keys = [...new Set([...(d ? d.params.map(p => p.key) : []), ...Object.keys(form.params)])].filter(k => isNumStr(form.params[k]));
-    const t = h("table", {}, h("tr", {}, ...["Search", "Parameter", "Current value", "Start", "Step", "Stop", "Values", ""].map(x => h("th", {}, x))));
-    for (const k of keys) {
-      const r = form.ranges[k] || (form.ranges[k] = { on: false, start: "", step: "", stop: "" });
-      const cnt = h("td", { class: "num" }, rangeCount(r) || "");
-      const cb = h("input", { type: "checkbox", checked: r.on });
-      const inp = f => { const x = h("input", { class: "numin", value: r[f] || "" }); x.addEventListener("input", () => { r[f] = x.value; cnt.textContent = rangeCount(r) || ""; saveForm(); update(); }); return x; };
-      const ins = { start: inp("start"), step: inp("step"), stop: inp("stop") };
-      cb.onchange = () => { r.on = cb.checked; if (r.on && !rangeCount(r)) { Object.assign(r, autoRange(form.params[k])); for (const f of ["start", "step", "stop"]) ins[f].value = r[f]; cnt.textContent = rangeCount(r) || ""; } saveForm(); update(); };
-      t.append(h("tr", {}, h("td", {}, cb), h("td", {}, h("b", {}, k)), h("td", { class: "num" }, form.params[k]), h("td", {}, ins.start), h("td", {}, ins.step), h("td", {}, ins.stop), cnt,
-        h("td", {}, h("button", { title: "fill start / step / stop with +-50% around the current value", onclick: () => { Object.assign(r, autoRange(form.params[k])); for (const f of ["start", "step", "stop"]) ins[f].value = r[f]; cnt.textContent = rangeCount(r) || ""; saveForm(); update(); } }, "+-50%"))));
+    const keys = [...new Set([...(d ? d.params.map(p => p.key) : []), ...Object.keys(form.params)])];
+    const groups = { "General": [], "Long side": [], "Short side": [] };
+    for (const k of keys) groups[/^long/i.test(k) ? "Long side" : /^short/i.test(k) ? "Short side" : "General"].push(k);
+    const t = h("table", { class: "ptable" }, h("tr", {}, ...["Search", "Parameter", "Value", "Start", "Step", "Stop", "Values", ""].map(x => h("th", {}, x))));
+    for (const [gname, ks] of Object.entries(groups)) {
+      if (!ks.length) continue;
+      t.append(h("tr", { class: "grouprow " + (gname === "Long side" ? "long" : gname === "Short side" ? "short" : "") }, h("td", { colspan: 8 }, icon(gname === "Long side" ? "up" : gname === "Short side" ? "down" : "cog"), gname)));
+      for (const k of ks) t.append(paramRow(k, d));
     }
-    tableBox.append(h("div", { class: "tablewrap", style: "max-height:380px" }, t));
+    const addK = h("input", { placeholder: "extra parameter name", style: "width:180px" }), addV = h("input", { placeholder: "value", style: "width:100px" });
+    tableBox.append(h("div", { class: "tablewrap", style: "max-height:none" }, t),
+      h("div", { class: "row", style: "margin-top:10px" }, addK, addV, h("button", { onclick: () => { if (addK.value) { form.params[addK.value] = addV.value; saveForm(); render(); hooks && hooks.onParamChange && hooks.onParamChange(); } } }, "add parameter")));
     update();
-  }
-  // load parameter values AND search ranges (Name=value||start||step||stop||Y) from a .set file, right here
-  const setPick = h("select", { title: "saved .set files" }, h("option", { value: "" }, "(choose a saved .set file)"), ...((hooks && hooks.files) || []).map(n => h("option", { value: n, selected: n === form.setFile }, n)));
-  const applySet = guard(async name => { hooks.setSel.value = name; await hooks.setSel.onchange(); render(); });
-  setPick.onchange = () => { if (setPick.value) applySet(setPick.value); };
-  const upSet = h("input", { type: "file", accept: ".set,.txt", style: "display:none", onchange: guard(async () => {
-    const f = upSet.files[0]; if (!f) return;
-    await api("files/set/" + encodeURIComponent(f.name), { method: "POST", body: new Blob([await f.arrayBuffer()]) });
-    for (const s of [hooks.setSel, setPick]) if (![...s.options].some(o => o.value === f.name)) s.append(h("option", { value: f.name }, f.name));
-    setPick.value = f.name; upSet.value = ""; await applySet(f.name);
-  }) });
-  const setBar = h("div", { class: "setbar" }, h("b", { class: "small" }, "Parameters from a .set file"), setPick, h("button", { class: "primary", onclick: () => upSet.click() }, "Upload .set file"), upSet,
-    h("span", { class: "muted small" }, "fills the parameter values and the search ranges (Y-flagged lines are ticked) from the file"));
-  const opt = form.opt;
+  }  const opt = form.opt;
   const fld = (label, key, w, help) => { const x = h("input", { value: opt[key], style: "width:" + w + "px" }); x.oninput = () => { opt[key] = x.value; saveForm(); update(); }; return h("label", { class: "f", title: help || "" }, label, x); };
   const sel = (label, key, options, help) => { const x = h("select", {}, ...options.map(([v, l]) => h("option", { value: v, selected: v === opt[key] }, l))); x.onchange = () => { opt[key] = x.value; saveForm(); update(); }; return h("label", { class: "f", title: help || "" }, label, x); };
-  const runBtn = h("button", { class: "primary", onclick: guard(async () => {
+  const startOptimization = guard(async () => {
     const base = getBase(); if (!base.dataset) throw new Error("choose a dataset");
     const en = enabled(); if (!en.length) throw new Error("tick at least one parameter to search");
-    const bad = en.filter(([, r]) => !rangeCount(r)).map(([k]) => k); if (bad.length) throw new Error("invalid range: " + bad.join(", "));
-    const body = Object.assign({}, base, { name: form.name || ("opt " + (base.strategy || "")), ranges: en.map(([k, r]) => ({ name: k, start: r.start, step: r.step, stop: r.stop })), opt: Object.assign({}, form.opt) });
+    const bad = en.filter(([k, r]) => !rangeSize(k, r)).map(([k]) => k); if (bad.length) throw new Error("invalid range: " + bad.join(", "));
+    const body = Object.assign({}, base, { name: form.name || ("opt " + (base.strategy || "")), ranges: en.map(([k, r]) => isBoolStr(form.params[k]) ? { name: k, values: ["true", "false"] } : { name: k, start: r.start, step: r.step, stop: r.stop }), opt: Object.assign({}, form.opt) });
     const r = await api("optimizations", { body }); location.hash = "#optimization/" + r.id;
-  }) }, "Run optimization");
-  root.append(
-    h("h2", {}, "Optimizer: search the best parameter values"),
-    h("div", { class: "muted small" }, "Each pass is a complete, tick-accurate backtest. Passes run in parallel on all cores over one shared tick mapping. In-sample period = the From / To above (indicator warm-up is loaded automatically). Numeric parameters only; everything else stays fixed."),
-    setBar, tableBox, summary,
+  });
+  // masked periods: opt.maskList = [{from, to}] (what the user edits), opt.mask = "A..B;C..D" (what the server reads)
+  if (!Array.isArray(opt.maskList)) opt.maskList = [];
+  const maskBox = h("div", { class: "maskbox" });
+  const syncMask = () => { opt.mask = opt.maskList.filter(m => m.from && m.to).map(m => m.from + ".." + m.to).join(";"); saveForm(); };
+  const renderMask = () => {
+    maskBox.innerHTML = "";
+    opt.maskList.forEach((m, i) => maskBox.append(h("div", { class: "row gap-lg maskrow", style: "align-items:flex-end; margin:6px 0" },
+      h("label", { class: "f" }, "No trades from", dateInput(m, "from", { onChange: syncMask }).el),
+      h("label", { class: "f" }, "to (incl.)", dateInput(m, "to", { onChange: syncMask }).el),
+      h("button", { title: "remove this period", onclick: () => { opt.maskList.splice(i, 1); syncMask(); renderMask(); } }, icon("x")))));
+    const yr = h("input", { type: "number", placeholder: "year", style: "width:80px", min: 1990, max: 2100 });
+    maskBox.append(h("div", { class: "row", style: "margin-top:8px; gap:8px" },
+      h("button", { onclick: () => { opt.maskList.push({ from: "", to: "" }); renderMask(); } }, icon("plus"), "Add period"),
+      yr, h("button", { title: "mask the whole calendar year", onclick: () => { const y = +yr.value; if (!(y > 1900)) return; opt.maskList.push({ from: y + ".01.01", to: y + ".12.31" }); syncMask(); renderMask(); } }, "Mask year")));
+  };
+  renderMask(); syncMask();
+  const cores = window.CORES || 8;
+  const picker = threadPicker(cores, +opt.threads || cores, v => { opt.threads = v >= cores ? "" : String(v); saveForm(); });
+  settingsBox.append(
+    h("div", { class: "cpusec" }, h("h2", { class: "withicon" }, icon("zap"), "Parallel passes"), picker.el,
+      h("div", { class: "muted small" }, "How many passes run at the same time. You can change it while an optimization runs.")),
+    h("h2", { class: "withicon" }, icon("target"), "Optimizer settings"),
     h("div", { class: "row gap-lg", style: "flex-wrap:wrap; align-items:flex-end" },
-      sel("Algorithm", "algo", [["auto", "auto (grid if it fits, else genetic)"], ["grid", "grid (all combinations)"], ["genetic", "genetic"]], "genetic = MT5-style: selection, crossover, mutation; never repeats a pass"),
+      sel("Algorithm", "algo", [["auto", "auto (grid if it fits, else genetic)"], ["grid", "grid (all combinations)"], ["genetic", "genetic"], ["forest", "forest (random-forest model)"], ["bayes", "bayes (Bayesian, Gaussian process)"]], "forest / bayes learn parameters -> score from the passes so far and only run the most promising candidates (fewer passes, best when a pass is slow); genetic = MT5-style: selection, crossover, mutation; never repeats a pass"),
       sel("Optimize for", "criterion", [["custom", "strategy criterion (OnTester)"], ["profit", "net profit"], ["pf", "profit factor"], ["recovery", "recovery factor (profit / drawdown)"]], "custom = the EA's own OnTester value; falls back to net profit"),
       fld("Max passes", "max_passes", 80, "hard cap of backtest passes"),
       fld("Min trades", "min_trades", 60, "passes with fewer trades are rejected"),
-      fld("Population", "population", 60, "genetic only"), fld("Generations", "generations", 70, "genetic only"), fld("Patience", "patience", 60, "genetic: stop after this many generations without improvement"),
-      fld("Seed", "seed", 50, "same seed = same search"), fld("Threads", "threads", 55, "empty = all cores")),
-    h("h3", {}, "Forward test (optional)"),
+      fld("Population", "population", 60, "genetic: size; forest/bayes: random starting passes"), fld("Generations", "generations", 70, "genetic: generations; forest/bayes: rounds"), fld("Patience", "patience", 60, "genetic: stop after this many generations without improvement"),
+      fld("Seed", "seed", 50, "same seed = same search")),
+    h("h3", { class: "withicon" }, icon("eye"), "Masked periods (optional)"),
+    h("div", { class: "muted small" }, "The strategy cannot open trades in these periods while optimizing (trades already open keep running), so the result is not tuned to them. Afterwards run the winner over the whole range and compare the masked years to see whether it generalizes."),
+    maskBox,
+    h("h3", { class: "withicon" }, icon("flag"), "Forward test (optional)"),
     h("div", { class: "muted small" }, "The best candidates are re-run on a later period they were not optimized on. Leave empty to skip."),
-    h("div", { class: "row gap-lg", style: "align-items:flex-end" }, fld("Forward from", "forward_from", 110, "e.g. 2026.01.01"), fld("Forward to", "forward_to", 110, "empty = end of data"), fld("Test best N", "forward_top", 60, "")),
-    h("div", { class: "row", style: "margin-top:14px" }, runBtn, h("span", { class: "muted small" }, "Results page shows live progress; you can leave and come back.")));
-  return { el: root, render };
+    h("div", { class: "row gap-lg", style: "align-items:flex-end" }, h("label", { class: "f", title: "the best candidates are re-run from this day on" }, "Forward from", dateInput(opt, "forward_from", { empty: "no forward test" }).el), h("label", { class: "f", title: "empty = end of the data" }, "Forward to", dateInput(opt, "forward_to", { empty: "end of the data" }).el), fld("Test best N", "forward_top", 60, "")),
+    h("div", { class: "muted small", style: "margin-top:14px" }, "Run (button at the top) shows live progress on the results page; you can leave and come back."));
+  root.append(
+    h("h2", { class: "withicon" }, icon("sliders"), "Parameters"),
+    tableBox, summary);
+  return { el: root, settings: settingsBox, render, start: startOptimization, count: () => enabled().length };
 }
 
 // Score of every finished pass in the order the passes finished: dots, the best score so far and a moving average,
@@ -161,11 +238,12 @@ function showContextMenu(ev, title, items) {
 // ---------------------------------------------------------------- list
 const statusBadge = s => h("span", { class: "badge " + s }, s);
 async function viewOptimizations(v) {
-  v.append(h("div", { class: "row" }, h("h1", { style: "margin:0" }, "Optimizations"), h("span", { class: "spacer" }), h("a", { class: "btn primary", href: "#new/optimize" }, "+ New optimization")));
+  v.append(historyBar("optimizations"));
+  v.append(h("div", { class: "row" }, h("h1", { style: "margin:0" }, "Optimizations"), h("span", { class: "spacer" }), h("a", { class: "btn primary", href: "#new" }, "+ New optimization")));
   const box = h("div", { class: "card" }); v.append(box);
   async function load() {
     const list = await api("optimizations"); box.innerHTML = "";
-    if (!list.length) { box.append(h("div", { class: "muted" }, "No optimizations yet. Tick parameters on the Optimize tab of 'New run'.")); return; }
+    if (!list.length) { box.append(h("div", { class: "muted" }, "No optimizations yet. Tick Search on parameters in Research.")); return; }
     const t = h("table", {}, h("tr", {}, ...["Name", "Strategy / data", "Search space", "Algorithm", "State", "Best score", "Best net profit", "Started", ""].map(x => h("th", {}, x))));
     for (const o of list) {
       const p = o.progress, s = o.summary || {};
@@ -190,20 +268,29 @@ async function viewOptimization(v, id) {
   const top = h("div"), live = h("div"), body = h("div"); v.append(top, live, body);
   const liveTbl = h("div"), liveSc = h("div"); live.append(liveTbl, liveSc);
   let meta = null, res = null, rows = [], bodyDone = false;
+  let thrCtl = null, thrTimer = null; // live "parallel passes" slider of a running optimization
   const samples = []; // [time ms, passes done] while running: the recent pass rate gives the time estimate
   let livePts = [], liveChart = null, liveNote = null, liveDrawn = -1, liveProg = null; // passes streamed while the search runs
   let sortKey = "rank", sortDir = 1, showN = 100, hmA = 0, hmB = 1, hmMetric = "score";
   const running = () => meta && (meta.status === "running" || meta.status === "queued");
   const paramText = (names, vals) => names.map((n, i) => n + "=" + vals[i]).join("  ");
 
+  let loading = false;
   async function load() {
-    const m = await api("optimizations/" + id + "?" + (meta && running() ? "results=0&" : "") + "since=" + livePts.length);
-    meta = m;
-    if (m.progress && m.progress.points) for (const pt of m.progress.points) livePts.push(pt);
-    if (!running() && !res) { res = m.results || (await api("optimizations/" + id)).results; if (res) prepare(); }
-    renderTop(); renderLive();
-    if (!running() && res && !bodyDone) { bodyDone = true; renderBody(); }
-    return !running();
+    if (loading) return false; // never let two polls overlap: both would append the same streamed points
+    loading = true;
+    try {
+      const m = await api("optimizations/" + id + "?" + (meta && running() ? "results=0&" : "") + "since=" + livePts.length);
+      meta = m;
+      const pr = m.progress;
+      if (pr && pr.points) for (const pt of pr.points) livePts.push(pt);
+      // the server says how many points it holds: if we disagree (lost / duplicated points) start over, so the charts always match the "best so far" table
+      if (pr && pr.points_total != null && pr.points_total !== livePts.length) { livePts = []; liveDrawn = -1; }
+      if (!running() && !res) { res = m.results || (await api("optimizations/" + id)).results; if (res) prepare(); }
+      renderTop(); renderLive();
+      if (!running() && res && !bodyDone) { bodyDone = true; renderBody(); }
+      return !running();
+    } finally { loading = false; }
   }
   function prepare() { rows = res.rows.map((r, i) => ({ rank: i + 1, score: r[0], net: r[1], pf: r[2], trades: r[3], dda: r[4], ddr: r[5], bal: r[6], v: r[7], f: r[8] })); }
 
@@ -217,7 +304,7 @@ async function viewOptimization(v, id) {
     if (meta.status === "error") top.append(h("div", { class: "card bad" }, "Error: " + meta.error));
     if (running()) {
       const total = p && p.total ? p.total : 0, done = p ? p.done : 0, frac = total ? Math.min(1, done / total) : 0, el = p && p.elapsed_s;
-      const genetic = meta.algo === "genetic";
+      const genetic = meta.algo !== "grid"; // every searching algorithm can stop early, so the pass count is an upper bound
       // pass rate over the last ~30 s (falls back to the average since the start)
       const now = Date.now(); samples.push([now, done]); while (samples.length > 60) samples.shift();
       const old = samples.find(s => now - s[0] <= 30000) || samples[0];
@@ -240,12 +327,21 @@ async function viewOptimization(v, id) {
       const sub = !p || el == null ? "" : done + " of " + (genetic ? "up to " : "") + total + " passes" + (p.generation != null ? "  |  generation " + p.generation : "") + (p.best != null ? "  |  best score " + num(p.best, 3) : "")
         + (el ? "  |  " + fmtSecs(el) + " elapsed" : "") + (rate ? "  |  " + num(rate, 2) + " passes/s" : "")
         + (clock ? "  |  done around " + clock : "") + (genetic && left != null ? "  |  stops earlier when there is no improvement" : "") + (fwdLeft ? "  |  includes ~" + fmtSecs(fwdLeft) + " forward test" : "");
-      top.append(h("div", { class: "card etacard" }, h("div", { class: "etahead" }, head), h("div", { class: "progress" }, h("div", { style: "width:" + (frac * 100) + "%" })), h("div", { class: "small muted", style: "margin-top:6px" }, sub)));    } else if (meta.status === "done" || meta.status === "cancelled") {
+      const eta = h("div", { class: "card etacard" }, h("div", { class: "etahead" }, head), h("div", { class: "progress" }, h("div", { style: "width:" + (frac * 100) + "%" })), h("div", { class: "small muted", style: "margin-top:6px" }, sub));
+      if (p && p.threads_max) {
+        if (!thrCtl) {
+          thrCtl = threadPicker(p.threads_max, p.threads, v => { clearTimeout(thrTimer); thrTimer = setTimeout(() => api("optimizations/" + id + "/threads", { body: { threads: v } }).catch(e => toast(e.message, true)), 250); }, { running: true });
+        }
+        if (!thrCtl.active) thrCtl.setValue(p.threads);        eta.append(h("div", { class: "thrrow" }, h("div", { class: "cpuhead2" }, icon("zap"), h("b", {}, "Parallel passes"), h("span", { class: "muted small" }, "change it while it runs - workers pause after their current pass")), thrCtl.el));
+      }
+      top.append(eta);
+    } else if (meta.status === "done" || meta.status === "cancelled") {
       const wall = meta.wall_s || 0;
       top.append(h("div", { class: "kpis" },
         kpi("Passes", num(s.passes, 0), (s.failed ? s.failed + " failed" : "") + (s.rejected ? (s.failed ? ", " : "") + s.rejected + " rejected (min trades)" : "")),
         kpi("Best score", s.best_score != null ? num(s.best_score, 3) : "-", meta.request.opt.criterion), kpi("Best net profit", s.best_net_profit != null ? money(s.best_net_profit) : "-", ""),
         kpi("Wall time", fmtSecs(wall), num(s.passes / Math.max(wall, 1e-9), 2) + " passes/s"), kpi("Search", meta.algo, bigNum(meta.space.size) + " combinations"),
+        meta.request.opt.mask ? kpi("Masked", meta.request.opt.mask.split(";").length + " period(s)", meta.request.opt.mask.replace(/;/g, "  ")) : null,
         meta.status === "cancelled" ? kpi("Stopped", "early", "partial results") : null));
       for (const w of s.warnings || []) top.append(h("div", { class: "card warn small" }, w));
       if (res && res.failed) top.append(h("div", { class: "card warn small" }, res.failed + " passes failed. First error: " + res.first_error));
@@ -289,7 +385,8 @@ async function viewOptimization(v, id) {
     });
     liveChart.set([{ type: "markers", scatter: true, pts }]);
     if (liveProg) liveProg.set(livePts);
-    liveNote.textContent = livePts.length + " of " + p.done + " finished passes plotted" + (p.done > livePts.length ? " (" + (p.done - livePts.length) + " rejected by 'min trades' or failed are not shown)" : "") + ". Orange: the 10 best so far. Up and to the left is better. Hover a dot for its parameters.";
+    const doneN = Math.max(p.done, livePts.length); // a plotted pass is a finished pass, even if the counter lags behind
+    liveNote.textContent = livePts.length + " of " + doneN + " finished passes plotted" + (doneN > livePts.length ? " (" + (doneN - livePts.length) + " rejected by 'min trades' or failed are not shown)" : "") + ". Orange: the 10 best so far. Up and to the left is better. Hover a dot for its parameters.";
   }
 
   // ---- actions on a result row
@@ -303,8 +400,8 @@ async function viewOptimization(v, id) {
   const runRow = (row, forward) => guard(async () => { const r = await api("runs", { body: requestFor(row, forward) }); location.hash = "#run/" + r.id; });
   const loadRow = row => () => {
     loadRequestIntoForm(requestFor(row, false));
-    form.ranges = {}; for (const r of meta.request.ranges) form.ranges[r.name] = { on: true, start: String(r.start), step: String(r.step), stop: String(r.stop) };
-    form.opt = Object.assign(defaultOpt(), meta.request.opt); saveForm(); location.hash = "#new/optimize";
+    form.ranges = {}; for (const r of meta.request.ranges) form.ranges[r.name] = r.values ? { on: true, start: "", step: "", stop: "" } : { on: true, start: String(r.start), step: String(r.step), stop: String(r.stop) };
+    form.opt = Object.assign(defaultOpt(), meta.request.opt); saveForm(); location.hash = "#new";
   };
   async function setBlob(rank) { const r = await fetch("/api/optimizations/" + id + "/set?rank=" + rank); if (!r.ok) throw new Error((await r.json()).error); return r.blob(); }
   const downloadSet = rank => guard(async () => { const b = await setBlob(rank); h("a", { href: URL.createObjectURL(b), download: meta.name.replace(/[^\w.-]+/g, "_") + "-" + rank + ".set" }).click(); });

@@ -68,6 +68,8 @@ export async function seedExample(server, load) {
   const j = server.json("GET", "/api/jobs/" + job.job);
   if (j.status !== "done") throw new Error("example dataset: " + (j.message || j.status));
   server.request("POST", "/api/files/config/example_eurusd.cfg", await load("broker.cfg"));
+  // the dataset remembers its broker config; Research picks it up when the dataset is selected
+  server.json("POST", "/api/datasets/example_eurusd/settings", { config: "example_eurusd.cfg" });
   for (const s of ["sma_crossover", "rsi_reversion"]) {
     server.request("POST", `/api/files/set/${s}.set`, await load(`sets/${s}.set`));
     server.request("POST", `/api/files/set/${s}_opt.set`, await load(`sets/${s}_opt.set`));
