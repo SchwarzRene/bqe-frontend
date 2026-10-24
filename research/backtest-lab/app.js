@@ -13,6 +13,93 @@ function h(tag, attrs, ...kids) {
   for (const c of kids.flat()) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(c));
   return e;
 }
+// ---------------------------------------------------------------- icons (inline SVG, stroke = currentColor, so they follow the text color)
+const ICONS = {
+  database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+  code: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+  flask: '<path d="M9 3h6M10 3v6L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9V3M7.5 15h9"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/>',
+  sliders: '<path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5"/>',
+  wallet: '<path d="M3 7a2 2 0 0 1 2-2h13v4M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14.5" r="1"/>',
+  zap: '<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/>',
+  tag: '<path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/>',
+  gauge: '<path d="M4.5 18a9 9 0 1 1 15 0M12 14l4-4"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  play: '<path d="M7 4l13 8-13 8V4z"/>',
+  rocket: '<path d="M5 15c-1 1-2 4-2 6 2 0 5-1 6-2M14 4c4-1 6-1 6-1s0 2-1 6l-6 6-5-5 6-6z"/><circle cx="15" cy="9" r="1.2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  up: '<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>',
+  down: '<path d="M3 7l6 6 4-4 8 8M15 17h6v-6"/>',
+  cog: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/>',
+  download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+};
+function icon(name, cls) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "ic" + (cls ? " " + cls : "")); s.setAttribute("aria-hidden", "true");
+  s.innerHTML = ICONS[name] || "";
+  return s;
+}
+// a button / tab with an icon and a text span that can be changed later (`.t`)
+const labeled = (name, text) => [icon(name), h("span", { class: "t" }, text)];
+// big tab tile: round icon badge, title (`.t`, updated later for counts) and a one-line description
+// header of a section card: icon badge, title and a short hint
+const sechead = (name, title, sub) => h("div", { class: "sechead" }, h("span", { class: "secicon" }, icon(name)), h("div", {}, h("b", {}, title), sub ? h("small", {}, sub) : null));
+const lab = (name, text) => h("span", { class: "lab" }, icon(name), text);
+const bigLabeled = (name, text, sub) => [h("span", { class: "bticon" }, icon(name)), h("span", { class: "btext" }, h("span", { class: "t" }, text), h("small", { class: "sub" }, sub))];
+
+// ---------------------------------------------------------------- date picker
+// A calendar input. The stores keep "YYYY.MM.DD" (what the server parses), the input shows / picks YYYY-MM-DD.
+// Limited to the days the selected dataset has (applyDateLimits); the x button clears it (= start / end of the data).
+const DATE_INPUTS = [];
+function dateInput(store, key, opts) {
+  opts = opts || {};
+  const iso = s => { const m = /^(\d{4})\.(\d{2})\.(\d{2})/.exec(s || ""); return m ? m[1] + "-" + m[2] + "-" + m[3] : ""; };
+  const inp = h("input", { type: "date", class: "dateinp", title: opts.title || "" });
+  inp.value = iso(store[key]);
+  const set = v => { store[key] = v; saveForm(); if (opts.onChange) opts.onChange(); };
+  inp.addEventListener("input", () => set(inp.value ? inp.value.replace(/-/g, ".") : ""));
+  const clear = h("button", { type: "button", class: "dateclear", title: "clear" + (opts.empty ? " (" + opts.empty + ")" : ""), onclick: () => { inp.value = ""; set(""); } }, icon("x"));
+  DATE_INPUTS.push(inp);
+  return { input: inp, el: h("span", { class: "datebox" }, inp, clear) };
+}
+function applyDateLimits(d) {
+  const lim = s => (s || "").slice(0, 10).replace(/\./g, "-");
+  for (const i of DATE_INPUTS) {
+    if (!i.isConnected) continue;
+    if (!d) { i.removeAttribute("min"); i.removeAttribute("max"); continue; }
+    i.min = lim(d.first); i.max = lim(d.last);
+    // a date outside the data (e.g. the built-in default From) is pulled in: before the data -> first day, after it -> empty (= start / end of the data)
+    if (i.value && (i.value < i.min || i.value > i.max)) { i.value = i.value < i.min ? i.min : ""; i.dispatchEvent(new Event("input")); }
+  }
+}
+// Export the current parameters (with the ticked search ranges) as an MT5 .set file: UTF-16LE with BOM and CRLF, like MT5 writes them.
+// Chrome / Edge let you pick the folder and name; other browsers just download it.
+async function exportSetFile() {
+  const text = paramsAsSetText().replace(/\r?\n/g, "\r\n");
+  const bytes = new Uint8Array(2 + text.length * 2); bytes[0] = 0xFF; bytes[1] = 0xFE;
+  for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); bytes[2 + i * 2] = c & 255; bytes[3 + i * 2] = c >> 8; }
+  const blob = new Blob([bytes], { type: "application/octet-stream" });
+  const name = ((form.setFile || form.strategy || "parameters").replace(/\.set$/i, "").replace(/[^\w.-]+/g, "_") || "parameters") + ".set";
+  if (window.showSaveFilePicker) {
+    try {
+      const fh = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "MT5 settings", accept: { "application/octet-stream": [".set"] } }] });
+      const w = await fh.createWritable(); await w.write(blob); await w.close();
+      toast("Exported " + fh.name); return;
+    } catch (e) { if (e && e.name === "AbortError") return; /* no permission / not supported here: fall back to a normal download */ }
+  }
+  const a = h("a", { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove();
+  toast("Downloaded " + name + " (your browser puts it in its download folder)");
+}
 function toast(msg, err) {
   const t = h("div", { class: "toast" + (err ? " err" : "") }, msg);
   $("#toasts").append(t); setTimeout(() => t.remove(), err ? 9000 : 3500);
@@ -55,7 +142,7 @@ function every(fn, ms) { const t = setInterval(guard(fn), ms); timers.push(t); r
 function clearTimers() { timers.forEach(clearInterval); timers = []; }
 
 // ---------------------------------------------------------------- persisted form state
-const defaultForm = () => ({ name: "", dataset: "", symbol: "", configFile: "", setFile: "", strategy: "", from: "2026.01.01", to: "", warmup: "", config: {}, extra: {}, params: {}, ranges: {}, opt: {} });
+const defaultForm = () => ({ name: "", dataset: "", symbol: "", configFile: "", setFile: "", strategy: "", from: "2026.01.01", to: "", warmup: "", timeframe: "", config: {}, extra: {}, params: {}, ranges: {}, opt: {} });
 let form = defaultForm();
 try { const s = JSON.parse(localStorage.getItem("mt5bt.form") || "null"); if (s) form = Object.assign(defaultForm(), s); } catch (e) { /* ignore */ }
 function saveForm() { try { localStorage.setItem("mt5bt.form", JSON.stringify(form)); } catch (e) { /* ignore */ } }
@@ -73,6 +160,12 @@ function ensureDefaults() {
   if (d && !Object.keys(form.params).length) for (const p of d.params) form.params[p.key] = p.default;
 }
 
+// ---------------------------------------------------------------- History: switch between the lists
+function historyBar(active) {
+  const items = [["runs", "Run history", "single forward passes", "list"], ["optimizations", "Optimizer history", "parameter searches", "target"], ["sweeps", "Sweeps", "parameter grids", "grid"]];
+  return h("nav", { class: "histbar", "aria-label": "history" }, ...items.map(([k, l, s, ic]) =>
+    h("a", { href: "#" + k, class: k === active ? "active" : "" }, icon(ic, "big"), h("b", {}, l), h("small", {}, s))));
+}
 // ---------------------------------------------------------------- router
 const views = {
   data: viewData, new: viewNew, runs: viewRuns, sweeps: viewSweeps,
@@ -82,8 +175,8 @@ const views = {
 async function route() {
   clearTimers();
   const [name, arg] = (location.hash.slice(1) || "runs").split("/");
-  const tab = { run: "runs", compare: "runs", sweep: "sweeps", optimization: "optimizations" }[name] || name;
-  document.querySelectorAll("header [data-tab]").forEach(a => a.classList.toggle("active", a.dataset.tab === tab));
+  const tab = { run: "history", runs: "history", compare: "history", sweep: "history", sweeps: "history", optimization: "history", optimizations: "history", new: "research" }[name] || name;
+  document.querySelectorAll(".hub [data-tab]").forEach(a => a.classList.toggle("active", a.dataset.tab === tab));
   const v = $("#view"); v.innerHTML = ""; v.className = "";
   const fn = views[name] || viewRuns;
   try { await fn(v, arg); } catch (e) { v.append(h("div", { class: "card bad" }, "Error: " + e.message)); console.error(e); }
@@ -93,8 +186,9 @@ window.addEventListener("hashchange", route);
 async function boot() {
   schema = await (await fetch("/api/schema")).json();
   ensureDefaults();
-  try { const i = await api("info"); $("#status").textContent = "workspace: " + i.workspace + "  |  " + i.threads + " parallel passes"; } catch (e) { /* ignore */ }
-  route();
+  try { const i = await api("info"); window.CORES = i.threads; $("#status").textContent = "workspace: " + i.workspace + "  |  " + i.threads + " parallel passes"; } catch (e) { /* ignore */ }
+  await route();
+  if (window.hideSplash) window.hideSplash(); // the first page is on screen: the loading splash may leave (after its minimum time)
 }
 
 // ---------------------------------------------------------------- DATA view
@@ -316,9 +410,16 @@ async function viewDataDetail(v, name) {
   const units = { "latency.feed_ms": "ms", "latency.open_ms": "ms", "latency.close_ms": "ms", "latency.modify_ms": "ms", "latency.jitter_ms": "ms", "costs.slippage_points": "pts", "costs.deviation_points": "pts", "costs.commission_per_lot": "/ lot / side", "account.initial_balance": "USD", "symbol.stops_level": "pts", "symbol.rollover_offset_min": "min" };
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], hm = m => pad2(Math.floor(m / 60)) + ":" + pad2(m % 60);
 
+  // values edited by hand on this page: saved with the dataset (the symbol / config files stay untouched) and applied in Research
+  const ov = Object.assign({}, d.overrides || {});
+  let ovTimer = null;
+  const saveOvNow = async () => { clearTimeout(ovTimer); await api("datasets/" + encodeURIComponent(d.name) + "/settings", { body: { overrides: ov } }); d.overrides = Object.assign({}, ov); };
+  const saveOv = () => { clearTimeout(ovTimer); ovTimer = setTimeout(guard(async () => { await saveOvNow(); toast("Saved - Research uses the edited values"); }), 600); };
   function settingsCard(kind, title, help, groups) {
     const card = h("div", { class: "card" }), body = h("div");
     const cur = d[kind] || "";
+    const keysHere = schema.config.filter(x => groups.includes(x.group)).flatMap(g => g.fields.map(f => f.key));
+    const resetBtn = h("button", { title: "forget the values edited here and use the file again", onclick: guard(async () => { for (const k of keysHere) delete ov[k]; await saveOvNow(); toast("Edits removed"); show(sel.value).catch(() => {}); }) }, "Reset edits");
     const sel = h("select", {}, h("option", { value: "" }, "(none)"), ...files[kind].map(n => h("option", { value: n, selected: n === cur }, n)));
     const up = h("input", { type: "file", accept: kind === "symbol" ? ".json" : ".cfg,.ini,.txt", style: "display:none", onchange: guard(async () => {
       const f = up.files[0]; if (!f) return;
@@ -326,19 +427,28 @@ async function viewDataDetail(v, name) {
       await api("datasets/" + encodeURIComponent(d.name) + "/settings", { body: { [kind]: f.name } }); toast("Saved " + f.name); route();
     }) });
     sel.onchange = guard(async () => { await api("datasets/" + encodeURIComponent(d.name) + "/settings", { body: { [kind]: sel.value } }); toast(sel.value ? "Using " + sel.value : "Cleared"); show(sel.value); });
-    card.append(h("div", { class: "row" }, h("h2", { style: "margin:0" }, title), h("span", { class: "spacer" }), sel, h("button", { onclick: () => up.click() }, "Upload"), up),
-      h("div", { class: "muted small", style: "margin:6px 0 10px" }, help), body);
+    card.append(h("div", { class: "row" }, h("h2", { style: "margin:0" }, title), h("span", { class: "spacer" }), sel, h("button", { onclick: () => up.click() }, "Upload"), up, resetBtn),
+      body);
     async function show(name) {
       body.innerHTML = "";
-      if (!name) { body.append(h("div", { class: "muted small" }, "Nothing selected - 'New run' then uses the built-in defaults for this part.")); return; }
-      const p = await api("files/" + kind + "/" + encodeURIComponent(name) + "/parsed");
-      const e = p.entries;
+      const p = name ? await api("files/" + kind + "/" + encodeURIComponent(name) + "/parsed") : null;
+      const e = p ? p.entries : {};
+      const store = {};
       for (const g of schema.config.filter(x => groups.includes(x.group))) {
-        const rows = g.fields.filter(f => e[f.key] !== undefined);
-        if (!rows.length) continue;
-        body.append(h("h3", {}, g.group.replace(" (ms)", "")), h("div", { class: "tiles" }, ...rows.map(f => tile(f.label, e[f.key], units[f.key], String(e[f.key]) !== f.default))));
+        const fl = h("div", { class: "fields" });
+        for (const f of g.fields) {
+          const fileVal = e[f.key] !== undefined ? String(e[f.key]) : String(f.default);
+          store[f.key] = ov[f.key] !== undefined ? ov[f.key] : fileVal;
+          const lbl = fieldInput(Object.assign({}, f, { label: f.label + (units[f.key] ? " (" + units[f.key] + ")" : "") }), store, () => {
+            if (String(store[f.key]) === fileVal) delete ov[f.key]; else ov[f.key] = String(store[f.key]);
+            lbl.classList.toggle("overridden", ov[f.key] !== undefined); saveOv();
+          });
+          lbl.classList.toggle("overridden", ov[f.key] !== undefined);
+          fl.append(lbl);
+        }
+        body.append(h("h3", {}, g.group.replace(" (ms)", "")), fl);
       }
-      if (kind === "symbol" && p.sessions) body.append(h("h3", {}, "Trade sessions (server time)"), sessionsViz(p.sessions));
+      if (kind === "symbol" && p && p.sessions) body.append(h("h3", {}, "Trade sessions (server time)"), sessionsViz(p.sessions));
       const known = new Set(schema.config.flatMap(g => g.fields.map(f => f.key)));
       const rest = Object.entries(e).filter(([k]) => !known.has(k));
       if (rest.length) body.append(h("details", { style: "margin-top:8px" }, h("summary", { class: "small" }, rest.length + " more values in the file"), h("div", { class: "small muted" }, rest.map(([k, val]) => k + " = " + val).join("   "))));
@@ -350,12 +460,12 @@ async function viewDataDetail(v, name) {
   const addCard = h("div", { class: "card addcard" }, h("h2", {}, "Add data"), importForm("append", d.name, () => route()),
     h("h2", { style: "margin-top:16px" }, "Data quality"), qualHost);
   colAdd.append(addCard);
-  col2.append(settingsCard("symbol", "Symbol specification", "MT5 symbol export (*_config.json).", ["Symbol"]));
-  col3.append(settingsCard("config", "Broker & account", "Account, commission, latency and tester (.cfg).", ["Account", "Costs", "Latency (ms)", "Tester"]));
+  col2.append(settingsCard("symbol", "Symbol specification", "", ["Symbol"]));
+  col3.append(settingsCard("config", "Broker & account", "", ["Account", "Costs", "Latency (ms)", "Tester"]));
   const fit = h("div", { class: "datafit" }, col1, colAdd, col2, col3);
   v.append(fit);
   loadDatasetStats(d, priceHost, tilesHost, qualHost, heatHost);
-  const resize = () => { if (!fit.isConnected) { window.removeEventListener("resize", resize); return; } if (innerWidth > 1100) fit.style.height = Math.max(520, innerHeight - fit.getBoundingClientRect().top - 16) + "px"; else fit.style.height = ""; };
+  const resize = () => { if (!fit.isConnected) { window.removeEventListener("resize", resize); return; } if (innerWidth > 1100) fit.style.height = Math.max(520, v.getBoundingClientRect().bottom - fit.getBoundingClientRect().top - (parseFloat(getComputedStyle(v).paddingBottom) || 0) - 2) + "px"; else fit.style.height = ""; };
   window.addEventListener("resize", resize); resize(); setTimeout(resize, 400);
 }
 
@@ -526,7 +636,7 @@ function fieldInput(f, store, onChange) {
 
 async function viewNew(v, arg) {
   const [ds, files] = await Promise.all([api("datasets"), api("files")]);
-  v.append(h("h1", {}, "New run"));
+  v.append(h("h1", { class: "withicon" }, icon("flask"), "Research"));
   if (!ds.length) v.append(h("div", { class: "card warn" }, "No tick dataset yet - add one under Data & files first."));
   const sel = (list, cur, none) => h("select", {}, h("option", { value: "" }, none), ...list.map(n => h("option", { value: n, selected: n === cur }, n)));
 
@@ -535,7 +645,7 @@ async function viewNew(v, arg) {
   if (!form.dataset && ds.length) { form.dataset = ds[0].name; dsSel.value = form.dataset; }
   dsSel.onchange = () => { form.dataset = dsSel.value; saveForm(); showRange(); applyDatasetSettings(); };
   const rangeInfo = h("span", { class: "small muted" });
-  function showRange() { const d = ds.find(x => x.name === form.dataset); rangeInfo.textContent = d && !d.missing ? "data: " + d.first.slice(0, 10).replace(/-/g, ".") + " .. " + d.last.slice(0, 10).replace(/-/g, ".") : ""; }
+  function showRange() { const d = ds.find(x => x.name === form.dataset); applyDateLimits(d && !d.missing ? d : null); updateSetupInfo(); rangeInfo.textContent = d && !d.missing ? "data: " + d.first.slice(0, 10).replace(/-/g, ".") + " .. " + d.last.slice(0, 10).replace(/-/g, ".") : ""; }
   const bind = (key, inp) => { inp.value = form[key] || ""; inp.addEventListener("input", () => { form[key] = inp.value; saveForm(); }); return inp; };
   const strategySel = h("select", {}, ...schema.strategies.map(s => h("option", { value: s.name, selected: s.name === form.strategy }, s.label)));
   const paramsBox = h("div"), cfgBox = h("div");
@@ -571,7 +681,7 @@ async function viewNew(v, arg) {
     for (const [k, val] of Object.entries(p.entries)) { const c = canonicalParam(form.strategy, k); if (c) form.params[c] = val; else skipped++; }
     const nr = applySetRanges(p.ranges);
     saveForm(); renderParams(); optPanel.render();
-    toast("Loaded parameters" + (nr ? ", " + nr + " with a search range (see the Optimize tab)" : "") + (skipped ? " (" + skipped + " keys do not belong to this strategy and were ignored)" : ""));
+    toast("Loaded parameters" + (nr ? ", " + nr + " with a search range (ticked under the parameters)" : "") + (skipped ? " (" + skipped + " keys do not belong to this strategy and were ignored)" : ""));
   });
   strategySel.onchange = () => {
     form.strategy = strategySel.value; form.params = {}; form.ranges = {}; const d = strategyDef(form.strategy);
@@ -597,11 +707,16 @@ async function viewNew(v, arg) {
   }
 
   // --- settings are split into tabs; only what differs from the defaults is surfaced as chips
-  const TABS = [["strategy", "Strategy", null], ["costs", "Account & costs", ["Account", "Costs"]], ["latency", "Latency", ["Latency (ms)"]], ["symbol", "Symbol", ["Symbol"]], ["tester", "Tester", ["Tester"]], ["sweep", "Sweep", null], ["optimize", "Optimize", null]];
+  const TABS = [["strategy", "Strategy", null], ["optimize", "Optimizer", null], ["costs", "Account & costs", ["Account", "Costs"]], ["latency", "Latency", ["Latency (ms)"]], ["symbol", "Symbol", ["Symbol"]], ["tester", "Tester", ["Tester"]], ["sweep", "Sweep", null]];
   const groupTab = {}; for (const [t, , gs] of TABS) for (const g of gs || []) groupTab[g] = t;
   const keyTab = {}; for (const g of schema.config) for (const f of g.fields) keyTab[f.key] = groupTab[g.group];
   const panels = Object.fromEntries(TABS.map(([t]) => [t, h("div")]));
   const tabBtns = {}, tabBody = h("div", { class: "tabbody" }), chipsBox = h("div", { class: "chips" });
+  // two levels: Strategy (parameters + what to search) | Optimizer (search settings) | Extra, and Extra holds the rest (account & costs, latency, symbol, tester, sweep)
+  const EXTRA = ["costs", "latency", "symbol", "tester", "sweep"];
+  let lastExtra = "costs";
+  const extraBtn = h("button", { class: "bigtab", onclick: () => showTab(lastExtra) }, ...bigLabeled("layers", "Extra", "costs, latency, symbol, tester, sweep"));
+  const subTabs = h("div", { class: "tabs sub" });
   const searchIn = h("input", { placeholder: "filter fields ...", style: "width:180px" });
   const onlyChanged = h("input", { type: "checkbox" });
   let activeTab = "strategy";
@@ -613,10 +728,13 @@ async function viewNew(v, arg) {
     for (const [k, val] of Object.entries(form.params)) { const def = d && d.params.find(p => p.key === k); if (!def || String(def.default) !== String(val)) out.push({ label: k, val, tab: "strategy" }); }
     return out;
   }
+  const optTabLabel = n => { tabBtns.optimize.querySelector(".t").textContent = "Optimizer" + (n ? "  (" + n + " ticked)" : ""); };
   function refresh() {
     const ch = changedList(), per = {};
     for (const c of ch) per[c.tab] = (per[c.tab] || 0) + 1;
-    for (const [t, l] of TABS) tabBtns[t].textContent = l + (per[t] ? "  (" + per[t] + ")" : "");
+    for (const [t, l] of TABS) tabBtns[t].querySelector(".t").textContent = l + (per[t] ? "  (" + per[t] + ")" : "");
+    try { optTabLabel(optPanel.count()); } catch (e) { /* the panel does not exist yet during start-up */ }
+    const nExtra = EXTRA.reduce((s, t) => s + (per[t] || 0), 0); extraBtn.querySelector(".t").textContent = "Extra" + (nExtra ? "  (" + nExtra + ")" : "");
     chipsBox.innerHTML = "";
     chipsBox.append(h("span", { class: "muted small" }, ch.length ? "Differs from defaults (" + ch.length + "):" : "Everything is at its default."));
     for (const c of ch.slice(0, 40)) chipsBox.append(h("button", { class: "chip", title: "open this setting", onclick: () => { searchIn.value = c.label; showTab(c.tab); } }, c.label + " = " + c.val));
@@ -625,13 +743,24 @@ async function viewNew(v, arg) {
   function applyFilter() {
     const q = searchIn.value.trim().toLowerCase();
     tabBody.classList.toggle("only-changed", onlyChanged.checked);
+    let groupShown = null;
+    tabBody.querySelectorAll("tr.prow, tr.grouprow").forEach(tr => {
+      if (tr.classList.contains("grouprow")) { if (groupShown) groupShown.style.display = groupShown._any ? "" : "none"; groupShown = tr; tr._any = false; return; }
+      const show = (!q || tr.dataset.key.toLowerCase().includes(q)) && (!onlyChanged.checked || tr.classList.contains("changed"));
+      tr.style.display = show ? "" : "none"; if (show && groupShown) groupShown._any = true;
+    });
+    if (groupShown) groupShown.style.display = groupShown._any ? "" : "none";
     tabBody.querySelectorAll(".fields label.f").forEach(l => { l.style.display = !q || l.textContent.toLowerCase().includes(q) || (l.title || "").toLowerCase().includes(q) ? "" : "none"; });
   }
   function showTab(t) {
-    activeTab = t; tabBody.innerHTML = ""; if (t === "optimize") optPanel.render(); tabBody.append(panels[t]);
-    runBtn.style.display = t === "optimize" ? "none" : ""; // the Optimize tab has its own Run optimization button
+
+    activeTab = t; tabBody.innerHTML = ""; if (t === "strategy" || t === "optimize") optPanel.render();
+    const inExtra = EXTRA.includes(t); if (inExtra) { lastExtra = t; subTabs.innerHTML = ""; for (const k of EXTRA) subTabs.append(tabBtns[k]); tabBody.append(subTabs); }
+    tabBody.append(panels[t]);
+    extraBtn.classList.toggle("active", inExtra);
     for (const [k] of TABS) tabBtns[k].classList.toggle("active", k === t);
     applyFilter();
+    const curDs = ds.find(x => x.name === form.dataset); applyDateLimits(curDs && !curDs.missing ? curDs : null); // the date inputs of this tab are only attached now
   }
   searchIn.addEventListener("input", applyFilter); onlyChanged.addEventListener("change", applyFilter);
 
@@ -642,50 +771,61 @@ async function viewNew(v, arg) {
       for (const g of schema.config.filter(x => gs.includes(x.group))) {
         const fl = h("div", { class: "fields" });
         for (const f of g.fields) fl.append(fieldInput(f, form.config, refresh));
-        panels[t].append(gs.length > 1 ? h("h3", {}, g.group) : null, fl);
+        if (gs.length > 1) panels[t].append(h("h3", {}, g.group)); // (appending null would print the word "null")
+        panels[t].append(fl);
       }
     }
     const ex = Object.keys(form.extra);
     if (ex.length) panels.symbol.append(h("h3", {}, "Other keys from loaded files (passed through)"), h("div", { class: "small muted" }, ex.map(k => k + "=" + form.extra[k]).join("   ")));
     refresh(); applyFilter();
   }
-  function renderParams() {
-    paramsBox.innerHTML = "";
-    const d = strategyDef(form.strategy);
-    const keys = [...new Set([...(d ? d.params.map(p => p.key) : []), ...Object.keys(form.params)])];
-    const groups = { "General": [], "Long side": [], "Short side": [] };
-    for (const k of keys) groups[/^long/i.test(k) ? "Long side" : /^short/i.test(k) ? "Short side" : "General"].push(k);
-    for (const [gname, ks] of Object.entries(groups)) {
-      if (!ks.length) continue;
-      const fl = h("div", { class: "fields" });
-      for (const k of ks) { const def = d && d.params.find(p => p.key === k); fl.append(fieldInput({ key: k, label: k, type: "text", default: def ? def.default : "", help: "" }, form.params, refresh)); }
-      paramsBox.append(h("h3", {}, gname), fl);
-    }
-    const addK = h("input", { placeholder: "extra parameter name", style: "width:180px" }), addV = h("input", { placeholder: "value", style: "width:100px" });
-    paramsBox.append(h("div", { class: "row", style: "margin-top:10px" }, addK, addV, h("button", { onclick: () => { if (addK.value) { form.params[addK.value] = addV.value; saveForm(); renderParams(); } } }, "add parameter")));
-    refresh(); applyFilter();
-  }
+  function renderParams() { optPanel.render(); refresh(); applyFilter(); } // the parameter table lives in the search panel
 
   // the symbol specification / broker config chosen on the dataset page are applied when the dataset is picked
-  function applyDatasetSettings() {
+  const setupInfo = h("div", { class: "setupinfo" });
+  function updateSetupInfo() {
+    setupInfo.replaceChildren(icon("folder"), "Symbol specification:", h("b", {}, form.symbol || "none"), h("span", { class: "sep" }, "|"), "Broker config:", h("b", {}, form.configFile || "none"), h("span", { class: "sep" }, "|"), (() => { const d = ds.find(x => x.name === form.dataset); const c = d && d.overrides ? Object.keys(d.overrides).length : 0; return c ? c + " value" + (c === 1 ? "" : "s") + " edited" : "no edits"; })(), h("span", { class: "sep" }, "|"), "set per dataset under",
+      h("a", { href: "#data/" + encodeURIComponent(form.dataset || "") }, "Data & files"));
+  }
+  // values edited by hand on the Data & files page (saved with the dataset) go on top of the symbol / config files
+  function applyDsOverrides() {
+    const d = ds.find(x => x.name === form.dataset); const o = d && d.overrides;
+    if (o && Object.keys(o).length) applyEntries(o);
+    updateSetupInfo();
+  }
+  async function applyDatasetSettings() {
     const d = ds.find(x => x.name === form.dataset); if (!d) return;
-    if (d.symbol && files.symbol.includes(d.symbol) && form.symbol !== d.symbol) { symSel.value = d.symbol; symSel.onchange(); }
-    if (d.config && files.config.includes(d.config) && form.configFile !== d.config) { cfgSel.value = d.config; cfgSel.onchange(); }
+    const jobs = [];
+    if (d.symbol && files.symbol.includes(d.symbol) && form.symbol !== d.symbol) { symSel.value = d.symbol; jobs.push(symSel.onchange()); }
+    if (d.config && files.config.includes(d.config) && form.configFile !== d.config) { cfgSel.value = d.config; jobs.push(cfgSel.onchange()); }
+    await Promise.all(jobs);
+    applyDsOverrides();
   }
   const nameIn = bind("name", h("input", { placeholder: "optional label", style: "width:220px" }));
-  const fromIn = bind("from", h("input", { placeholder: "2026.01.01", style: "width:120px" }));
-  const toIn = bind("to", h("input", { placeholder: "(end of data)", style: "width:120px" }));
+  const fromDate = dateInput(form, "from", { title: "first day of trading (empty = start of the data)", empty: "start of the data" });
+  const toDate = dateInput(form, "to", { title: "last day (empty = end of the data)", empty: "end of the data" });
   const warmIn = bind("warmup", h("input", { placeholder: "auto", style: "width:70px" }));
+  // chart timeframe of the run (MQL5 PERIOD_CURRENT): one fixed list for runs, sweeps and the optimizer; overrides the strategy's own ChartTimeframe / Timeframe parameter
+  const TIMEFRAMES = ["M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20", "M30", "H1", "H2", "H3", "H4", "H6", "H8", "H12", "D1"];
+  const tfIn = bind("timeframe", h("select", { title: "Chart timeframe of this run (like the chart period in the MT5 tester). Applies to runs, sweeps and optimizations and overrides the strategy's own ChartTimeframe / Timeframe parameter." }, h("option", { value: "" }, "strategy default"), ...TIMEFRAMES.map(x => h("option", { value: x }, x))));
 
   function buildRequest() {
     const config = Object.assign({}, form.extra, form.config);
-    return { name: form.name || autoName(), dataset: form.dataset, symbol: form.symbol, strategy: form.strategy, config, params: Object.assign({}, form.params), from: form.from, to: form.to, warmup_days: form.warmup ? +form.warmup : null };
+    return { name: form.name || autoName(), dataset: form.dataset, symbol: form.symbol, strategy: form.strategy, config, params: Object.assign({}, form.params), from: form.from, to: form.to, timeframe: form.timeframe || "", warmup_days: form.warmup ? +form.warmup : null, search_ui: { ranges: JSON.parse(JSON.stringify(form.ranges || {})), opt: Object.assign({}, form.opt || {}) } };
   }
-  const optPanel = buildOptimizePanel(buildRequest, { files: files.set, setSel });
-  const runBtn = h("button", { class: "primary", onclick: guard(async () => {
+  // one normal forward pass with the values of the parameter table (what is ticked for search is ignored)
+  const runOnce = guard(async () => {
     if (!form.dataset) throw new Error("choose a dataset");
     const r = await api("runs", { body: buildRequest() }); location.hash = "#run/" + r.id;
-  }) }, "Run forward pass");
+  });
+  const optPanel = buildOptimizePanel(buildRequest, { files: files.set, setSel, onUpdate: n => { runBtn.replaceChildren(...labeled(n ? "rocket" : "play", n ? "Run optimization" : "Run forward pass")); runOnceBtn.style.display = n ? "" : "none"; optTabLabel(n); }, onParamChange: () => refresh() });
+  const runBtn = h("button", { class: "primary", onclick: guard(async () => {
+    if (!form.dataset) throw new Error("choose a dataset");
+    if (optPanel.count()) return optPanel.start(); // parameters ticked for search: this is an optimization
+    return runOnce();
+  }) }, ...labeled("play", "Run forward pass"));
+  // next to "Run optimization": the same values as one plain forward pass (hidden while nothing is ticked, then the main button does exactly that)
+  const runOnceBtn = h("button", { title: "one normal forward pass with the values in the Value column (no search)", style: "display:none", onclick: runOnce }, ...labeled("play", "Run forward pass"));
 
   function cfgToText() {
     const bySec = {};
@@ -733,25 +873,35 @@ async function viewNew(v, arg) {
         const r = await api("sweeps", { body }); location.hash = "#sweep/" + r.id;
       }) }, "Run sweep"), countEl));
   // --- assemble: run bar (always visible) -> what differs -> tabbed settings
-  for (const [t, l] of TABS) tabBtns[t] = h("button", { onclick: () => showTab(t) }, l);
+  const TAB_ICONS = { strategy: "sliders", optimize: "target", costs: "wallet", latency: "zap", symbol: "tag", tester: "gauge", sweep: "grid" };
+  const BIG_SUB = { strategy: "parameters and what to search", optimize: "algorithm, criterion, limits" };
+  for (const [t, l] of TABS) tabBtns[t] = h("button", { class: BIG_SUB[t] ? "bigtab" : "", onclick: () => showTab(t) }, ...(BIG_SUB[t] ? bigLabeled(TAB_ICONS[t], l, BIG_SUB[t]) : labeled(TAB_ICONS[t], l)));
   panels.strategy.append(
     h("div", { class: "row gap-lg", style: "margin-bottom:6px" }, h("label", { class: "f" }, "Strategy", strategySel), h("label", { class: "f" }, "Parameter file (.set)", setSel),
-      h("div", { class: "row", style: "align-self:flex-end" }, uploader("set", setSel, "Upload .set"), saver("set", "Save as .set", paramsAsSetText))),
-    paramsBox);
+      h("div", { class: "row", style: "align-self:flex-end" }, uploader("set", setSel, "Upload .set"), saver("set", "Save as .set", paramsAsSetText), h("button", { title: "save the parameters (and search ranges) as an MT5 .set file wherever you like", onclick: guard(exportSetFile) }, icon("download"), "Export .set"))));
   panels.sweep.append(sweepPanel);
-  panels.optimize.append(optPanel.el);
+  panels.strategy.append(optPanel.el);
+  panels.optimize.append(optPanel.settings);
 
-  const runBar = h("div", { class: "runbar" },
-    h("label", { class: "f" }, "Tick dataset", dsSel), h("label", { class: "f" }, "From (trading starts)", fromIn), h("label", { class: "f" }, "To", toIn),
-    h("label", { class: "f" }, "Warm-up days", warmIn), h("label", { class: "f grow" }, "Label", nameIn), runBtn);
-  const presets = h("div", { class: "row gap-lg presets" }, h("b", { class: "small" }, "Load presets"),
+  const runBar = h("div", { class: "runbar setup" },
+    sechead("play", "Test setup", "what to run on, and when"),
+    h("label", { class: "f" }, lab("database", "Tick dataset"), dsSel), h("label", { class: "f" }, lab("calendar", "From (trading starts)"), fromDate.el), h("label", { class: "f" }, lab("calendar", "To (empty = end)"), toDate.el), h("label", { class: "f" }, lab("gauge", "Timeframe"), tfIn),
+    h("label", { class: "f" }, lab("history", "Warm-up days"), warmIn), h("label", { class: "f grow" }, lab("tag", "Label"), nameIn), h("div", { class: "runbtns" }, runOnceBtn, runBtn), setupInfo);  const presets = h("div", { class: "row gap-lg presets" },
     h("label", { class: "row small" }, "Symbol", symSel, uploader("symbol", symSel, "upload")),
     h("label", { class: "row small" }, "Config", cfgSel, uploader("config", cfgSel, "upload"), saver("config", "save", cfgToText)),
     h("span", { class: "spacer" }),
-    h("button", { onclick: () => { form = Object.assign(defaultForm(), { dataset: form.dataset, from: form.from, to: form.to }); ensureDefaults(); const d = strategyDef(form.strategy); for (const q of d.params) form.params[q.key] = q.default; saveForm(); route(); } }, "Reset all to defaults"));
+    h("button", { onclick: () => { form = Object.assign(defaultForm(), { dataset: form.dataset, from: form.from, to: form.to, timeframe: form.timeframe }); ensureDefaults(); const d = strategyDef(form.strategy); for (const q of d.params) form.params[q.key] = q.default; saveForm(); route(); } }, "Reset all to defaults"));
   const tools = h("div", { class: "row small", style: "margin:8px 0" }, searchIn, h("label", { class: "row" }, onlyChanged, "only changed"), rangeInfo);
-  v.append(runBar, h("div", { class: "card" }, chipsBox), h("div", { class: "card" }, presets, h("div", { class: "tabs", style: "margin-top:10px" }, ...TABS.map(([t]) => tabBtns[t])), tools, tabBody));
+  // symbol / broker config are chosen per dataset on the Data & files page (applyDatasetSettings); the old selectors stay as hidden logic. Only "Reset all" is kept, in the header.
+  const resetBtn = presets.lastElementChild;
+  const cfgHead = sechead("cog", "Configuration", "strategy parameters, the search, and the extra settings"); cfgHead.append(h("span", { class: "spacer" }), resetBtn);
+  // the "differs from defaults" summary is secondary: it goes below the fields
+  v.append(runBar,
+    h("div", { class: "card sec" }, cfgHead, h("div", { class: "bigtabs" }, tabBtns.strategy, tabBtns.optimize, extraBtn), tools, tabBody),
+    h("div", { class: "card sec" }, chipsBox));
   renderCfg(); renderParams(); showTab(arg && panels[arg] ? arg : "strategy"); showRange();
+  if (skipOverridesOnce) skipOverridesOnce = false; else if (form.symbol || form.configFile) applyDsOverrides();
+
   if (!form.symbol && !form.configFile) applyDatasetSettings();
 }
 
@@ -762,6 +912,7 @@ function headlineCells(hd) {
     h("td", { class: "num" }, num(hd.win_rate, 1) + "%"), h("td", { class: "num" }, num(hd.max_dd_rel_pct) + "%"), h("td", { class: "num" }, num(hd.expected_payoff))];
 }
 async function viewRuns(v) {
+  v.append(historyBar("runs"));
   const box = h("div"); v.append(box);
   let selected = new Set(), showSweeps = false, q = "";
   const search = h("input", { placeholder: "search runs ...", style: "width:200px", oninput: () => { q = search.value.toLowerCase(); draw(); search.focus(); } });
@@ -780,8 +931,8 @@ async function viewRuns(v) {
     const shown = runs.filter(r => (showSweeps || !r.sweep) && (!q || (r.name + " " + brief(r)).toLowerCase().includes(q)));
     box.append(h("div", { class: "row", style: "margin-bottom:12px" }, h("h1", { style: "margin:0" }, "Runs"), h("span", { class: "muted" }, shown.length + (shown.length === 1 ? " run" : " runs")), h("span", { class: "spacer" }), search,
       h("label", { class: "row small" }, h("input", { type: "checkbox", checked: showSweeps, onchange: e => { showSweeps = e.target.checked; draw(); } }), "include sweep passes"),
-      h("button", { onclick: () => { if (selected.size < 2) return toast("Tick at least two runs to compare", true); location.hash = "#compare/" + [...selected].join(","); } }, "Compare ticked")));
-    if (!runs.length) { box.append(h("div", { class: "card" }, h("h2", {}, "No runs yet"), h("div", { class: "muted", style: "margin-bottom:10px" }, "Start your first forward pass - everything is preset, you only need a dataset."), h("a", { class: "btn newrun", href: "#new" }, "+ New run"))); return; }
+      h("button", { onclick: () => { if (selected.size < 2) return toast("Tick at least two runs to compare", true); location.hash = "#compare/" + [...selected].join(","); } }, "Compare ticked"), h("a", { class: "btn newrun", href: "#new" }, icon("plus"), "New run")));
+    if (!runs.length) { box.append(h("div", { class: "card" }, h("h2", {}, "No runs yet"), h("div", { class: "muted", style: "margin-bottom:10px" }, "Start your first forward pass - everything is preset, you only need a dataset."), h("a", { class: "btn newrun", href: "#new" }, icon("plus"), "New run"))); return; }
     const t = h("table", {}, h("tr", {}, ...[["", ""], ["Run", ""], ["Net profit", "num"], ["Profit factor", "num"], ["Trades", "num"], ["Win %", "num"], ["Max DD", "num"], ["Started", ""], ["", ""]].map(([x, c]) => h("th", { class: c }, x))));
     for (const r of shown) {
       const hd = r.headline, go = () => location.hash = "#run/" + r.id;
@@ -828,6 +979,8 @@ async function viewRun(v, id) {
     head.innerHTML = "";
     head.append(h("div", { class: "row" }, h("a", { href: "#runs" }, "< Runs"), h("h1", { style: "margin:0" }, run.name), h("span", { class: "badge " + run.status }, run.status), h("span", { class: "spacer" }),
       h("button", { onclick: () => { loadRequestIntoForm(run.request); location.hash = "#new"; } }, "Edit & re-run"),
+      run.status === "done" ? h("button", { title: "save the performance diagram of this run as a PNG image", onclick: guard(() => exportRunDiagram(run)) }, icon("download"), "Export diagram") : null,
+      run.status === "done" ? h("button", { class: "primary", title: "save this run into a folder: the strategy source (.txt), the .set file, the performance diagram (PNG) and a summary", onclick: guard(() => exportRun(run)) }, icon("download"), "Export run") : null,
       h("button", { title: "the parameters of this run as an MT5 .set file", onclick: guard(() => downloadRunSet(run.id)) }, "Download .set"),
       h("button", { class: "danger", onclick: guard(async () => { if (!confirm("Delete this run?")) return; await api("runs/" + run.id, { method: "DELETE" }); location.hash = "#runs"; }) }, "Delete")),
       h("div", { class: "chips", style: "margin:8px 0 12px" }, ...keyChips(run.request).map(([l, val]) => h("span", { class: "chip plain" }, l + ": " + val))));
@@ -845,7 +998,7 @@ async function viewRun(v, id) {
 
 // MT5 .set file (UTF-16 LE with BOM, loads in the tester / on a chart) of the parameters a run used
 async function downloadRunSet(id) {
-  const run = await api("runs/" + id), pr = (run.request && run.request.params) || {};
+  const run = await api("runs/" + id), pr = effectiveRunParams(run.request || {});
   const text = "; saved by mt5bt from run " + run.name + "\n" + Object.entries(pr).map(([k, val]) => k + "=" + val).join("\n") + "\n";
   const u = new Uint16Array(text.length + 1); u[0] = 0xFEFF; for (let i = 0; i < text.length; i++) u[i + 1] = text.charCodeAt(i);
   const url = URL.createObjectURL(new Blob([u], { type: "application/octet-stream" }));
@@ -853,10 +1006,145 @@ async function downloadRunSet(id) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+// ---------------------------------------------------------------- Export run: folder with the .mq5, the .set, the performance diagram and a summary
+const safeName = s => String(s || "run").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "run";
+const utf8 = s => new TextEncoder().encode(s);
+const utf8Bom = s => { const b = utf8(s), o = new Uint8Array(b.length + 3); o.set([0xEF, 0xBB, 0xBF]); o.set(b, 3); return o; };   // MetaEditor opens UTF-8 with BOM
+function utf16Bom(text) { const o = new Uint8Array(2 + text.length * 2); o[0] = 0xFF; o[1] = 0xFE; for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); o[2 + i * 2] = c & 255; o[3 + i * 2] = c >> 8; } return o; }
+
+function niceTicks(lo, hi, n) {
+  if (!(hi > lo)) { hi = lo + 1; }
+  const raw = (hi - lo) / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p, step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p, out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) out.push(v);
+  return out;
+}
+
+// the performance diagram as a PNG (always light, for documents): balance line, equity band, drawdown, key numbers
+async function renderRunPng(run, eq) {
+  const W = 1600, H = 1040, c = document.createElement("canvas"); c.width = W; c.height = H; const g = c.getContext("2d");
+  const ink = "#1c2330", muted = "#6a7586", line = "#e1e5eb", blue = "#2f6fed", red = "#c7352f", green = "#138a4b", font = "Segoe UI, Helvetica, Arial, sans-serif";
+  const st = (run.summary && run.summary.stats) || {}, rq = run.request || {};
+  g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+  g.fillStyle = ink; g.font = "700 40px " + font; g.fillText(run.name || run.id, 60, 78);
+  g.fillStyle = muted; g.font = "400 22px " + font;
+  const when = eq.t.length ? fmtDay(eq.t[0]) + "  to  " + fmtDay(eq.t[eq.t.length - 1]) : "";
+  g.fillText([rq.strategy, rq.dataset, rq.timeframe ? rq.timeframe : null, when].filter(Boolean).join("   |   "), 60, 116);
+  // key numbers
+  const kpis = [["Net profit", money(st.net_profit), st.net_profit >= 0 ? green : red], ["Final balance", money(st.final_balance), ink], ["Trades", String(st.trades ?? "-"), ink], ["Win rate", num(st.win_rate, 1) + " %", ink],
+    ["Profit factor", num(st.profit_factor, 2), ink], ["Max drawdown", num(st.max_dd_rel_pct, 2) + " %", red], ["Expected payoff", money(st.expected_payoff), ink]];
+  const kw = (W - 120) / kpis.length;
+  kpis.forEach(([l, v, col], i) => { const x = 60 + i * kw; g.fillStyle = "#f6f7f9"; g.fillRect(x, 150, kw - 12, 96); g.fillStyle = muted; g.font = "600 17px " + font; g.fillText(l.toUpperCase(), x + 16, 182); g.fillStyle = col; g.font = "700 30px " + font; g.fillText(v, x + 16, 226); });
+  // plots
+  const X0 = 140, X1 = W - 60, n = eq.t.length;
+  const t0 = eq.t[0], t1 = eq.t[n - 1] || t0 + 1, px = t => X0 + (t - t0) / Math.max(1, t1 - t0) * (X1 - X0);
+  const xTicks = () => { const out = [], d0 = new Date(t0), d1 = new Date(t1), months = (d1.getUTCFullYear() - d0.getUTCFullYear()) * 12 + d1.getUTCMonth() - d0.getUTCMonth() + 1, every = months > 120 ? 24 : months > 60 ? 12 : months > 30 ? 6 : months > 14 ? 3 : 1;
+    for (let k = 0; k <= months; k += every) { const d = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth() + k, 1); if (d >= t0 && d <= t1) out.push(d); } return out; };
+  const frame = (y0, y1, ticks, py, fmtY) => {
+    g.strokeStyle = line; g.lineWidth = 1; g.fillStyle = muted; g.font = "400 16px " + font; g.textAlign = "right";
+    for (const v of ticks) { const y = py(v); g.beginPath(); g.moveTo(X0, y); g.lineTo(X1, y); g.stroke(); g.fillText(fmtY(v), X0 - 12, y + 5); }
+    g.textAlign = "center"; for (const d of xTicks()) { const x = px(d), dd = new Date(d); g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); g.fillText(dd.getUTCFullYear() + "-" + String(dd.getUTCMonth() + 1).padStart(2, "0"), x, y1 + 24); } g.textAlign = "left";
+  };
+  // equity + balance
+  const Y0 = 300, Y1 = 700, lo = Math.min(...eq.equity_min, ...eq.balance), hi = Math.max(...eq.equity_max, ...eq.balance), pad = (hi - lo) * 0.06 || 1;
+  const py = v => Y1 - (v - (lo - pad)) / ((hi + pad) - (lo - pad)) * (Y1 - Y0);
+  g.fillStyle = ink; g.font = "700 22px " + font; g.fillText("Balance and equity", X0, Y0 - 14);
+  frame(Y0, Y1, niceTicks(lo - pad, hi + pad, 6), py, v => num(v, 0));
+  g.beginPath(); eq.t.forEach((t, i) => { const x = px(t), y = py(eq.equity_max[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); for (let i = n - 1; i >= 0; i--) g.lineTo(px(eq.t[i]), py(eq.equity_min[i])); g.closePath(); g.fillStyle = "rgba(47,111,237,.16)"; g.fill();
+  if (st.initial_balance != null) { g.setLineDash([8, 8]); g.strokeStyle = "#9aa6b8"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X0, py(st.initial_balance)); g.lineTo(X1, py(st.initial_balance)); g.stroke(); g.setLineDash([]); }
+  g.strokeStyle = blue; g.lineWidth = 2.6; g.lineJoin = "round"; g.beginPath(); eq.t.forEach((t, i) => { const x = px(t), y = py(eq.balance[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+  // drawdown
+  const D0 = 790, D1 = 960, dmax = Math.max(1, ...eq.dd_pct) * 1.08, pd = v => D0 + v / dmax * (D1 - D0);
+  g.fillStyle = ink; g.font = "700 22px " + font; g.fillText("Drawdown (%)", X0, D0 - 14);
+  frame(D0, D1, niceTicks(0, dmax, 4), pd, v => num(v, 1));
+  g.beginPath(); g.moveTo(px(eq.t[0]), D0); eq.t.forEach((t, i) => g.lineTo(px(t), pd(eq.dd_pct[i]))); g.lineTo(px(eq.t[n - 1]), D0); g.closePath(); g.fillStyle = "rgba(199,53,47,.25)"; g.fill();
+  g.strokeStyle = red; g.lineWidth = 1.8; g.beginPath(); eq.t.forEach((t, i) => { const x = px(t), y = pd(eq.dd_pct[i]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+  g.fillStyle = muted; g.font = "400 16px " + font; g.fillText("exported from mt5bt  |  " + new Date().toISOString().slice(0, 16).replace("T", " "), 60, H - 28);
+  return await new Promise(res => c.toBlob(res, "image/png"));
+}
+const fmtDay = ms => new Date(ms).toISOString().slice(0, 10);
+
+// minimal ZIP writer (stored, no compression) for browsers without a folder picker
+function crc32(bytes) {
+  if (!crc32.t) { crc32.t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; crc32.t[n] = c >>> 0; } }
+  let crc = -1; for (let i = 0; i < bytes.length; i++) crc = crc32.t[(crc ^ bytes[i]) & 255] ^ (crc >>> 8); return (crc ^ -1) >>> 0;
+}
+function makeZip(files, folder) {
+  const now = new Date(), dosT = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1), dosD = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  const parts = [], central = []; let offset = 0;
+  for (const f of files) {
+    const name = utf8(folder + "/" + f.name), crc = crc32(f.bytes), lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true); lh.setUint16(10, dosT, true); lh.setUint16(12, dosD, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, f.bytes.length, true); lh.setUint32(22, f.bytes.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), name, f.bytes);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, dosT, true); ch.setUint16(14, dosD, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, f.bytes.length, true); ch.setUint32(24, f.bytes.length, true); ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + f.bytes.length;
+  }
+  const cdSize = central.reduce((s, p) => s + p.length, 0), end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
+}
+
+// Export only the performance diagram as a PNG: a save dialog (Chrome / Edge) lets you choose folder and name, other browsers download it.
+async function exportRunDiagram(run) {
+  if (run.status !== "done") throw new Error("the run has not finished");
+  const eq = await api("runs/" + run.id + "/equity?n=1600");
+  if (!eq.t || eq.t.length < 2) throw new Error("this run has no equity curve");
+  const blob = await renderRunPng(run, eq), name = safeName(run.name || run.id) + "_performance.png";
+  if (window.showSaveFilePicker) {
+    try {
+      const fh = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "PNG image", accept: { "image/png": [".png"] } }] });
+      const w = await fh.createWritable(); await w.write(blob); await w.close(); toast("Saved " + fh.name); return;
+    } catch (e) { if (e && e.name === "AbortError") return; /* no permission here: fall back to a download */ }
+  }
+  const a = h("a", { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove();
+  toast("Downloaded " + name + " (your browser puts it in its download folder)");
+}
+
+// the parameters a run REALLY used: the run-level timeframe overrides the strategy's own ChartTimeframe / Timeframe parameter
+const effectiveRunParams = rq => { const p = Object.assign({}, rq.params || {}); if (rq.timeframe) for (const k of ["ChartTimeframe", "Timeframe"]) if (k in p) p[k] = rq.timeframe; return p; };
+// Export: choose a folder (Chrome / Edge) and a subfolder for this run is written into it; other browsers get a ZIP.
+async function exportRun(run) {
+  if (run.status !== "done") throw new Error("the run has not finished");
+  const rq = run.request || {}, base = safeName(run.name || run.id), day = new Date((run.created || Date.now() / 1000) * 1000).toISOString().slice(0, 10);
+  const folder = day + "_" + base, notes = [];
+  const files = [];
+  // 1. the original MQL5 strategy code as a .txt file (only strategies ported in the Strategy editor keep their source)
+  let src = ""; try { src = (await api("studio/" + encodeURIComponent(rq.strategy || ""))).source || ""; } catch (e) { /* none */ }
+  if (src) files.push({ name: safeName(rq.strategy) + ".txt", bytes: utf8Bom(src) }); else notes.push("No MQL5 source is stored for strategy '" + rq.strategy + "' (built-in strategy), so no strategy .txt file was exported.");
+  // 2. the parameters of the run as an MT5 .set file
+  const used = effectiveRunParams(rq);
+  const set = "; saved by mt5bt from run " + (run.name || run.id) + "\n" + Object.entries(used).map(([k, v]) => k + "=" + v).join("\n") + "\n";
+  files.push({ name: base + ".set", bytes: utf16Bom(set.replace(/\n/g, "\r\n")) });
+  // 3. the performance diagram
+  const eq = await api("runs/" + run.id + "/equity?n=1600");
+  if (eq.t && eq.t.length > 1) files.push({ name: base + "_performance.png", bytes: new Uint8Array(await (await renderRunPng(run, eq)).arrayBuffer()) }); else notes.push("The run has no equity curve, so no diagram was exported.");
+  // 4. a short text summary with everything needed to understand the run later
+  const cfg = Object.entries(rq.config || {}).map(([k, v]) => k + " = " + v).join("\n");
+  const txt = ["Run: " + (run.name || run.id), "Exported: " + new Date().toISOString().slice(0, 16).replace("T", " "), "Strategy: " + rq.strategy, "Dataset: " + rq.dataset, "Period: " + (rq.from || "start of the data") + " .. " + (rq.to || "end of the data"), "Timeframe: " + (rq.timeframe || "strategy default"), "Warm-up days: " + (rq.warmup_days ?? "auto"),
+    "", "---- results ----", (run.summary && run.summary.text) || "", "", "---- parameters ----", Object.entries(used).map(([k, v]) => k + " = " + v).join("\n"), "", "---- config ----", cfg, ...(notes.length ? ["", "---- notes ----", ...notes] : [])].join("\r\n");
+  files.push({ name: "summary.txt", bytes: utf8Bom(txt) });
+  if (window.showDirectoryPicker) {
+    let root; try { root = await window.showDirectoryPicker({ mode: "readwrite" }); } catch (e) { if (e && e.name === "AbortError") return; root = null; }
+    if (root) {
+      const dir = await root.getDirectoryHandle(folder, { create: true });
+      for (const f of files) { const w = await (await dir.getFileHandle(f.name, { create: true })).createWritable(); await w.write(f.bytes); await w.close(); }
+      toast("Exported " + files.length + " files to " + root.name + "\\" + folder); return;
+    }
+  }
+  const url = URL.createObjectURL(makeZip(files, folder)); const a = h("a", { href: url, download: folder + ".zip" }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 8000);
+  toast("Downloaded " + folder + ".zip (" + files.length + " files; this browser cannot pick a folder)");
+}
+
+let skipOverridesOnce = false; // set by "Edit & re-run": the run's own config is reproduced exactly, dataset edits are not applied on top
 function loadRequestIntoForm(r) {
-  form = Object.assign(defaultForm(), { name: r.name || "", dataset: r.dataset, symbol: r.symbol || "", strategy: r.strategy, from: r.from || "", to: r.to || "", warmup: r.warmup_days || "", params: Object.assign({}, r.params), config: {}, extra: {} });
+  skipOverridesOnce = true;
+  form = Object.assign(defaultForm(), { name: r.name || "", dataset: r.dataset, symbol: r.symbol || "", strategy: r.strategy, from: r.from || "", to: r.to || "", timeframe: r.timeframe || "", warmup: r.warmup_days || "", params: Object.assign({}, r.params), config: {}, extra: {} });
   const known = new Set(cfgFields().map(f => f.key));
   for (const [k, val] of Object.entries(r.config || {})) { if (known.has(k)) form.config[k] = String(val); else form.extra[k] = String(val); }
+  if (r.search_ui) { form.ranges = JSON.parse(JSON.stringify(r.search_ui.ranges || {})); form.opt = Object.assign({}, r.search_ui.opt || {}); } // keep the ticked search parameters
   ensureDefaults(); saveForm();
 }
 
@@ -881,7 +1169,7 @@ function settingsView(run) {
   const tbl = rows => rows.length ? h("table", {}, h("tr", {}, h("th", {}, "Setting"), h("th", { class: "num" }, "Used"), h("th", { class: "num" }, "Default")), ...rows.map(x => h("tr", {}, h("td", {}, x[0]), h("td", { class: "num" }, h("b", {}, x[1])), h("td", { class: "num muted" }, x[2])))) : h("div", { class: "muted" }, "all defaults");
   return h("div", {},
     h("div", { class: "grid2" },
-      h("div", { class: "card" }, h("h2", {}, "Test"), h("table", {}, ...[["Dataset", r.dataset], ["Strategy", r.strategy], ["Symbol file", r.symbol || "-"], ["From", r.from || "start of data"], ["To", r.to || "end of data"], ["Warm-up days", r.warmup_days ?? "auto"]].map(x => h("tr", {}, h("td", { class: "muted" }, x[0]), h("td", {}, x[1]))))),
+      h("div", { class: "card" }, h("h2", {}, "Test"), h("table", {}, ...[["Dataset", r.dataset], ["Strategy", r.strategy], ["Symbol file", r.symbol || "-"], ["From", r.from || "start of data"], ["To", r.to || "end of data"], ["Timeframe", r.timeframe || "strategy default"], ["Warm-up days", r.warmup_days ?? "auto"]].map(x => h("tr", {}, h("td", { class: "muted" }, x[0]), h("td", {}, x[1]))))),
       h("div", { class: "card" }, h("h2", {}, "Broker / costs / latency (differs from defaults)"), tbl(cfgRows)),
       h("div", { class: "card" }, h("h2", {}, "Strategy parameters (differs from defaults)"), tbl(parRows))),
     h("div", { class: "card" }, h("details", {}, h("summary", {}, "Complete configuration (JSON)"), h("pre", {}, JSON.stringify({ params: r.params, config: r.config }, null, 2)))),
@@ -1041,32 +1329,56 @@ async function viewCompare(v, ids) {
   v.append(h("div", { class: "row" }, h("a", { href: "#runs" }, "< Runs"), h("h1", { style: "margin:0" }, "Compare " + runs.length + " runs")));
   const eq = await Promise.all(ids.map(i => api("runs/" + i + "/equity?n=1200")));
   const pal = PALETTE();
-  const host = h("div");
-  v.append(h("div", { class: "card" }, h("h2", {}, "Profit over time (balance - initial)"), legend(runs.map((r, i) => ({ color: pal[i % pal.length], name: r.name }))), host));
-  new XYChart(host, { height: 340, yFmt: v => num(v, 0) }).set(runs.map((r, i) => ({ type: "line", name: r.name, color: pal[i % pal.length], step: true, x: eq[i].t, y: eq[i].balance.map(b => b - r.summary.stats.initial_balance) })));
-  const metrics = [["Net profit", s => s.net_profit, money, 1], ["Final balance", s => s.final_balance, money, 1], ["Profit factor", s => s.profit_factor, num, 1], ["Trades", s => s.trades, num, 0],
+  const host = h("div"), legendHost = h("div");
+  let showMean = true; try { showMean = localStorage.getItem("cmpMean") !== "0"; } catch (e) { /* ignore */ }
+  const prof = runs.map((r, i) => ({ t: eq[i].t, y: eq[i].balance.map(b => b - r.summary.stats.initial_balance) }));
+  // mean profit curve: every run is a step function on one common time grid (before a run starts its profit is 0, after it ends it stays at its final value)
+  const meanCurve = () => {
+    const t0 = Math.min(...prof.map(p => p.t[0])), t1 = Math.max(...prof.map(p => p.t[p.t.length - 1])), N = 1200, xs = [], ys = [];
+    const at = (p, T) => { if (T < p.t[0]) return 0; let lo = 0, hi = p.t.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (p.t[m] <= T) lo = m; else hi = m - 1; } return p.y[lo]; };
+    for (let k = 0; k < N; k++) { const T = t0 + (t1 - t0) * k / (N - 1); xs.push(T); ys.push(prof.reduce((s, p) => s + at(p, T), 0) / prof.length); }
+    return { x: xs, y: ys };
+  };
+  const chart = new XYChart(host, { height: 340, yFmt: v => num(v, 0) });
+  const meanColor = cssVar("--ink"), meanName = "Mean of the " + runs.length + " runs";
+  function drawChart() {
+    const series = runs.map((r, i) => ({ type: "line", name: r.name, color: pal[i % pal.length], step: true, x: prof[i].t, y: prof[i].y }));
+    const items = runs.map((r, i) => ({ color: pal[i % pal.length], name: r.name }));
+    if (showMean && runs.length > 1) { const m = meanCurve(); series.push({ type: "line", name: meanName, color: meanColor, width: 3, x: m.x, y: m.y }); items.push({ color: meanColor, name: meanName }); }
+    legendHost.replaceChildren(legend(items)); chart.set(series);
+  }
+  const meanBox = h("input", { type: "checkbox", checked: showMean, onchange: () => { showMean = meanBox.checked; try { localStorage.setItem("cmpMean", showMean ? "1" : "0"); } catch (e) { /* ignore */ } drawChart(); drawTable(); } });
+  v.append(h("div", { class: "card" }, h("div", { class: "row" }, h("h2", { style: "margin:0" }, "Profit over time (balance - initial)"), h("span", { class: "spacer" }),
+    runs.length > 1 ? h("label", { class: "row small", title: "the average profit curve of all compared runs (a run that starts later counts as 0 before its start)" }, meanBox, "Show the mean of the runs") : null), legendHost, host));
+  drawChart();  const metrics = [["Net profit", s => s.net_profit, money, 1], ["Final balance", s => s.final_balance, money, 1], ["Profit factor", s => s.profit_factor, num, 1], ["Trades", s => s.trades, num, 0],
     ["Win rate %", s => s.win_rate, x => num(x, 1), 1], ["Avg win", s => s.avg_win, money, 1], ["Avg loss", s => s.avg_loss, money, 1], ["Expected payoff", s => s.expected_payoff, money, 1],
     ["Max DD %", s => s.max_dd_rel_pct, num, -1], ["Max DD abs", s => s.max_dd_abs, money, -1], ["Commission", s => s.total_commission, money, 1], ["Swap", s => s.total_swap, money, 1]];
-  const t = h("table", {}, h("tr", {}, h("th", {}, "Metric"), ...runs.map((r, i) => h("th", { class: "num" }, h("a", { href: "#run/" + r.id }, r.name)))));
-  for (const [l, f, fm, dir] of metrics) {
-    const vals = runs.map(r => f(r.summary.stats)); const best = dir === 0 ? null : (dir > 0 ? Math.max(...vals) : Math.min(...vals));
-    t.append(h("tr", {}, h("td", { class: "muted" }, l), ...vals.map(x => h("td", { class: "num" + (best !== null && x === best && runs.length > 1 ? " good" : "") }, fm(x)))));
+  const tableHost = h("div", { class: "tablewrap", style: "max-height:none" });
+  function drawTable() {
+    const withMean = showMean && runs.length > 1;
+    const t = h("table", {}, h("tr", {}, h("th", {}, "Metric"), ...runs.map((r, i) => h("th", { class: "num" }, h("a", { href: "#run/" + r.id }, r.name))), withMean ? h("th", { class: "num", title: "average of the values of the compared runs" }, "Mean") : null));
+    for (const [l, f, fm, dir] of metrics) {
+      const vals = runs.map(r => f(r.summary.stats)); const best = dir === 0 ? null : (dir > 0 ? Math.max(...vals) : Math.min(...vals));
+      t.append(h("tr", {}, h("td", { class: "muted" }, l), ...vals.map(x => h("td", { class: "num" + (best !== null && x === best && runs.length > 1 ? " good" : "") }, fm(x))),
+        withMean ? h("td", { class: "num", style: "font-weight:700" }, fm(vals.reduce((a, b) => a + b, 0) / vals.length)) : null));
+    }
+    tableHost.replaceChildren(t);
   }
-  // differing settings
+  drawTable();  // differing settings
   const flat = r => Object.assign({ dataset: r.dataset, strategy: r.strategy, from: r.request.from, to: r.request.to }, r.request.config, Object.fromEntries(Object.entries(r.request.params || {}).map(([k, x]) => ["param:" + k, x])));
   const fl = runs.map(flat), keys = [...new Set(fl.flatMap(Object.keys))].filter(k => new Set(fl.map(f => String(f[k] ?? ""))).size > 1);
   const dt = h("table", {}, h("tr", {}, h("th", {}, "Setting"), ...runs.map(r => h("th", {}, r.name))), ...keys.map(k => h("tr", {}, h("td", { class: "muted" }, k), ...fl.map(f => h("td", {}, String(f[k] ?? ""))))));
-  v.append(h("div", { class: "card" }, h("h2", {}, "Results"), h("div", { class: "tablewrap", style: "max-height:none" }, t)),
+  v.append(h("div", { class: "card" }, h("h2", {}, "Results"), tableHost),
     h("div", { class: "card" }, h("h2", {}, "Settings that differ"), keys.length ? h("div", { class: "tablewrap" }, dt) : h("div", { class: "muted" }, "none")));
 }
 
 // ---------------------------------------------------------------- SWEEPS
 async function viewSweeps(v) {
-  v.append(h("h1", {}, "Sweeps"));
+  v.append(historyBar("sweeps"), h("h1", {}, "Sweeps"));
   const box = h("div", { class: "card" }); v.append(box);
   async function load() {
     const list = await api("sweeps"); box.innerHTML = "";
-    if (!list.length) { box.append(h("div", { class: "muted" }, "No sweeps yet. Define one at the bottom of 'New run'.")); return; }
+    if (!list.length) { box.append(h("div", { class: "muted" }, "No sweeps yet. Define one under Extra > Sweep in Research.")); return; }
     const t = h("table", {}, h("tr", {}, ...["Sweep", "Axes", "Progress", "Started", ""].map(x => h("th", {}, x))));
     for (const s of list) t.append(h("tr", { class: "click", onclick: () => location.hash = "#sweep/" + s.id },
       h("td", {}, h("b", {}, s.name)), h("td", {}, s.axes.map(a => a.key + " (" + a.values.length + ")").join(" x ")), h("td", {}, s.done + s.failed + " / " + s.total + (s.failed ? " (" + s.failed + " failed)" : "")), h("td", {}, ago(s.created)),
@@ -1148,12 +1460,15 @@ async function viewSweep(v, id) {
 // A progress ring around the dot of Runs / Sweeps / Optimizer while such jobs run (polled from the light /api/activity).
 const RING_C = 2 * Math.PI * 17;
 function initRoadmap() {
+  document.querySelectorAll("nav.roadmap a[data-icon] .dot").forEach(d => { d.textContent = ""; d.append(icon(d.parentElement.dataset.icon)); });
   document.querySelectorAll("nav.roadmap a .dot").forEach(d => d.insertAdjacentHTML("beforeend",
     '<svg class="ring" viewBox="0 0 40 40" aria-hidden="true"><circle class="track" cx="20" cy="20" r="17"/><circle class="arc" cx="20" cy="20" r="17"/></svg>'));
   document.querySelectorAll("nav.roadmap a .lbl").forEach(l => l.insertAdjacentHTML("beforeend", '<span class="pct"></span>'));
   const tick = async () => {
     let a; try { const r = await fetch("/api/activity"); if (!r.ok) return; a = await r.json(); } catch (e) { return; }
-    for (const [tab, st] of Object.entries(a)) setBusy(tab, st);
+    // runs, sweeps and optimizations all live under History: one ring for all of them
+    const act = Object.values(a).filter(s => s && s.active > 0), fr = act.map(s => s.frac).filter(x => x != null);
+    setBusy("history", { active: act.reduce((n, s) => n + s.active, 0), frac: fr.length ? fr.reduce((x, y) => x + y, 0) / fr.length : null });
   };
   tick(); setInterval(tick, 1200);
 }

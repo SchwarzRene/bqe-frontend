@@ -21,15 +21,16 @@ mt5bt.wasm                                Rust: datasets, runs, sweeps, optimize
 
 | File | Role |
 |---|---|
-| `index.html` | The app's own page (header roadmap, tabs) plus a back link to /research/ |
+| `index.html` | The app's page shell (loading splash, hub layout: pages in the left dock, stage on the right) plus a back link to /research/ and an "About this demo" note; phones get the dock as a scrolling strip |
+| `splash.js` | The loading splash (inline in the engine repo's `web/index.html`; extracted here because the site's CSP forbids inline scripts) |
 | `app.js`, `charts.js`, `optimizer.js`, `style.css`, `schema.json` | The web app, **copied unmodified** from the engine repo's `web/` |
 | `mt5bt.wasm` | The server + engine (~1 MB), built from the Rust repo with `wasm/build.sh` |
 | `bridge.js` | Routes the app's API calls to the worker |
 | `server-worker.js`, `server-core.js` | Worker, and the WASI glue (in-memory file system from `assets/vendor/browser_wasi_shim-0.4.2/`) |
-| `data/example_ticks.csv`, `broker.cfg`, `sets/*.set` | The seeded example: 70 000 random EURUSD-like ticks (a seeded random walk, **not market data**), its broker config and ready-made parameter files, including optimiser ranges |
+| `data/example_ticks.csv`, `broker.cfg`, `sets/*.set` | The seeded example: 70 000 random EURUSD-like ticks (a seeded random walk, **not market data**), its broker config (linked to the dataset, so Research applies it on its own) and ready-made parameter files, including optimiser ranges |
 
 On load the worker starts the module and seeds the workspace *through the app's own API* (upload the CSV, convert
-it, save the config and `.set` files), so the example goes through exactly the path a user's data would.
+it, save the config and `.set` files, link the config to the dataset), so the example goes through exactly the path a user's data would.
 
 ## Limits compared with a local `mt5bt serve`
 
@@ -44,7 +45,7 @@ it, save the config and `.set` files), so the example goes through exactly the p
 ## Updating
 
 In the Rust repo: `wasm/build.sh ../bqe-frontend` rebuilds `mt5bt.wasm` and copies it, together with the web UI
-files, into this folder. Commit the result. `test/research/backtest-lab.test.ts` (run by `npm test`) loads that exact module,
+files, into this folder. `index.html` and `splash.js` are the website's own: when the engine repo's `web/index.html` changes (new pages, markup), update them by hand. Commit the result. `test/research/backtest-lab.test.ts` (run by `npm test`) loads that exact module,
 drives the API the way the app does, and compares run results with the native binary, so a stale or broken build
 fails CI.
 
