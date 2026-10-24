@@ -79,7 +79,7 @@ function applyDateLimits(d) {
     if (!d) { i.removeAttribute("min"); i.removeAttribute("max"); continue; }
     i.min = lim(d.first); i.max = lim(d.last);
     // a date outside the data (e.g. the built-in default From) is pulled in: before the data -> first day, after it -> empty (= start / end of the data)
-    if (i.value && (i.value < i.min || i.value > i.max)) { i.value = i.value < i.min ? i.min : ""; i.dispatchEvent(new Event("input")); }
+    if (i.value && i.min && i.max && (i.value < i.min || i.value > i.max)) { i.value = i.value < i.min ? i.min : ""; i.dispatchEvent(new Event("input")); }
   }
 }
 // Export the current parameters (with the ticked search ranges) as an MT5 .set file: UTF-16LE with BOM and CRLF, like MT5 writes them.
