@@ -591,6 +591,8 @@ export const INTERVAL_SECONDS = { "1m": 60, "5m": 300, "15m": 900, "30m": 1800, 
 // How far back Yahoo serves each interval, minus a safety margin. null = unlimited.
 const HISTORY_LIMIT = { "1m": 6.5 * DAY, "5m": 58 * DAY, "15m": 58 * DAY, "30m": 58 * DAY, "1h": 720 * DAY, "1d": null, "1wk": null };
 const CONTEXT_BARS = 80;
+// Extra history before the entry, so the lead-up to the trade is visible.
+const HISTORY_BARS = 400;
 const MAX_TRADE_BARS = 6000;
 
 /** Trade times are the trader's wall clock; the browser is in that zone. */
@@ -615,9 +617,9 @@ export function autoInterval(entryTs, exitTs, available) {
   return available.find((i) => span / INTERVAL_SECONDS[i] <= 120) || available[available.length - 1];
 }
 
-export function chartWindow(entryTs, exitTs, now, interval, minPadding) {
+export function chartWindow(entryTs, exitTs, now, interval, minPadding, minHistory = minPadding) {
   const padding = Math.max((exitTs - entryTs) * 0.5, minPadding);
-  let start = entryTs - padding;
+  let start = entryTs - Math.max((exitTs - entryTs) * 1.5, minHistory);
   const limit = HISTORY_LIMIT[interval];
   if (limit != null) start = Math.max(start, now - limit);
   return [start, Math.min(exitTs + padding, now)];
@@ -634,9 +636,9 @@ export function planTradeChart(trade, interval, now = Date.now() / 1000) {
   return {
     interval,
     available,
-    window: chartWindow(entryTs, exitTs, now, interval, pad),
+    window: chartWindow(entryTs, exitTs, now, interval, pad, HISTORY_BARS * INTERVAL_SECONDS[interval]),
     // Window fell on a weekend or outside session hours: widen it.
-    fallback: INTERVAL_SECONDS[interval] < DAY ? chartWindow(entryTs, exitTs, now, interval, 5 * DAY) : null,
+    fallback: INTERVAL_SECONDS[interval] < DAY ? chartWindow(entryTs, exitTs, now, interval, 5 * DAY, 10 * DAY) : null,
   };
 }
 
