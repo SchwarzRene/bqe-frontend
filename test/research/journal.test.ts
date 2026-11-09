@@ -17,7 +17,7 @@ function seeded() {
 
 describe("trading journal store", () => {
   it("suggests tickers like the Python app", () => {
-    expect(S.suggest("nas100")).toEqual({ ticker: "^NDX", asset_class: "index", point_value: 1 });
+    expect(S.suggest("nas100")).toEqual({ ticker: "NQ=F", asset_class: "index", point_value: 1 });
     expect(S.suggest("BTCUSDT")).toEqual({ ticker: "BTC-USD", asset_class: "crypto", point_value: 1 });
     expect(S.suggest("EURUSD")).toEqual({ ticker: "EURUSD=X", asset_class: "forex", point_value: 100000 });
     expect(S.suggest("AAPL").asset_class).toBe("stock");

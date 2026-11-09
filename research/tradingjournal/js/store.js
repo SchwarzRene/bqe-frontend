@@ -123,7 +123,8 @@ function naiveMinutes(iso) {
 
 // Common MT5/CFD symbol names -> [Yahoo ticker, asset class].
 const TICKER_PRESETS = {
-  NAS100: ["^NDX", "index"], US100: ["^NDX", "index"], USTEC: ["^NDX", "index"],
+  // Nasdaq 100 futures: they trade almost around the clock, unlike the ^NDX cash index (US hours only).
+  NAS100: ["NQ=F", "index"], US100: ["NQ=F", "index"], USTEC: ["NQ=F", "index"],
   US30: ["^DJI", "index"], DJ30: ["^DJI", "index"],
   SPX500: ["^GSPC", "index"], US500: ["^GSPC", "index"],
   GER40: ["^GDAXI", "index"], DE40: ["^GDAXI", "index"], GER30: ["^GDAXI", "index"],

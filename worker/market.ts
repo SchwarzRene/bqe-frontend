@@ -71,7 +71,8 @@ export async function handleMarket(request: Request, ctx: ExecutionContext, what
     }
     // Rounded to whole bars, so repeated views of an open trade share a fetch.
     const range = candleRange(interval, Number(url.searchParams.get("period1")), Number(url.searchParams.get("period2")));
-    params = range ? { ...range, interval } : { range: TIMEFRAME_RANGES[interval], interval };
+    // includePrePost: stocks and ETFs (e.g. QQQ) also get pre- and after-market bars.
+    params = { ...(range ?? { range: TIMEFRAME_RANGES[interval] }), interval, includePrePost: "true" };
     ttl = CANDLE_TTL;
   } else {
     return json({ error: "not found" }, 404);
