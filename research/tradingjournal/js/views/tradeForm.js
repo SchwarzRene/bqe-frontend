@@ -8,7 +8,7 @@ import { $, $$, esc, formValues, openFormModal, toast } from "../ui.js";
  * Entry and exit prices left empty are looked up from the symbol's chart at
  * the entry and exit times when the trade is saved.
  */
-export async function openTradeForm({ trade = null, closing = false, onSaved }) {
+export async function openTradeForm({ trade = null, closing = false, kind = null, onSaved }) {
   const [symbols, setups] = await Promise.all([api.symbols(), api.setups()]);
   if (!symbols.length) {
     toast("Add a symbol first (Symbols tab)", "error");
@@ -16,10 +16,12 @@ export async function openTradeForm({ trade = null, closing = false, onSaved }) 
     return;
   }
   const t = trade || { direction: "long", entry_time: nowLocalInput(), fees: 0, symbol_id: symbols[0].id };
+  const knockout = (trade ? trade.kind : kind) === "knockout";
+  t.kind = knockout ? "knockout" : "standard";
 
   let prices;
   openFormModal({
-    title: trade ? (closing ? `Close ${trade.symbol_name} trade` : "Edit trade") : "New trade",
+    title: trade ? (closing ? `Close ${trade.symbol_name} trade` : "Edit trade") : knockout ? "New knockout trade" : "New trade",
     submitLabel: closing ? "Close trade" : "Save trade",
     wide: true,
     body: formBody(t, symbols, setups),
@@ -56,18 +58,21 @@ function formBody(t, symbols, setups) {
         <input type="radio" id="dir-short" name="direction" value="short" ${t.direction === "short" ? "checked" : ""}><label for="dir-short">▼ Short</label>
       </div>
     </div>
-    <div class="field"><label>Volume (lots / units)</label><input name="volume" type="number" step="any" min="0" value="${val(t.volume)}" placeholder="0.10" required></div>
+    <input type="hidden" name="kind" value="${t.kind}">
+    ${t.kind === "knockout"
+      ? `<div class="field"><label>Invested amount (USD)</label><input name="invest" type="number" step="any" min="0" value="${val(t.invest)}" placeholder="20" required><div class="hint">The money you buy the certificate with — lost in full if the stop loss is hit.</div></div>`
+      : `<div class="field"><label>Volume (lots / units)</label><input name="volume" type="number" step="any" min="0" value="${val(t.volume)}" placeholder="0.10" required></div>`}
     <div class="field"><label>Setup / strategy</label><input name="setup" list="setup-list" value="${val(t.setup)}" placeholder="e.g. London breakout"><datalist id="setup-list">${setups.map((s) => `<option value="${esc(s)}">`).join("")}</datalist></div>
 
     <div class="form-section-title">Entry</div>
     <div class="field"><label>Entry price</label><div class="input-row"><input name="entry_price" type="number" step="any" value="${val(t.entry_price)}" placeholder="from the chart at entry time"><button type="button" class="btn small" data-live="entry">Live</button></div><div class="hint" data-price-hint="entry"></div></div>
-    <div class="field"><label>Entry time</label><input name="entry_time" type="datetime-local" value="${val(t.entry_time)}" required></div>
-    <div class="field"><label>Stop loss</label><input name="stop_loss" type="number" step="any" value="${val(t.stop_loss)}" placeholder="optional — enables R-multiple"></div>
+    <div class="field"><label>Entry time</label><div class="input-row"><input name="entry_time" type="datetime-local" value="${val(t.entry_time)}" required><button type="button" class="btn small" data-now="entry">Now</button></div></div>
+    <div class="field"><label>Stop loss</label><input name="stop_loss" type="number" step="any" value="${val(t.stop_loss)}" placeholder="${t.kind === "knockout" ? "required" : "optional — enables R-multiple"}" ${t.kind === "knockout" ? "required" : ""}></div>
     <div class="field"><label>Take profit</label><input name="take_profit" type="number" step="any" value="${val(t.take_profit)}" placeholder="optional"></div>
 
     <div class="form-section-title">Exit <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">— leave the exit time empty while the trade is open</span></div>
     <div class="field"><label>Exit price</label><div class="input-row"><input name="exit_price" type="number" step="any" value="${val(t.exit_price)}" placeholder="from the chart at exit time"><button type="button" class="btn small" data-live="exit">Live</button></div><div class="hint" data-price-hint="exit"></div></div>
-    <div class="field"><label>Exit time</label><input name="exit_time" type="datetime-local" value="${val(t.exit_time)}"></div>
+    <div class="field"><label>Exit time</label><div class="input-row"><input name="exit_time" type="datetime-local" value="${val(t.exit_time)}"><button type="button" class="btn small" data-now="exit">Now</button></div></div>
     <div class="field"><label>Fees (commission + swap)</label><input name="fees" type="number" step="any" value="${val(t.fees)}"><div class="hint">Cost is positive; a swap credit is negative.</div></div>
     <div class="field"><label>Actual P&amp;L from broker</label><input name="pnl_override" type="number" step="any" value="${val(t.pnl_override)}" placeholder="optional override"><div class="hint">Use this if the calculated P&amp;L doesn't match MT5.</div></div>
     <div class="full preview-box" data-preview></div>
@@ -91,6 +96,12 @@ function wireForm(form, symbols, closing) {
   form.addEventListener("change", updatePreview);
   $$("[data-live]", form).forEach((btn) =>
     btn.addEventListener("click", () => fillLivePrice(form, symbolFor(), btn.dataset.live).then(updatePreview)),
+  );
+  $$("[data-now]", form).forEach((btn) =>
+    btn.addEventListener("click", () => {
+      form[`${btn.dataset.now}_time`].value = nowLocalInput();
+      updatePreview();
+    }),
   );
   wireStars(form);
   const prices = wireAutoPrices(form, symbolFor, updatePreview);
@@ -170,15 +181,37 @@ function wireStars(form) {
 
 function previewText(form, symbol) {
   if (!symbol) return "";
-  const num = (name) => (form[name].value === "" ? null : Number(form[name].value));
-  const sign = form.direction.value === "short" ? -1 : 1;
-  const [entry, exit, volume, sl, fees] = ["entry_price", "exit_price", "volume", "stop_loss", "fees"].map(num);
-  const parts = [`Point value <span class="mono">${symbol.point_value}</span> per 1.0 move per lot`];
-  if (entry && volume && sl) {
-    parts.push(`Risk <span class="mono loss">${money(-Math.abs(entry - sl) * volume * symbol.point_value)}</span>`);
+  const num = (name) => (form[name]?.value ? Number(form[name].value) : null);
+  const long = form.direction.value !== "short";
+  const sign = long ? 1 : -1;
+  const knockout = form.kind.value === "knockout";
+  const [entry, exit, volume, invest, sl, tp, fees] = ["entry_price", "exit_price", "volume", "invest", "stop_loss", "take_profit", "fees"].map(num);
+  const parts = [];
+
+  // Money per 1.0 of price movement: the lots for a normal trade, or whatever
+  // makes the stop loss cost exactly the invested amount for a knockout.
+  let perUnit = null;
+  if (knockout) {
+    parts.push("Knockout: stop loss = loss of the whole invested amount");
+    if (entry && sl && invest && entry !== sl) perUnit = invest / Math.abs(entry - sl);
+  } else {
+    parts.push(`Point value <span class="mono">${symbol.point_value}</span> per 1.0 move per lot`);
+    if (volume) perUnit = volume * symbol.point_value;
   }
-  if (entry && volume && exit) {
-    const pnl = sign * (exit - entry) * volume * symbol.point_value - (fees || 0);
+
+  if (entry && sl && perUnit) {
+    const risk = knockout ? invest : Math.abs(entry - sl) * perUnit;
+    parts.push(`Risk <span class="mono loss">${money(-risk)}</span>`);
+  }
+  if (entry && sl && tp) {
+    const risk = sign * (entry - sl), reward = sign * (tp - entry);
+    if (risk > 0 && reward > 0) parts.push(`Planned R:R <span class="mono">1 : ${(reward / risk).toFixed(2)}</span>`);
+    else parts.push(`<span class="loss">SL / TP are on the wrong side for a ${long ? "long" : "short"}</span>`);
+  }
+  if (entry && perUnit && exit) {
+    let move = sign * (exit - entry) * perUnit;
+    if (knockout) move = Math.max(move, -invest);
+    const pnl = move - (fees || 0);
     parts.push(`Calculated P&amp;L <span class="mono ${pnl >= 0 ? "profit" : "loss"}">${money(pnl)}</span>`);
   }
   return parts.join(" &nbsp;·&nbsp; ");

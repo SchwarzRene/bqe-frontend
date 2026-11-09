@@ -66,18 +66,19 @@ function layout(t) {
 
 function facts(t) {
   const items = [
-    ["Volume", t.volume],
+    ...(t.kind === "knockout" ? [["Type", "Knockout"], ["Invested", `$${t.invest}`]] : [["Volume", t.volume]]),
     ["Entry", price(t.entry_price, t.digits)],
     [t.status === "open" ? "Current" : "Exit", price(t.status === "open" ? t.current_price : t.exit_price, t.digits)],
     ["Stop loss", price(t.stop_loss, t.digits)],
     ["Take profit", price(t.take_profit, t.digits)],
     ["Risk", t.risk != null ? money(-t.risk) : "—"],
+    ["Planned R:R", t.planned_rr != null ? `1 : ${t.planned_rr.toFixed(2)}` : "—"],
     ["R-multiple", rMultiple(t.r_multiple)],
     ["Fees", money(t.fees, { signed: false })],
     ["Duration", duration(t.duration_minutes)],
     ["Rating", t.rating ? "★".repeat(t.rating) + "☆".repeat(5 - t.rating) : "—"],
     ["P&L source", t.pnl_override != null ? "Broker (override)" : "Calculated"],
-    ["Point value", t.point_value],
+    ...(t.kind === "knockout" ? [] : [["Point value", t.point_value]]),
   ];
   return items.map(([label, value]) => `<div class="fact"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
 }
