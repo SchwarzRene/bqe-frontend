@@ -14,6 +14,7 @@ export async function renderTrades(root) {
       <h1>Trades</h1>
       <div class="actions">
         <button class="btn" data-refresh>↻ Refresh prices</button>
+        <button class="btn" data-new-knockout>+ New knockout trade</button>
         <button class="btn primary" data-new>+ New trade</button>
       </div>
     </div>
@@ -39,6 +40,7 @@ export async function renderTrades(root) {
     select.addEventListener("change", () => { filters[key] = select.value; loadList(root, symbols); });
   }
   $("[data-new]", root).addEventListener("click", () => openTradeForm({ onSaved: () => loadList(root, symbols) }));
+  $("[data-new-knockout]", root).addEventListener("click", () => openTradeForm({ kind: "knockout", onSaved: () => loadList(root, symbols) }));
   $("[data-refresh]", root).addEventListener("click", () => loadList(root, symbols));
   await loadList(root, symbols);
 }

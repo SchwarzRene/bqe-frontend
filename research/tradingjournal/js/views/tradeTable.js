@@ -13,7 +13,7 @@ export function tradeTable(trades, { compact = false } = {}) {
         <td class="mono">${dateTime(t.entry_time)}</td>
         <td><strong>${esc(t.symbol_name)}</strong></td>
         <td><span class="badge ${t.direction}">${t.direction}</span></td>
-        ${compact ? "" : `<td class="r num">${t.volume}</td>`}
+        ${compact ? "" : `<td class="r num">${t.kind === "knockout" ? `KO $${t.invest}` : t.volume}</td>`}
         ${compact ? "" : `<td class="r num">${price(t.entry_price, t.digits)}</td>`}
         ${compact ? "" : `<td class="r num">${exitCell}</td>`}
         <td class="r num ${pnlClass(livePnl)}">${money(livePnl)}${t.status === "open" && livePnl != null ? " <span class='muted'>(live)</span>" : ""}</td>
@@ -26,7 +26,7 @@ export function tradeTable(trades, { compact = false } = {}) {
     <div class="table-wrap"><table>
       <thead><tr>
         <th>Opened</th><th>Symbol</th><th>Side</th>
-        ${compact ? "" : "<th class='r'>Volume</th><th class='r'>Entry</th><th class='r'>Exit</th>"}
+        ${compact ? "" : "<th class='r'>Size</th><th class='r'>Entry</th><th class='r'>Exit</th>"}
         <th class="r">P&amp;L</th>
         ${compact ? "" : "<th class='r'>R</th><th>Setup</th>"}
         <th>Status</th>

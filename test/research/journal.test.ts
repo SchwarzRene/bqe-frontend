@@ -49,6 +49,29 @@ describe("trading journal store", () => {
     expect(S.addMetrics(open).unrealized_pnl).toBeNull();
   });
 
+  it("sizes knockout trades by the invested money", () => {
+    const { db, gold } = seeded();
+    const base = { symbol_id: gold.id, kind: "knockout", direction: "long", invest: "20", entry_price: 2000, stop_loss: 1990, entry_time: "2026-09-22T10:00" };
+    const win = S.addMetrics(S.createTrade(db, { ...base, take_profit: 2030, exit_price: 2020, exit_time: "2026-09-22T11:00" }));
+    expect(win.volume).toBeNull();
+    expect(win.risk).toBe(20);
+    expect(win.pnl).toBeCloseTo(40); // 20 points × (20 / 10 points)
+    expect(win.r_multiple).toBeCloseTo(2);
+    expect(win.planned_rr).toBeCloseTo(3);
+
+    const stopped = S.addMetrics(S.createTrade(db, { ...base, exit_price: 1990, exit_time: "2026-09-22T11:00" }));
+    expect(stopped.pnl).toBeCloseTo(-20);
+    const gapped = S.addMetrics(S.createTrade(db, { ...base, exit_price: 1950, exit_time: "2026-09-22T11:00" }));
+    expect(gapped.pnl).toBeCloseTo(-20); // never more than invested
+
+    const short = S.addMetrics(S.createTrade(db, { ...base, direction: "short", stop_loss: 2005, exit_price: 1990, exit_time: "2026-09-22T11:00" }));
+    expect(short.pnl).toBeCloseTo(40);
+
+    expect(() => S.createTrade(db, { ...base, stop_loss: "" })).toThrow(/needs a stop loss/);
+    expect(() => S.createTrade(db, { ...base, stop_loss: 2010 })).toThrow(/below the entry/);
+    expect(() => S.createTrade(db, { ...base, invest: "" })).toThrow(/required/);
+  });
+
   it("enforces the trade rules", () => {
     const { db, gold } = seeded();
     const base = { symbol_id: gold.id, direction: "long", volume: 1, entry_price: 10, entry_time: "2026-09-22T10:00" };

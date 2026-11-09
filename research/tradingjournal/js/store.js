@@ -224,7 +224,7 @@ export function deleteSymbol(db, id) {
 
 // ─── trades (trades.py) ─────────────────────────────────────────────────────
 
-const TRADE_COLUMNS = ["symbol_id", "direction", "volume", "entry_price", "entry_time", "exit_price", "exit_time",
+const TRADE_COLUMNS = ["symbol_id", "kind", "direction", "volume", "invest", "entry_price", "entry_time", "exit_price", "exit_time",
   "stop_loss", "take_profit", "fees", "pnl_override", "setup", "rating", "notes"];
 
 /** A trade joined with its symbol, the row shape the views read. */
@@ -258,10 +258,15 @@ export function validateTrade(db, data) {
   const symbolId = integerInRange(data, "symbol_id", 1, 2 ** 31);
   if (symbolId == null) throw new ValidationError("symbol is required");
   getSymbol(db, symbolId);
+  const kind = choice(data, "kind", ["standard", "knockout"], "standard");
+  const knockout = kind === "knockout";
   const fields = {
     symbol_id: symbolId,
+    kind,
     direction: choice(data, "direction", ["long", "short"]),
-    volume: number(data, "volume", { required: true, positive: true }),
+    // A knockout certificate is sized by the money put in, not by a volume.
+    volume: knockout ? null : number(data, "volume", { required: true, positive: true }),
+    invest: knockout ? number(data, "invest", { required: true, positive: true }) : null,
     entry_price: number(data, "entry_price", { required: true, positive: true }),
     entry_time: timestamp(data, "entry_time", { required: true }),
     exit_price: number(data, "exit_price", { positive: true }),
@@ -274,6 +279,11 @@ export function validateTrade(db, data) {
     rating: integerInRange(data, "rating", 1, 5),
     notes: text(data, "notes"),
   };
+  if (knockout) {
+    if (fields.stop_loss == null) throw new ValidationError("a knockout trade needs a stop loss (the invested money is lost when it is hit)");
+    const wrongSide = fields.direction === "long" ? fields.stop_loss >= fields.entry_price : fields.stop_loss <= fields.entry_price;
+    if (wrongSide) throw new ValidationError(`stop loss must be ${fields.direction === "long" ? "below" : "above"} the entry price`);
+  }
   const hasPrice = fields.exit_price != null, hasTime = fields.exit_time != null;
   if (hasPrice !== hasTime) throw new ValidationError("exit price and exit time must be given together");
   if (hasTime && fields.exit_time < fields.entry_time) throw new ValidationError("exit time cannot be before entry time");
@@ -321,6 +331,7 @@ export function addMetrics(trade, livePrice = null) {
   const risk = riskAmount(trade);
   result.risk = risk;
   result.r_multiple = risk && realizedOrLive != null ? realizedOrLive / risk : null;
+  result.planned_rr = plannedRR(trade);
   result.duration_minutes = trade.exit_time ? Math.floor(naiveMinutes(trade.exit_time) - naiveMinutes(trade.entry_time)) : null;
   return result;
 }
@@ -329,13 +340,33 @@ function closedPnl(t) {
   return t.pnl_override != null ? t.pnl_override : priceMovePnl(t, t.exit_price) - t.fees;
 }
 
+/**
+ * Money gained per 1.0 of price movement. A knockout certificate is sized so
+ * that the stop loss costs exactly the invested amount.
+ */
+function exposure(t) {
+  if (t.kind === "knockout") return t.invest / Math.abs(t.entry_price - t.stop_loss);
+  return t.volume * t.point_value;
+}
+
 function priceMovePnl(t, price) {
-  return (t.direction === "long" ? 1 : -1) * (price - t.entry_price) * t.volume * t.point_value;
+  const move = (t.direction === "long" ? 1 : -1) * (price - t.entry_price) * exposure(t);
+  // A knockout can never lose more than what was invested, even on a gap.
+  return t.kind === "knockout" ? Math.max(move, -t.invest) : move;
 }
 
 function riskAmount(t) {
+  if (t.kind === "knockout") return t.invest;
   if (t.stop_loss == null) return null;
-  return Math.abs(t.entry_price - t.stop_loss) * t.volume * t.point_value || null;
+  return Math.abs(t.entry_price - t.stop_loss) * exposure(t) || null;
+}
+
+/** Planned reward : risk from the take profit and stop loss, before the trade is closed. */
+export function plannedRR(t) {
+  if (t.stop_loss == null || t.take_profit == null) return null;
+  const sign = t.direction === "long" ? 1 : -1;
+  const risk = sign * (t.entry_price - t.stop_loss), reward = sign * (t.take_profit - t.entry_price);
+  return risk > 0 && reward > 0 ? reward / risk : null;
 }
 
 // ─── stats (stats.py) ───────────────────────────────────────────────────────
